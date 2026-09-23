@@ -1,0 +1,175 @@
+#pragma once
+
+// level_editor::app: wiring between the Asset Browser and the editor.
+namespace level_editor
+{
+    // Everything the Asset Browser needs from the editor: command-routed mutations, source-control badges and locks,
+    // open-asset routing (Level / Texture), and the extra Project Settings sections.
+    inline void app::WireAssetBrowser()
+    {
+        e10::RegisterAssetBrowserCallbacks(AsserBrowser, LevelEditorUndo, CmdContext.m_Undo, MainWindow);
+        e10::RegisterSourceControlCallbacks(AsserBrowser, LevelEditorUndo);
+
+
+
+        // "Scripting" section in the merged Plugins/Project Settings tab (e10::plugin_tab,
+
+        // E10_asset_browser_plugin_tab.h) - the project's Script-Module build-membership list
+
+        // (Project.config\Script.config.txt, level_editor::g_ScriptConfig.m_ModuleRefs), rendered as a normal
+
+        // xproperty::inspector array field (WireResourcePickerCallbacks already gives every full_guid
+
+        // element a working click-to-browse picker for free, and the array gets the standard Unity-style
+
+        // insert/delete/drag controls - see xproperty_array_element_controls). NOT the Dependencies-node
+
+        // drag-drop pattern an earlier pass here used - that assumed the Resources tab could be docked
+
+        // and visible AT THE SAME TIME as this one, which is false: "Project Settings" and "Resources"
+
+        // are tabs in the SAME tab strip, mutually exclusive on screen, so a drag source and this drop
+
+        // target could never both be visible. The inspector's own click-to-open-popup picker has no such
+
+        // docking assumption at all - direct user correction.
+
+        //
+
+        // No m_OnPropertyChanged hook wired here (unlike EntityInspector's own edits, which route through
+
+        // InspectorBridge into the undo system) - a snapshot/diff around the render call instead: simple,
+
+        // catches every mutation kind the array control can make (insert/delete/reorder/reassign)
+
+        // uniformly, and doesn't require raw edits here to go through xundo the way every other project-
+
+        // level-settings edit in this codebase already doesn't either (Library.config.txt's own
+
+        // ParentLibraries has no raw-inspector-edit path at all, only command-driven Add/Remove).
+
+        //
+
+        // Reuses plugin_tab's OWN inherited xproperty::inspector (passed in by RightPanel()) rather than
+
+        // carrying a second, redundant instance - direct user correction: "you have one inspector
+
+        // working with the plugin... why did you reinvent the wheel?". WireResourcePickerCallbacks is
+
+        // registered lazily, once, the first time this section is actually selected - LevelEditor has no way to
+
+        // reach plugin_tab's own instance ahead of time (it's created generically inside assert_browser's
+
+        // own tab list), so "wire on first use" is the only hook point available, not a startup call.
+
+        AsserBrowser.m_ExtraPluginTabSections.push_back(
+
+        {
+
+            "Scripting",
+
+            [](xproperty::inspector& Inspector)
+
+            {
+
+                static bool bWired = false;
+
+                if (!bWired) { e10::WireResourcePickerCallbacks(Inspector); bWired = true; }
+
+
+
+                // REAL BUG FOUND LIVE (2026-09-19): rebuilding (clear/AppendEntity/AppendEntityComponent)
+
+                // on EVERY frame - not just when the data actually changed - makes every widget's ImGui id
+
+                // unstable, so a tree node's own open/closed state can never persist between frames; the
+
+                // ModuleRefs array node fought itself and flickered continuously the instant it was
+
+                // expanded. Same documented failure mode as xproperty_inspector_must_persist_across_frames/
+
+                // xgpu_imgui_per_frame_rebuild_activeid_bug - rebuild ONLY when s_BuiltWith says the
+
+                // structure is stale (first render, or the data changed since the frame that built it,
+
+                // whether from this same UI or an external CLI command), never unconditionally.
+
+                static std::vector<xresource::full_guid> s_BuiltWith;
+
+                if (level_editor::g_ScriptConfig.m_ModuleRefs != s_BuiltWith)
+
+                {
+
+                    Inspector.clear();
+
+                    Inspector.AppendEntity();
+
+                    Inspector.AppendEntityComponent(*xproperty::getObjectByType<level_editor::script_config>(), &level_editor::g_ScriptConfig);
+
+                }
+
+
+
+                // Separate, frame-local snapshot - did THIS ShowEmbedded call itself edit the array (an
+
+                // insert/delete/reassign via the array's own controls)? Distinct from the staleness check
+
+                // above, which would otherwise misfire a save on the very first render of an already-
+
+                // populated list (stale-vs-s_BuiltWith is true then too, but nothing was actually edited).
+
+                const auto BeforeThisRender = level_editor::g_ScriptConfig.m_ModuleRefs;
+
+
+
+                xproperty::settings::context Context;
+
+                Inspector.ShowEmbedded(Context);
+
+
+
+                if (level_editor::g_ScriptConfig.m_ModuleRefs != BeforeThisRender)
+
+                {
+
+                    if (auto Err = level_editor::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, level_editor::g_ScriptConfig); Err)
+
+                        xeditor::NotifyError(std::format("Failed to save Script.config.txt: {}", Err.getMessage()));
+
+                    level_editor::RegenerateGameModuleSources(level_editor::g_pGamePlugin->m_Paths);
+
+                }
+
+                s_BuiltWith = level_editor::g_ScriptConfig.m_ModuleRefs;
+
+            }
+
+        });
+
+
+
+        // Double-click: a Level opens in the Level editor, a resource type with a registered editor (Texture, Static Geom, ...)
+        // opens in its own window, and every other type keeps today's inert setSelection-only default.
+
+        AsserBrowser.m_OnOpenAsset = [this](e10::library::guid LibraryGuid, xresource::full_guid AssetGuid)
+            {
+                if (AssetGuid.m_Type == xecs::level::type_guid_v)
+                {
+                    if (xlevel::RequestOpenLevel(*pGameMgr, State, CmdContext.m_Undo, AssetGuid, /*bStartGameReload*/ true))
+                        State.m_bPendingStartGameReloadAfterOpen = true;
+                    return;
+                }
+                ResourceEditors.Open(AssetGuid, LibraryGuid);
+            };
+
+        // Per-resource thumbnails (Texture today; any other type that registers a xeditor::thumbnail_renderer
+        // going forward) - same dependency-inversion shape as m_OnOpenAsset just above: the browser only
+        // knows it can ask for one, everything about how it's made/cached lives in xeditor.
+        xeditor::g_ThumbnailCache.Init(MainWindow);
+        AsserBrowser.m_OnRequestThumbnail = [this](xresource::full_guid AssetGuid) -> e10::plugin_icon_ref
+            {
+                if (!ResourceEditors.m_pDevice) return {};
+                return xeditor::g_ThumbnailCache.RequestThumbnail(*ResourceEditors.m_pDevice, AssetGuid);
+            };
+    }
+}

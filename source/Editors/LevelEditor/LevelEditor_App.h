@@ -1,0 +1,565 @@
+#pragma once
+
+#include "source/Editors/LevelEditor/LevelEditor_Kit.h"
+
+// Moved ahead of LevelEditor_GamePlugin.h (was line 22, below) - LevelEditor_GamePluginBuild.h's own
+
+// BuildGamePluginIfStale now needs level_editor::g_ScriptConfig (GetLatestModuleSourceWriteTime,
+
+// LevelEditor_GameModuleSources.h) for its own staleness check, so g_ScriptConfig must already be declared
+
+// by the time the umbrella below compiles. E10_AssetMgr.h (e10::g_LibMgr) is already visible via
+
+// LevelEditor_Kit.h just above, so this is the only reordering actually needed.
+
+#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ProjectScriptConfig.h"
+
+#include "dependencies/xECSV2/src/xecs_plugin_api.h"
+
+#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePlugin.h"
+#include "plugins/xlevel.plugin/source/Editor/xlevel_panel_play_transport.h"
+
+#include "dependencies/xundo/source/xundo_history.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
+
+#include "plugins/xscene.plugin/source/Editor/xscene_commands_selection.h"
+
+#include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
+
+#include "dependencies/xeditor/include/xeditor/host.h"
+
+#include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Chat.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_level.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_scene_dependency.h"
+
+#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_LibraryDependency.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_workspace.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_play_session.h"
+
+#include "plugins/xscene.plugin/source/Editor/xscene_commands_scene_organization.h"
+
+#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"
+
+#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_AssetFiles.h"
+
+#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Commands_Scripting.h"
+
+#include "plugins/xscene.plugin/source/Editor/xscene_commands_make_prefab.h"
+
+#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Compilation.h"
+
+#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_SourceControl.h"
+
+#include "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_Commands_ResourceEditors.h"
+
+#include "plugins/xlevel.plugin/source/Editor/xlevel_document.h"
+
+#include "source/Editors/LevelEditor/extensions/idle_work/LevelEditor_SceneSanityScan.h"
+
+#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ComponentCompatibility.h"
+
+#include "source/Editors/LevelEditor/LevelEditor_Theme.h"
+
+#include "source/Editors/LevelEditor/LevelEditor_EditorTabs.h"
+
+#include "source/Tools/Editor/xeditor_resource_tab.h"
+
+#include "dependencies/xeditor/include/xeditor/diagnostics.h"
+
+#include "ximgui_toolbar.h"
+
+
+
+//-----------------------------------------------------------------------------------
+
+//
+
+// LevelEditor - Level + Scene editor.
+
+//
+
+// First real consumer of xECSV2's scene system (dependency-ordered scene load/unload, permanent-ID
+
+// entity serialization - see dependencies/xECSV2/doc/xecs_scene*.md) as actual, resource-pipeline-
+
+// integrated Level/Scene resource types: browse/create Levels (a list of member Scenes) and Scenes
+
+// (dependency edges to parent scenes + the entities that live in them), create/delete entities,
+
+// edit their components through the same xproperty inspector every other editor uses.
+
+//
+
+// Everything reusable (Level tree UI, Entity Properties panel, prefab authoring/instancing,
+
+// folder/entity bookkeeping, the modal error popup, the entity-reference/prefab-override inspector
+
+// wiring) now lives in LevelEditor_Kit.h - this file is just the demo content (its own
+
+// `transform` starter component) and the example's own setup/main loop wiring it together.
+
+//
+
+//-----------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+#include "source/Editors/LevelEditor/LevelEditor_DemoContent.h"
+#include "source/Editors/LevelEditor/commands/LevelEditor_CommandSet.h"
+
+//-----------------------------------------------------------------------------------
+// level_editor::app - the editor process: window, world, editor state, command surface and the frame loop.
+// Members are declared in startup order (destroyed in reverse). Init/Frame/Shutdown are defined in
+// LevelEditor_AppInit.h / LevelEditor_AppFrame.h.
+//-----------------------------------------------------------------------------------
+namespace level_editor
+{
+    struct app
+    {
+
+
+
+
+
+
+
+        xgpu::instance Instance;
+
+
+
+
+
+
+
+
+        xgpu::device Device;
+
+
+
+
+
+
+
+
+        xgpu::window MainWindow;
+
+
+
+
+
+
+
+
+        // Same wiring E10 does: texture (and other) loaders Destroy via UserData.m_Device.
+
+
+
+        // Without this, RegisterResource/ReleaseRef (Texture editor preview reload after Compile)
+
+
+
+        // crashes in device::Destroy on a default-constructed empty device handle.
+
+
+
+        resource_mgr_user_data ResourceMgrUserData{};
+
+
+
+
+        level_editor::game_plugin_state GamePlugin;
+        xlevel::play_gate         PlayGate;
+
+
+
+
+
+
+
+
+        //
+
+
+
+        // Project path (same lookup every editor example uses) - kept around (not just a local) so
+
+
+
+        // PollGameReload can re-apply it to a freshly reconstructed pGameMgr.
+
+
+
+        //
+
+
+
+        // Historically this located the repo root by searching the executable's own path for the
+
+
+
+        // first literal "xGPU" substring and assumed everything up to (and including) it was the repo
+
+
+
+        // root. That breaks the moment the checkout itself sits under a directory that ALSO contains
+
+
+
+        // "xGPU" earlier in the path - e.g. a git worktree at .../copilot-worktrees/xGPU/<branch>/... -
+
+
+
+        // the substring match fires on the outer container folder, which has no example.lionprj of its
+
+
+
+        // own, and OpenProject/plugin enumeration then aborts. Fixed by walking UP the executable's own
+
+
+
+        // ancestor directories and picking the first (closest) one that actually has a bootstrapped
+
+
+
+        // example.lionprj\Cache\Plugins - i.e. finding the repo root structurally, never by name.
+
+
+
+        std::wstring ProjectPath;
+
+
+
+
+
+
+
+
+        //
+
+
+
+        // Asset browser + editor state
+
+
+
+        //
+
+
+
+        e10::assert_browser  AsserBrowser;
+
+
+
+
+        xlevel::level_state    State;
+
+
+
+
+
+
+
+
+        //
+
+
+
+        // Command/undo system - phase 1 of documentation/Editors/LevelEditor/command_undo_system_plan.md: selection only,
+
+
+
+        // the simplest slice, wired end to end (real click sites routed through Execute(), Ctrl+Z/Y) to
+
+
+
+        // prove the whole shape before tackling property editing/component add-remove/entity
+
+
+
+        // create-delete on top of it. Direct port of E27_NodeOS's own xundo wiring
+
+
+
+        // (E27_NodeOS_Editor.cpp) - one xundo::system per "document" (just LevelEditor's own editor state here),
+
+
+
+        // one xundo::history addressing it under the "LevelEditor" namespace for the CLI/Command-Console work a
+
+
+
+        // later phase adds. bAutoLoadSave=false, same reasoning as E27's own comment: a fresh undo stack
+
+
+
+        // each run, a stale on-disk history from a previous session's differently-shaped scene would be
+
+
+
+        // more confusing than useful.
+
+
+
+        //
+
+
+
+        level_editor::commands::chat_log            ChatLog;
+
+
+
+
+        xundo::system                      LevelEditorUndo;
+
+
+
+
+        xeditor::host                     EditorHost;
+        xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, ...)
+
+
+
+
+        xlevel::level_host_session LevelHostSession;
+
+        xlevel::level_context     CmdContext{ State, pGameMgr, LevelHostSession.Undo() };
+
+        level_editor::scene_sanity_scanner SceneScanner{ CmdContext };
+
+
+
+
+
+
+
+
+        xundo::history                        LevelEditorHistory;
+
+
+
+
+
+
+
+
+        // Command Console named pipe - phase 5 of documentation/Editors/LevelEditor/command_undo_system_plan.md. Lets an
+
+
+
+        // external process (xeditorcli, a script, an AI) drive LevelEditor through LevelEditorHistory.Route() with no UI
+
+
+
+        // automation - see extensions/command_console/LevelEditor_CommandConsolePipe.h's own top comment for the full threading
+
+
+
+        // reasoning. Detached, not joined - a local dev/debug feature, dies with the process, same as
+
+
+
+        // E27_NodeOS's own identical pipe thread.
+
+
+
+        level_editor::command_console_pipe_bridge    ConsolePipeBridge;
+
+
+
+
+        xscene::entity_inspector_bridge  InspectorBridge;
+
+
+
+
+        std::uint64_t FrameNumber = 0;
+
+
+
+
+        static constexpr float EditorToolbarWidth = 570.0f;
+
+
+
+
+        static constexpr float SceneToolbarWidth = 390.0f;
+
+
+
+
+        static constexpr float EditorToolbarHeight = 20.0f;
+
+
+
+
+        static constexpr float EditorToolbarFontScale = 1.0f;
+
+
+
+
+        static constexpr float EditorToolbarItemSpacing = 2.0f;
+
+
+
+
+
+
+
+
+        //
+
+
+
+        // Main Loop
+
+
+
+        //
+
+
+
+        ximgui::toolbar::toolbar_host_state EditorToolbarHost;
+
+
+
+
+        int SceneTool = 0; // Q=select, W=move, E=rotate, R=scale, F=frame
+
+
+
+
+        bool bPivotCenter = true;
+
+
+
+
+        bool bLocalSpace = false;
+
+
+
+
+        bool bGridVisible = true;
+
+        std::unique_ptr<xecs::game_mgr::instance> pGameMgr;
+
+
+
+
+
+
+
+
+        // Registers level_editor's own demo content - kept as a local lambda (not inlined at each of the two call
+
+
+
+        // sites below) so PollGameReload can re-run the exact same host-registration sequence after a
+
+
+
+        // reload, matching what startup does here.
+
+
+
+        static constexpr auto RegisterHostComponents = []( xecs::game_mgr::instance& GameMgr ) noexcept
+
+
+
+        {
+
+
+
+            GameMgr.RegisterComponents<xscene::name, level_editor::transform, xecs::editor::prefab_instance, xecs::component::entity_reference>();
+
+
+
+        };
+
+
+
+
+        static constexpr auto RegisterHostSystems = []( xecs::game_mgr::instance& GameMgr ) noexcept
+
+
+
+        {
+
+
+
+            GameMgr.RegisterSystems<level_editor::tick_logger_a, level_editor::tick_logger_b>();
+
+
+
+        };
+
+
+
+
+
+
+
+
+        //
+
+
+
+        // Entity component inspector - the currently-selected entity's components. The resource-picker
+
+
+
+        // callbacks are stateless (WireResourcePickerCallbacks); the prefab-override/entity-reference
+
+
+
+        // ones need live GameMgr/State access, so they're bundled into entity_inspector_bridge (kit).
+
+
+
+        //
+
+
+
+        xproperty::inspector          EntityInspector{ "Inspector" };
+
+
+
+        std::optional<command_set> Commands;
+
+        void RenderParentEditorToolbar();
+        void RenderEditorToolbar(const char* Name, ximgui::toolbar::axis Axis);
+        void DrawDrawerTab(int TabIndex);
+        void WireAssetBrowser();
+
+        // this editor's world (see LevelEditor_AppWorld.h)
+        void CreateWorld();
+        void RestoreWorld(persist_mode PersistMode);
+        void StopPlay(const std::vector<std::string>& KeepCommands);
+        void CollectRequiredComponents(std::vector<xecs::scene::component_dependency>& Out);
+        void BeforeReload();
+        void AfterReload();
+
+        std::vector<std::unique_ptr<xecs::scene::instance>> m_ReloadCapture;   // scenes held across a Game.dll reload
+
+        // bHeadless=true skips window/device/ImGui init entirely - the editor still runs its full
+        // command system (ECS, undo, asset browser, Command Console pipe), just with no GPU/UI. See
+        // LevelEditor_AppInit.h / LevelEditor_AppFrameHeadless.h. Remembered (not just an Init() local)
+        // so Shutdown() knows which teardown steps are safe to skip.
+        bool bHeadless = false;
+
+        int  Init(bool bHeadlessMode = false);   // 0 on success, otherwise the process exit code
+        void Frame();          // one iteration of the graphical main loop
+        void Run();            // Frame() until the window closes
+        void RunHeadless();    // pumps the command console/idle work with no window, until killed
+        void Shutdown();
+    };
+}

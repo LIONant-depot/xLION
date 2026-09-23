@@ -1,0 +1,16 @@
+/.vs
+/Build
+/dependencies
+/plugins
+/example.lionprj
+
+# Scratch/log output from manual build investigation - never real deliverables
+/_build_*.txt
+/_configure_log.txt
+/_isolated*.obj
+/_preproc*.i
+/_xlion_std*.log
+
+/*.png
+/*.tga
+/*.pdb

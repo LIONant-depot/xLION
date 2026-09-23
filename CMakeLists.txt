@@ -1,0 +1,536 @@
+cmake_minimum_required(VERSION 3.10)
+project(xLION LANGUAGES C CXX)
+set(TARGET_PROJECT "xLION")
+set(COMPONENT_REGISTRY "")
+
+# Mirrors xGPU's own xECSV2 shared-library option (see dependencies/xGPU/CMakeLists.txt) - needed
+# for the same reason: the LevelEditor's Game.dll hot-reload system only works when xECSV2 is a
+# shared library both xLION and a future Game.dll can link against.
+option(XECS_BUILD_SHARED_LIBRARY "Build xECSV2 as its own shared library (xECSV2.dll) instead of compiling it directly into the target" ON)
+
+if(POLICY CMP0169)
+  cmake_policy(SET CMP0169 OLD)
+endif()
+
+#
+# Fetch Common.cmake from xcmake_tools - identical bootstrap to xGPU's own root CMakeLists.txt
+#
+include(FetchContent)
+FetchContent_Declare(
+  xcmake_tools
+  GIT_REPOSITORY https://github.com/LIONant-depot/xcmake_tools.git
+  GIT_TAG main
+  GIT_SHALLOW TRUE
+  SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/xcmake_tools"
+)
+FetchContent_MakeAvailable(xcmake_tools)
+include(${CMAKE_BINARY_DIR}/_deps/xcmake_tools/Common.cmake)
+
+#
+# Get and build the sample project (Assets, plugins, and most third-party dependencies live here -
+# same mechanism xGPU itself uses, reused verbatim so LevelEditor's plugin editors and asset
+# pipeline work identically once ported).
+#
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/check_changes.bat")
+    FetchContent_Declare(
+      xresource_pipeline_example
+      GIT_REPOSITORY https://github.com/LIONant-depot/example.lionprj.git
+      GIT_TAG main
+      GIT_SHALLOW TRUE
+      SOURCE_DIR "${CMAKE_SOURCE_DIR}/example.lionprj"
+    )
+    FetchContent_Populate(xresource_pipeline_example)
+
+    set(XEXAMPLE_PLUGIN_BUILD_DIR "${CMAKE_SOURCE_DIR}/example.lionprj")
+    message(STATUS "Running Install.bat in ${XEXAMPLE_PLUGIN_BUILD_DIR}...")
+    execute_process(
+        COMMAND "${XEXAMPLE_PLUGIN_BUILD_DIR}/Install.bat" "return"
+        WORKING_DIRECTORY "${XEXAMPLE_PLUGIN_BUILD_DIR}"
+        RESULT_VARIABLE result
+    )
+    if(result)
+        message(FATAL_ERROR "Failed to execute Install.bat: ${result}")
+    endif()
+endif()
+
+#
+# Worm holes to unify all the dependencies/plugins - identical mechanism to xGPU's own
+#
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/dependencies")
+  file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies" "${CMAKE_SOURCE_DIR}/dependencies" SYMBOLIC RESULT result)
+  if(result)
+    message(FATAL_ERROR "Failed to create symlink: ${result}")
+  endif()
+endif()
+
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins")
+  file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/plugins" "${CMAKE_SOURCE_DIR}/plugins" SYMBOLIC RESULT result)
+  if(result)
+    message(FATAL_ERROR "Failed to create symlink: ${result}")
+  endif()
+endif()
+
+# xscene.plugin, xlevel.plugin, xscript_module.plugin - the Scene/Level editors and the scripting
+# core LevelEditor is actually built on. Header-only (nothing to compile ahead of time), so - same
+# as xGPU's own root CMakeLists.txt - they're never in Install.bat's PLUGINS loop, just cloned
+# straight here and referenced through the plugins/ worm hole above.
+foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin)
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}/source")
+        execute_process(
+            COMMAND git clone --depth 1 https://github.com/LIONant-depot/${HeaderOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}"
+            RESULT_VARIABLE result
+        )
+        if(result)
+            message(FATAL_ERROR "Failed to clone ${HeaderOnlyPlugin}: ${result}")
+        endif()
+    endif()
+endforeach()
+
+# xmaterial.plugin hardcodes the pre-port path to the Command Console's text-editor widget
+# (source/Examples/E19_MaterialEditor/E19_TextEditor.h) - that file now lives at
+# source/Tools/Editor/xeditor_text_widget.h (see the port's own file-migration notes). Idempotent
+# patch, same technique as the imgui-node-editor patches below.
+set(XMATERIAL_EDITOR_H "${CMAKE_SOURCE_DIR}/plugins/xmaterial.plugin/source/Editor/xmaterial_editor.h")
+if(EXISTS "${XMATERIAL_EDITOR_H}")
+  file(READ "${XMATERIAL_EDITOR_H}" XMATERIAL_EDITOR_CONTENTS)
+  string(FIND "${XMATERIAL_EDITOR_CONTENTS}" "source/Examples/E19_MaterialEditor/E19_TextEditor.h" TEXTEDITOR_OLD_PATH_FOUND)
+  if(NOT TEXTEDITOR_OLD_PATH_FOUND EQUAL -1)
+    string(REPLACE
+      "source/Examples/E19_MaterialEditor/E19_TextEditor.h"
+      "source/Tools/Editor/xeditor_text_widget.h"
+      XMATERIAL_EDITOR_PATCHED "${XMATERIAL_EDITOR_CONTENTS}")
+    file(WRITE "${XMATERIAL_EDITOR_H}" "${XMATERIAL_EDITOR_PATCHED}")
+  endif()
+endif()
+
+# xtexture.plugin's resource-loader .cpp assumes it sits 2 directories below a "tools" sibling
+# folder (a layout from whichever repo it was originally vendored inside) - true for wherever
+# xGPU's own build reaches it from, not for this one (plugins/xtexture.plugin/source/, symlinked
+# in via example.lionprj). Idempotent patch to the real path.
+set(XTEXTURE_LOADER_CPP "${CMAKE_SOURCE_DIR}/plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.cpp")
+if(EXISTS "${XTEXTURE_LOADER_CPP}")
+  file(READ "${XTEXTURE_LOADER_CPP}" XTEXTURE_LOADER_CONTENTS)
+  string(FIND "${XTEXTURE_LOADER_CONTENTS}" "../../tools/xgpu_xcore_bitmap_helpers.h" XTEXTURE_LOADER_OLD_PATH_FOUND)
+  if(NOT XTEXTURE_LOADER_OLD_PATH_FOUND EQUAL -1)
+    string(REPLACE
+      "../../tools/xgpu_xcore_bitmap_helpers.h"
+      "dependencies/xGPU/source/Tools/xgpu_xcore_bitmap_helpers.h"
+      XTEXTURE_LOADER_PATCHED "${XTEXTURE_LOADER_CONTENTS}")
+    file(WRITE "${XTEXTURE_LOADER_CPP}" "${XTEXTURE_LOADER_PATCHED}")
+  endif()
+endif()
+
+#
+# Get all the dependencies - same list xGPU's own root CMakeLists.txt fetches (duplicated
+# deliberately, not extracted into a shared fragment - see the port's own plan notes: touching
+# xGPU's own working CMakeLists.txt for this carries more risk than a ~20-line, rarely-changing
+# duplicated list is worth. FetchAndPopulate no-ops for anything Install.bat above already placed
+# in example.lionprj/Cache/dependencies, so this is mostly a defensive/consistency measure.)
+#
+FetchAndPopulate("https://github.com/ocornut/imgui.git" "docking")
+FetchAndPopulate("https://github.com/LIONant-depot/xresource_mgr.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xcontainer.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xdelegate.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xprim_geom.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xproperty.git" "master")
+FetchAndPopulate("https://github.com/LIONant-depot/xstrtool.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xbmp_tools.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xserializer.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xscheduler.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xECS.git" "Lesson09_Prefabs")
+FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xundo.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
+FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
+
+# xproperty's own imgui-inspector example header (xPropertyImGuiInspector.h) falls back to a
+# same-directory example "my_properties.h" stub (guard MY_PROPERTIES_H, missing several
+# xproperty::inspector members) whenever a consuming file reaches it before including this
+# project's real config header (xcore/my_properties.h, guard XCORE_PROPERTIES_H). Every other
+# translation unit here reaches the real config first via some other header's own chain;
+# xPropertyImGuiInspector.cpp is compiled as its own standalone source (see XLION_EXTRA_SOURCES
+# below) with nothing else pulling the real config in ahead of it, so it silently built
+# xproperty::inspector 96 bytes smaller than every other TU - a real ODR violation that crashed
+# the moment any resource editor's inspector pushed its first entity (access violation writing
+# through a garbage vector capacity left over from whatever heap bytes were there). Idempotent
+# patch: include the real config first, exactly as this header's own doc comment says every
+# source should.
+set(XPROPERTY_IMGUI_INSPECTOR_CPP "${CMAKE_SOURCE_DIR}/dependencies/xproperty/source/examples/imgui/xPropertyImGuiInspector.cpp")
+if(EXISTS "${XPROPERTY_IMGUI_INSPECTOR_CPP}")
+  file(READ "${XPROPERTY_IMGUI_INSPECTOR_CPP}" XPROPERTY_IMGUI_INSPECTOR_CONTENTS)
+  string(FIND "${XPROPERTY_IMGUI_INSPECTOR_CONTENTS}" "xcore/my_properties.h" XPROPERTY_REAL_CONFIG_FOUND)
+  if(XPROPERTY_REAL_CONFIG_FOUND EQUAL -1)
+    string(REPLACE
+      "#include \"dependencies/xproperty/source/examples/imgui/xPropertyImGuiInspector.h\""
+      "#include \"dependencies/xproperty/source/xcore/my_properties.h\"\n#include \"dependencies/xproperty/source/examples/imgui/xPropertyImGuiInspector.h\""
+      XPROPERTY_IMGUI_INSPECTOR_PATCHED "${XPROPERTY_IMGUI_INSPECTOR_CONTENTS}")
+    if(XPROPERTY_IMGUI_INSPECTOR_PATCHED STREQUAL XPROPERTY_IMGUI_INSPECTOR_CONTENTS)
+      message(FATAL_ERROR "Failed to locate xPropertyImGuiInspector.h's own include in xPropertyImGuiInspector.cpp to patch - upstream may have changed the file's formatting.")
+    endif()
+    file(WRITE "${XPROPERTY_IMGUI_INSPECTOR_CPP}" "${XPROPERTY_IMGUI_INSPECTOR_PATCHED}")
+  endif()
+endif()
+
+# Same idempotent upstream patch xGPU's own CMakeLists.txt applies - imgui-node-editor
+# (unpatched) calls an ImGui API that no longer exists in the vendored docking-branch ImGui.
+set(IMGUI_NODE_EDITOR_INTERNAL_H "${CMAKE_SOURCE_DIR}/dependencies/imgui-node-editor/imgui_node_editor_internal.h")
+if(EXISTS "${IMGUI_NODE_EDITOR_INTERNAL_H}")
+  file(READ "${IMGUI_NODE_EDITOR_INTERNAL_H}" IMGUI_NODE_EDITOR_INTERNAL_CONTENTS)
+  string(FIND "${IMGUI_NODE_EDITOR_INTERNAL_CONTENTS}" "GetKeyIndex(T a)" GETKEYINDEX_SHIM_FOUND)
+  if(GETKEYINDEX_SHIM_FOUND EQUAL -1)
+    file(APPEND "${IMGUI_NODE_EDITOR_INTERNAL_H}" "\nnamespace ImGui{ template< typename T> T GetKeyIndex(T a) {return a;} }\n")
+  endif()
+endif()
+
+# Second idempotent upstream patch, same rationale: imgui-node-editor's imgui_extra_math.inl
+# unconditionally defines operator*(float, ImVec2) as a "missing from imgui.h" fallback - true
+# for xGPU's own older pinned imgui.h, but the docking-branch imgui.h xLION fetches fresh (~11
+# months newer) has since added that exact overload itself (upstream imgui commit, unrelated to
+# this project), so with IMGUI_DEFINE_MATH_OPERATORS active both definitions now collide
+# (C2084 "already has a body"). Guard imgui-node-editor's copy behind the same
+# IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED flag imgui.h itself sets when its own operators are
+# active, so whichever one runs first wins and the other is skipped.
+set(IMGUI_EXTRA_MATH_INL "${CMAKE_SOURCE_DIR}/dependencies/imgui-node-editor/imgui_extra_math.inl")
+if(EXISTS "${IMGUI_EXTRA_MATH_INL}")
+  file(READ "${IMGUI_EXTRA_MATH_INL}" IMGUI_EXTRA_MATH_CONTENTS)
+  string(FIND "${IMGUI_EXTRA_MATH_CONTENTS}" "IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED" FLOAT_VEC2_SHIM_FOUND)
+  if(FLOAT_VEC2_SHIM_FOUND EQUAL -1)
+    string(REPLACE
+      "inline ImVec2 operator*(const float lhs, const ImVec2& rhs)\n{\n    return ImVec2(lhs * rhs.x, lhs * rhs.y);\n}"
+      "#ifndef IMGUI_DEFINE_MATH_OPERATORS_IMPLEMENTED\ninline ImVec2 operator*(const float lhs, const ImVec2& rhs)\n{\n    return ImVec2(lhs * rhs.x, lhs * rhs.y);\n}\n#endif"
+      IMGUI_EXTRA_MATH_PATCHED "${IMGUI_EXTRA_MATH_CONTENTS}")
+    if(IMGUI_EXTRA_MATH_PATCHED STREQUAL IMGUI_EXTRA_MATH_CONTENTS)
+      message(FATAL_ERROR "Failed to locate operator*(float, ImVec2) in imgui_extra_math.inl to patch - upstream may have changed the file's formatting.")
+    endif()
+    file(WRITE "${IMGUI_EXTRA_MATH_INL}" "${IMGUI_EXTRA_MATH_PATCHED}")
+  endif()
+endif()
+
+FetchAndPopulate("https://github.com/LIONant-depot/toolbar.imgui.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xeditor.git" "main")
+
+#
+# xGPU itself, as a dependency. Its own build/dependency/CMakeLists.txt registers the "xGPU"
+# component (source/xGPU.cpp + public headers) via DefineInterfaceComponent, and FetchAndPopulate
+# auto-add_subdirectory's that file since it exists - so xGPU's own component (and its own xmath
+# fetch) is pulled in automatically, no extra step needed here.
+#
+FetchAndPopulate("https://github.com/LIONant-depot/xGPU.git" "main")
+
+#
+# Add ImGui files directly - identical component definition to xGPU's own
+#
+DefineInterfaceComponent(imgui "dependencies"
+  "imconfig.h"
+  "imgui.cpp"
+  "imgui.h"
+  "imgui_demo.cpp"
+  "imgui_draw.cpp"
+  "imgui_internal.h"
+  "imgui_tables.cpp"
+  "imgui_widgets.cpp"
+  "imstb_rectpack.h"
+  "imstb_textedit.h"
+  "imstb_truetype.h"
+  "backends/imgui_impl_win32.h"
+  "backends/imgui_impl_win32.cpp"
+)
+
+DefineInterfaceComponent(imgui-node-editor "dependencies"
+  "crude_json.cpp"
+  "crude_json.h"
+  "imgui_bezier_math.h"
+  "imgui_canvas.cpp"
+  "imgui_canvas.h"
+  "imgui_extra_math.h"
+  "imgui_node_editor.cpp"
+  "imgui_node_editor.h"
+  "imgui_node_editor_api.cpp"
+  "imgui_node_editor_internal.h"
+)
+
+#
+# Shaders - only the subset LevelEditor's own plugin editors (static geom, skinned geom, skeleton,
+# font) and its own mesh-preview widget actually need, plus xGPU's own core draw/imgui shaders
+# (which live in xGPU's own repo now, fetched to dependencies/xGPU).
+#
+set(GLSLC_CANDIDATE "${CMAKE_SOURCE_DIR}/dependencies/Shaderc/bin/glslc.exe")
+if(NOT EXISTS "${GLSLC_CANDIDATE}")
+  message(FATAL_ERROR "glslc.exe not found at ${GLSLC_CANDIDATE} - expected example.lionprj's Install.bat to have provided a Shaderc install alongside xGPU's own dependencies.")
+endif()
+set(GLSLC "${GLSLC_CANDIDATE}")
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/sprv_shaders_h")
+
+set(FRAG_SHADER_SOURCES
+  "dependencies/xGPU/bin/draw_frag.glsl"
+  "plugins/xgeom_static.plugin/source/runtime/GeomStaticShadowMapCreation_frag.glsl"
+  "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_frag.glsl"
+  "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_frag.glsl"
+  "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_frag.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_GridShader_frag.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_frag.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_frag.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_frag.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/E23_ShadowGeneration_frag.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/E28_msdf_frag.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/E28_wire_frag.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_frag.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_frag.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_cube_frag.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_cube_frag.glsl"
+)
+
+set(VERT_SHADER_SOURCES
+  "dependencies/xGPU/bin/draw_vert.glsl"
+  "dependencies/xGPU/bin/imgui_vert.glsl"
+  "plugins/xgeom_static.plugin/source/runtime/GeomStaticShadowMapCreation_vert.glsl"
+  "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_vert.glsl"
+  "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_vert.glsl"
+  "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_vert.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_GridShader_vert.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_vert.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_vert.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_vert.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/E23_ShadowGeneration_vert.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/E28_msdf_vert.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/E28_wire_vert.glsl"
+  "source/Tools/Editor/shaders/xeditor_mesh_preview_full_vert.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_vert.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_vert.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_cube_vert.glsl"
+  "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_cube_vert.glsl"
+)
+
+set(GEOM_SHADER_SOURCES
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_geom.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_geom.glsl"
+)
+
+set(GENERATED_HEADERS)
+foreach(SHADER ${FRAG_SHADER_SOURCES})
+    get_filename_component(FILENAME ${SHADER} NAME_WE)
+    set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    add_custom_command(
+        OUTPUT ${OUTPUT_FILE}
+        COMMAND ${GLSLC} -fshader-stage=frag "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        COMMENT "Compiling fragment shader ${SHADER}"
+    )
+    list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
+endforeach()
+
+foreach(SHADER ${VERT_SHADER_SOURCES})
+    get_filename_component(FILENAME ${SHADER} NAME_WE)
+    set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    add_custom_command(
+        OUTPUT ${OUTPUT_FILE}
+        COMMAND ${GLSLC} -fshader-stage=vert "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        COMMENT "Compiling vertex shader ${SHADER}"
+    )
+    list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
+endforeach()
+
+foreach(SHADER ${GEOM_SHADER_SOURCES})
+    get_filename_component(FILENAME ${SHADER} NAME_WE)
+    set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    add_custom_command(
+        OUTPUT ${OUTPUT_FILE}
+        COMMAND ${GLSLC} -fshader-stage=geom "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        COMMENT "Compiling geometry shader ${SHADER}"
+    )
+    list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
+endforeach()
+
+include_directories("${CMAKE_BINARY_DIR}/sprv_shaders_h")
+
+#
+# xLION's own sources - shared between the graphical and headless targets; only the main_*.cpp
+# entry point differs (see source/main_graphical.cpp / source/main_headless.cpp).
+#
+# xtextfile.cpp/my_properties.cpp/xPropertyImGuiInspector.cpp: xGPU's own CMakeLists.txt gets
+# these compiled in as a side effect of including unrelated examples (E20/E04) that happen to
+# #include them - not needed here (those examples aren't part of the port), so they're listed
+# directly instead. Each executable that needs them (this target AND xECSV2.dll, see the
+# XECS_BUILD_SHARED_LIBRARY block below) compiles its own private copy - not a name clash, two
+# separate binaries. Kept out of XLION_COMMON_SOURCES (below) since they don't live under
+# source/ - source_group(TREE ...) requires every file it's given to share that root.
+set(XLION_EXTRA_SOURCES
+  "dependencies/xtextfile/source/xtextfile.cpp"
+  "dependencies/xproperty/source/xcore/my_properties.cpp"
+  "dependencies/xproperty/source/examples/imgui/xPropertyImGuiInspector.cpp"
+
+  "plugins/xmaterial.plugin/source/Graph/xmaterial_graph.cpp"
+  "plugins/xmaterial.plugin/source/Graph/xmaterial_graph.h"
+  "plugins/xmaterial.plugin/source/Graph/xmaterial_graph_node.cpp"
+  "plugins/xmaterial.plugin/source/Graph/xmaterial_graph_node.h"
+  "plugins/xmaterial.plugin/source/Graph/xmaterial_graph_node_guid.h"
+
+  "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"
+)
+
+# xGPU's own ImGui integration layer (xgpu::tools::imgui::CreateInstance/BeginRendering/Render/
+# Shutdown/getFont/ConsumeWindowFocusGained) - not part of the "xGPU" component (that's just
+# source/xGPU.h + Details/xgpu_*_inline.h), a separate Tools/ file every windowed example needs.
+# NOT registered as its own CMake source: compiled as an independent translation unit (its own
+# add_library(OBJECT) target, or a plain entry in XLION_EXTRA_SOURCES), xgpu_imgui_breach.cpp
+# reproducibly fails to compile under MSBuild specifically - xgpu::device/window/texture come back
+# "not a member of xgpu" (C2039/C2065 cascade from xgpu_imgui_breach.h) - despite an exhaustive,
+# byte-for-byte matched manual cl.exe reproduction (same flags, same include dirs in the same
+# order, same working directory, same output paths, with and without /MP, with and without a rich
+# %INCLUDE%/%LIB%) succeeding every single time. Root cause not found. Instead, its .cpp is
+# #include'd directly into LevelEditor_Main.cpp (see there) - the same "fold a dependency's .cpp
+# into an already-known-good TU" trick this port already uses for my_properties.cpp/xtextfile.cpp/
+# xPropertyImGuiInspector.cpp being pulled in via unrelated xGPU examples upstream - which sidesteps
+# whatever is specific to compiling this file as its own independent MSBuild-invoked TU.
+
+set(XLION_COMMON_SOURCES
+  "source/Editors/LevelEditor/LevelEditor_MaterialGraphCompat.h"
+  "source/Editors/LevelEditor/LevelEditor_App.h"
+  "source/Editors/LevelEditor/LevelEditor_AppFrame.h"
+  "source/Editors/LevelEditor/LevelEditor_AppFrameHeadless.h"
+  "source/Editors/LevelEditor/LevelEditor_AppInit.h"
+  "source/Editors/LevelEditor/LevelEditor_AppToolbars.h"
+  "source/Editors/LevelEditor/LevelEditor_AppWorld.h"
+  "source/Editors/LevelEditor/LevelEditor_DemoContent.h"
+  "source/Editors/LevelEditor/LevelEditor_EditorTabs.h"
+  "source/Editors/LevelEditor/LevelEditor_Kit.h"
+  "source/Editors/LevelEditor/LevelEditor_Main.cpp"
+  "source/Editors/LevelEditor/LevelEditor_Theme.h"
+  "source/Editors/LevelEditor/commands/LevelEditor_CommandSet.h"
+  "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_AppAssetBrowser.h"
+  "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_Commands_ResourceEditors.h"
+  "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
+  "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Chat.h"
+  "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Panel_CommandConsole.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Commands_Scripting.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ComponentCompatibility.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleEvents.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleReload.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleSources.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePlugin.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginBuild.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginLoad.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginLog.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameReloadSession.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Panel_SystemRegistry.h"
+  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ProjectScriptConfig.h"
+  "source/Editors/LevelEditor/extensions/idle_work/LevelEditor_SceneSanityScan.h"
+
+  "source/Tools/Editor/xeditor_camera.h"
+  "source/Tools/Editor/xeditor_console.h"
+  "source/Tools/Editor/xeditor_descriptor_editor.h"
+  "source/Tools/Editor/xeditor_dock_isolation.h"
+  "source/Tools/Editor/xeditor_document_editor.h"
+  "source/Tools/Editor/xeditor_inspector.h"
+  "source/Tools/Editor/xeditor_mesh_preview.h"
+  "source/Tools/Editor/xeditor_registry.h"
+  "source/Tools/Editor/xeditor_resource_editor.h"
+  "source/Tools/Editor/xeditor_resource_tab.h"
+  "source/Tools/Editor/xeditor_text_widget.h"
+  "source/Tools/Editor/xeditor_text_widget.cpp"
+  "source/Tools/Editor/xeditor_texture_thumbnails.h"
+  "source/Tools/Editor/xeditor_thumbnail.h"
+  "source/Tools/Editor/xeditor_thumbnail_cache.h"
+  "source/Tools/Editor/xeditor_toolbar.h"
+  "source/Tools/Editor/xeditor_types.h"
+)
+
+set(XLION_SOURCES ${XLION_COMMON_SOURCES} ${XLION_EXTRA_SOURCES} ${GENERATED_HEADERS} "source/main_graphical.cpp")
+set(XLION_HEADLESS_SOURCES ${XLION_COMMON_SOURCES} ${XLION_EXTRA_SOURCES} ${GENERATED_HEADERS} "source/main_headless.cpp")
+
+set(XLION_PLUGIN_INCLUDES
+  "${CMAKE_SOURCE_DIR}/dependencies/toolbar.imgui"
+  "${CMAKE_SOURCE_DIR}/dependencies/xcmdline/source"
+  "${CMAKE_SOURCE_DIR}/plugins/xgeom_static.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xgeom_skin.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xtexture.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xmaterial.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xmaterial_instance.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xskeleton.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xfont.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xanim_package.plugin"
+)
+
+add_executable(${TARGET_PROJECT} ${XLION_SOURCES})
+target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
+# Target-wide (not per-file): imgui-node-editor's own internal headers try to enable this
+# themselves before their own <imgui.h> include, but that didn't reliably activate imgui.h's
+# operators for every TU that needed them here - defining it target-wide plus the
+# imgui_extra_math.inl patch above (for the one overload that now collides) is the combination
+# that actually works. NOMINMAX: xgpu_imgui_breach.cpp (folded into LevelEditor_Main.cpp, see
+# there) #includes <windows.h> without it, whose min/max macros otherwise break every later
+# std::...::max()/min() call in the SAME translation unit (e.g. xbitmap's xcolor_inline.h).
+target_compile_definitions(${TARGET_PROJECT} PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
+
+# xLION_Headless - no window/device/ImGui at runtime (see LevelEditor_App::Init's bHeadless
+# branch), driven entirely by the same command system over the Command Console pipe. Still links
+# the same components as the graphical target (xGPU/imgui) since there's no separate "core"
+# library to link against yet - see the port's own plan notes on why that split is deferred.
+add_executable(xLION_Headless ${XLION_HEADLESS_SOURCES})
+target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
+target_compile_definitions(xLION_Headless PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
+
+if(XECS_BUILD_SHARED_LIBRARY)
+  add_library(xECSV2 SHARED
+    "dependencies/xECSV2/src/xecs.cpp"
+    "dependencies/xtextfile/source/xtextfile.cpp"
+    "dependencies/xproperty/source/xcore/my_properties.cpp"
+  )
+  target_include_directories(xECSV2 PRIVATE
+    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/dependencies/xECSV2/src"
+    "${CMAKE_SOURCE_DIR}/dependencies/xerr"
+    "${CMAKE_SOURCE_DIR}/dependencies/xresource_guid"
+    "${CMAKE_SOURCE_DIR}/dependencies/xtextfile"
+    "${CMAKE_SOURCE_DIR}/dependencies/xproperty"
+    "${CMAKE_SOURCE_DIR}/dependencies/xresource_pipeline_v2"
+    "${CMAKE_SOURCE_DIR}/dependencies/xstrtool"
+    "${CMAKE_SOURCE_DIR}/dependencies/xcontainer"
+    "${CMAKE_SOURCE_DIR}/dependencies/xdelegate"
+    "${CMAKE_SOURCE_DIR}/dependencies/xscheduler"
+    "${CMAKE_SOURCE_DIR}/dependencies/xmath"
+    "${CMAKE_SOURCE_DIR}/dependencies/xbits"
+  )
+  target_compile_definitions(xECSV2 PRIVATE XECS_BUILD_SHARED XECS_EXPORTS)
+  if(WIN32)
+    target_link_libraries(xECSV2 PRIVATE Advapi32.lib)
+  endif()
+
+  target_link_libraries(${TARGET_PROJECT} PRIVATE xECSV2)
+  target_compile_definitions(${TARGET_PROJECT} PRIVATE XECS_BUILD_SHARED)
+
+  target_link_libraries(xLION_Headless PRIVATE xECSV2)
+  target_compile_definitions(xLION_Headless PRIVATE XECS_BUILD_SHARED)
+endif()
+
+source_group("Shaders" FILES ${GENERATED_HEADERS})
+source_group(TREE "${CMAKE_SOURCE_DIR}/source" PREFIX "source" FILES ${XLION_COMMON_SOURCES})
+
+find_package(OpenMP REQUIRED)
+target_link_libraries(${TARGET_PROJECT} PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(xLION_Headless PRIVATE OpenMP::OpenMP_CXX)
+
+if(WIN32)
+  target_link_libraries(${TARGET_PROJECT} PRIVATE Advapi32.lib)
+  target_link_libraries(xLION_Headless PRIVATE Advapi32.lib)
+endif()
+
+if(MSVC)
+  target_compile_options(${TARGET_PROJECT} PRIVATE /bigobj)
+  target_compile_options(xLION_Headless PRIVATE /bigobj)
+endif()
+
+# xeditorcli - the client both xLION executables' Command Console pipe server accepts commands
+# from. Zero dependency on Vulkan/ImGui/xproperty/etc, so it stays its own fast-building tool.
+add_executable(xeditorcli "source/Tools/Editor/xeditorcli.cpp")
+set_target_properties(xeditorcli PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+# Pulls in xGPU's own "xGPU" component registration (source/xGPU.cpp + public headers) and the
+# imgui/imgui-node-editor components above, via their build/dependency/CMakeLists.txt files -
+# applied to BOTH targets in turn (ProcessComponents applies the whole registry to whichever
+# target TARGET names).
+ProcessComponents(TARGET ${TARGET_PROJECT})
+ProcessComponents(TARGET xLION_Headless)
