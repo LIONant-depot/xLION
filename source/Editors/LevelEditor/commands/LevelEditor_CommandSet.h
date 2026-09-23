@@ -29,6 +29,7 @@ namespace level_editor
         xscene::commands::delete_entity_cmd                 CmdDeleteEntity;
         level_editor::commands::say_query_cmd                     CmdSay;
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
+        level_editor::commands::exit_query_cmd                    CmdExit;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
         xlevel::commands::close_scene_cmd                   CmdCloseScene;
         xlevel::commands::add_scene_cmd                     CmdAddScene;
@@ -127,6 +128,7 @@ namespace level_editor
         , CmdDeleteEntity(Level, pScene)
         , CmdSay(Workspace, pEditor)
         , CmdGetLog(Workspace, pEditor)
+        , CmdExit(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
         , CmdCloseScene(Level, pEditor)
         , CmdAddScene(Level, pEditor)

@@ -14,3 +14,7 @@
 /*.png
 /*.tga
 /*.pdb
+
+# Local tool caches (Serena/graphify code-analysis indexing) - machine-local, not project state
+/.serena
+/graphify-out

@@ -2,9 +2,10 @@
 
 namespace level_editor
 {
-    // No window, no device, no ImGui context - just the command system. Runs until the process is
-    // killed (matches the named-pipe server model already used for the graphical build's detached
-    // Command Console thread; here it's the whole process instead of a background thread). See
+    // No window, no device, no ImGui context - just the command system. Runs until the Exit command
+    // (LevelEditor_Commands_App.h) sets ExitState.bRequested, or the process is killed (matches the
+    // named-pipe server model already used for the graphical build's detached Command Console
+    // thread; here it's the whole process instead of a background thread). See
     // LevelEditor_AppFrame.h's app::Frame() for the graphical equivalent this mirrors the
     // non-rendering half of (PollGameReload + PumpCommandConsolePipe run there too, unconditionally,
     // before any ImGui/render call - this reuses the exact same two calls).
@@ -12,7 +13,7 @@ namespace level_editor
     {
         xeditor::diagnostics::Log("headless: entering command loop");
 
-        while (true)
+        while (!ExitState.bRequested)
         {
             level_editor::PollGameReload(CmdContext, GamePlugin, RegisterHostComponents);
 

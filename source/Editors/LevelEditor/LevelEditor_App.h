@@ -30,6 +30,7 @@
 #include "dependencies/xeditor/include/xeditor/host.h"
 
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Chat.h"
+#include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_App.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_level.h"
 
@@ -315,6 +316,7 @@ namespace level_editor
 
 
         level_editor::commands::chat_log            ChatLog;
+        level_editor::commands::exit_state          ExitState;
 
 
 
@@ -558,8 +560,8 @@ namespace level_editor
 
         int  Init(bool bHeadlessMode = false);   // 0 on success, otherwise the process exit code
         void Frame();          // one iteration of the graphical main loop
-        void Run();            // Frame() until the window closes
-        void RunHeadless();    // pumps the command console/idle work with no window, until killed
+        void Run();            // Frame() until the window closes or the Exit command runs
+        void RunHeadless();    // pumps the command console/idle work with no window, until the Exit command runs
         void Shutdown();
     };
 }

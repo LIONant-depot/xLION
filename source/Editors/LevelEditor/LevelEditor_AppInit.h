@@ -451,6 +451,7 @@ namespace level_editor
         EditorHost.provide(CmdContext);
         EditorHost.provide<xscene::scene_context>(CmdContext);
         EditorHost.provide(ChatLog);
+        EditorHost.provide(ExitState);
         EditorHost.provide(ResourceEditors);
         if (!bHeadless)
         {
@@ -626,7 +627,7 @@ namespace level_editor
 
     inline void app::Run()
     {
-        while (Instance.ProcessInputEvents()) Frame();
+        while (Instance.ProcessInputEvents() && !ExitState.bRequested) Frame();
     }
 
     inline void app::Shutdown()
