@@ -62,8 +62,15 @@
 // pLevelSession is a raw, non-owning pointer to the one Level session Open() constructs at startup - it is a
 // SINGLETON (see xlevel_session.h's own top comment for why: no per-Guid identity, never destroyed for the
 // life of the process), so this pointer stays valid for as long as `app` does. Commands (still built here,
-// against the session's own CmdContext/Undo - the command/undo split is stage (c)) and WireAssetBrowser's
-// open-asset routing both reach into it directly.
+// against the session's own CmdContext/Undo for its "Level" half) and WireAssetBrowser's open-asset routing
+// both reach into it directly. command_set's ~32 Level-tagged commands (entity/scene/play mutation) are
+// already registered on pLevelSession->m_Undo, not a shell-owned system - true since stage (b) - so
+// host::dispatch()'s Name\Command already reaches them; physically relocating those command *objects* into
+// xlevel::session itself (so command_set holds only the ~50 Workspace-tagged ones) is left for a follow-up -
+// one of them (CmdSerializeRoundtrip) is defined in a shell-only file
+// (extensions/game_module/LevelEditor_Commands_Scripting.h) that xlevel_session.h cannot see without a real
+// include-order untangling, and that's a bigger, separate piece of work than the AddSystem/
+// m_pExternalWorkspace removal this stage is actually about.
 //
 //-----------------------------------------------------------------------------------
 
@@ -89,16 +96,14 @@ namespace level_editor
 
         //
         // Command/undo system - the shell's own framework-level workspace: asset CRUD, source control, compile,
-        // idle-work, Say/GetLog, OpenResourceEditor and friends. Registered as EditorHost's external workspace
-        // (m_pExternalWorkspace) and under the legacy "LevelEditor" namespace in LevelEditorHistory for the
-        // Command Console's Name\Command routing - both removed in stage (c) once Level is a normal
-        // host.m_Sessions entry and host::dispatch() resolves it by display name on its own, the same way it
-        // already does for Texture.
+        // idle-work, Say/GetLog, OpenResourceEditor and friends. EditorHost.m_Workspace IS this workspace
+        // (stage (c): no more m_pExternalWorkspace override onto a separate app-owned system, and no more
+        // routing the legacy "LevelEditor/..." prefix through LevelEditorHistory - Level is a normal
+        // host.m_Sessions entry, so host::dispatch()'s Name\Command already resolves it by display name, the
+        // same way it already does for Texture).
         //
         level_editor::commands::chat_log            ChatLog;
         level_editor::commands::exit_state          ExitState;
-
-        xundo::system                      LevelEditorUndo;
 
         xeditor::host                     EditorHost;
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)

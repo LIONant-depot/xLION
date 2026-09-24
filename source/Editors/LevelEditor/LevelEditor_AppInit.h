@@ -127,7 +127,8 @@ namespace level_editor
         AsserBrowser.SetWindowName(xlevel::editor_tabs::kResourceBrowserWindow);
         AsserBrowser.Show(true);
 
-        EditorHost.m_pExternalWorkspace = &LevelEditorUndo;
+        // EditorHost.m_Workspace IS the shell's framework-level workspace now - no more overriding it with a
+        // separate app-owned system (stage (c): removed the m_pExternalWorkspace indirection entirely).
         EditorHost.m_OnBeforeEdit        = xlevel::TryGateLevelMutation;
         EditorHost.provide(ChatLog);
         EditorHost.provide(ExitState);
@@ -140,7 +141,7 @@ namespace level_editor
         }
         EditorHost.m_IdleWork.m_OnRun.Register<&e10::source_control::ScanAllLibrariesWhenIdle>();
 
-        if (auto Err = LevelEditorUndo.Init({}, false); !Err.empty())
+        if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
             xeditor::NotifyError(std::format("LevelEditor: xundo Init failed: {}", Err));
 
         // Level opens exactly like Texture does on double-click - the one difference is WHEN: Level is a
@@ -153,11 +154,11 @@ namespace level_editor
             if (!pLevelSession) xeditor::NotifyError("LevelEditor: failed to construct the Level session");
         }
 
+        // No more LevelEditorHistory.AddSystem("LevelEditor", ...) - Level is a normal host.m_Sessions entry
+        // (see open_resource_editors::SyncToHost), so host::dispatch()'s own Name\Command resolution already
+        // reaches it by display name, the same way it already reaches Texture.
         if (pLevelSession)
-        {
-            Commands.emplace(LevelEditorUndo, pLevelSession->m_Undo, static_cast<xscene::scene_context*>(&pLevelSession->m_CmdContext), &pLevelSession->m_CmdContext);
-            LevelEditorHistory.AddSystem("LevelEditor", 1, LevelEditorUndo);
-        }
+            Commands.emplace(EditorHost.m_Workspace, pLevelSession->m_Undo, static_cast<xscene::scene_context*>(&pLevelSession->m_CmdContext), &pLevelSession->m_CmdContext);
 
         std::thread(level_editor::CommandConsolePipeThreadMain, std::ref(ConsolePipeBridge)).detach();
 

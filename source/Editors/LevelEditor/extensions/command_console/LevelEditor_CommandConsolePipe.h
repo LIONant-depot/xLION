@@ -180,43 +180,13 @@ namespace level_editor
 
 
 
+        // Level is a normal host.m_Sessions entry now (xeditor::open_resource_editors, same as Texture) -
+        // xeditor::host::dispatch()'s own Name\Command resolves it by display name on its own; the legacy
+        // "LevelEditor/Edit/..." / "LevelEditor/Query/..." xundo::history::Route() fallback this used to keep
+        // for old scripts is gone along with LevelEditorHistory's "LevelEditor" registration
+        // (LevelEditor_AppInit.h no longer calls AddSystem for it).
         if (pHost)
-
-
-
-        {
-
-
-
-            // Prefer xeditor::host for modern short names / Name\Cmd / help / list.
-
-
-
-            // Legacy "LevelEditor/Edit/..." and "LevelEditor/Query/..." keep History.Route so AI/scripts
-
-
-
-            // that still use the old full paths never lose access (legacy routes).
-
-
-
-            const bool bLegacyLevelEditorPath =
-
-
-
-                (Cmd.size() >= 4 && (Cmd.substr(0, 4) == "LevelEditor/" || Cmd.substr(0, 4) == "level_editor/"));
-
-
-
-            if (!bLegacyLevelEditorPath)
-
-
-
-                return pHost->dispatch(Cmd);
-
-
-
-        }
+            return pHost->dispatch(Cmd);
 
 
 

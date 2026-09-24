@@ -7,8 +7,8 @@ namespace level_editor
     // open-asset routing (Level / Texture), and the extra Project Settings sections.
     inline void app::WireAssetBrowser()
     {
-        e10::RegisterAssetBrowserCallbacks(AsserBrowser, LevelEditorUndo, pLevelSession ? pLevelSession->m_Undo : LevelEditorUndo, MainWindow);
-        e10::RegisterSourceControlCallbacks(AsserBrowser, LevelEditorUndo);
+        e10::RegisterAssetBrowserCallbacks(AsserBrowser, EditorHost.m_Workspace, pLevelSession ? pLevelSession->m_Undo : EditorHost.m_Workspace, MainWindow);
+        e10::RegisterSourceControlCallbacks(AsserBrowser, EditorHost.m_Workspace);
 
         // "Scripting" section in the merged Plugins/Project Settings tab (e10::plugin_tab,
         // E10_asset_browser_plugin_tab.h) - the project's Script-Module build-membership list

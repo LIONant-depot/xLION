@@ -20,7 +20,7 @@ namespace level_editor
             AsserBrowser.RenderEmbeddedTab(e10::g_LibMgr, xresource::g_Mgr, "Assets");
             break;
         case 2:
-            e10::RenderSourceControlPanel(LevelEditorUndo);
+            e10::RenderSourceControlPanel(EditorHost.m_Workspace);
             break;
         case 3:
             xeditor::RenderIdleWorkPanel(EditorHost.m_IdleWork, pLevelSession && pLevelSession->m_pGameMgr && !pLevelSession->m_State.m_OpenScenes.empty());
