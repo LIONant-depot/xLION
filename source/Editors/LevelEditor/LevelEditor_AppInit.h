@@ -7,620 +7,180 @@ namespace level_editor
         bHeadless = bHeadlessMode;
 
         xeditor::diagnostics::Start("LevelEditor.trace.log");
-
         xeditor::diagnostics::InstallCrtReportHook();
-
         xeditor::diagnostics::InstallTerminateHandler();
-
         xeditor::diagnostics::InstallUnhandledExceptionFilter();
-
         xeditor::diagnostics::Log("startup: LevelEditor_Example begin");
 
         if (!bHeadless)
         {
-        xeditor::diagnostics::Log("startup: creating xgpu instance");
-
-        if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = true, .m_pLogErrorFunc = xeditor::NotifyError, .m_pLogWarning = xeditor::NotifyError }); Err)
-
-        {
-
-            xeditor::diagnostics::Log("startup: xgpu instance creation failed");
-
-            xeditor::diagnostics::RemoveCrtReportHook();
-
-            xeditor::diagnostics::RemoveTerminateHandler();
-
-            xeditor::diagnostics::Stop();
-
-            return xgpu::getErrorInt(Err);
-
+            xeditor::diagnostics::Log("startup: creating xgpu instance");
+            if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = true, .m_pLogErrorFunc = xeditor::NotifyError, .m_pLogWarning = xeditor::NotifyError }); Err)
+            {
+                xeditor::diagnostics::Log("startup: xgpu instance creation failed");
+                xeditor::diagnostics::RemoveCrtReportHook();
+                xeditor::diagnostics::RemoveTerminateHandler();
+                xeditor::diagnostics::Stop();
+                return xgpu::getErrorInt(Err);
+            }
+            xeditor::diagnostics::Log("startup: creating xgpu device");
+            if (auto Err = Instance.Create(Device); Err)
+            {
+                xeditor::diagnostics::Log("startup: xgpu device creation failed");
+                xeditor::diagnostics::RemoveCrtReportHook();
+                xeditor::diagnostics::RemoveTerminateHandler();
+                xeditor::diagnostics::Stop();
+                return xgpu::getErrorInt(Err);
+            }
+            xeditor::diagnostics::Log("startup: creating main window");
+            if (auto Err = Device.Create(MainWindow, {}); Err)
+            {
+                xeditor::diagnostics::Log("startup: main window creation failed");
+                xeditor::diagnostics::RemoveCrtReportHook();
+                xeditor::diagnostics::RemoveTerminateHandler();
+                xeditor::diagnostics::Stop();
+                return xgpu::getErrorInt(Err);
+            }
         }
-
-        xeditor::diagnostics::Log("startup: creating xgpu device");
-
-        if (auto Err = Instance.Create(Device); Err)
-
-        {
-
-            xeditor::diagnostics::Log("startup: xgpu device creation failed");
-
-            xeditor::diagnostics::RemoveCrtReportHook();
-
-            xeditor::diagnostics::RemoveTerminateHandler();
-
-            xeditor::diagnostics::Stop();
-
-            return xgpu::getErrorInt(Err);
-
-        }
-
-        xeditor::diagnostics::Log("startup: creating main window");
-
-        if (auto Err = Device.Create(MainWindow, {}); Err)
-
-        {
-
-            xeditor::diagnostics::Log("startup: main window creation failed");
-
-            xeditor::diagnostics::RemoveCrtReportHook();
-
-            xeditor::diagnostics::RemoveTerminateHandler();
-
-            xeditor::diagnostics::Stop();
-
-            return xgpu::getErrorInt(Err);
-
-        }
-        }
-
-
 
         xeditor::diagnostics::Log("startup: initializing resource manager");
-
         xresource::g_Mgr.Initiallize(20000);
-
         ResourceMgrUserData.m_Device = Device;
-
         xresource::g_Mgr.setUserData(&ResourceMgrUserData, false);
-
-
 
         if (!bHeadless)
         {
-        //
+            xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance begin");
+            ResourceEditors.m_pDevice = &Device;
+            xgpu::tools::imgui::CreateInstance(MainWindow);
+            xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance complete");
 
-        // Setup Imgui interface
+            xeditor::diagnostics::Log("startup: applying LevelEditor theme begin");
+            level_editor::theme::ApplyUnityInspiredTheme();
+            xeditor::diagnostics::Log("startup: applying LevelEditor theme complete");
 
-        //
-
-        xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance begin");
-
-        ResourceEditors.m_pDevice = &Device;
-
-        xgpu::tools::imgui::CreateInstance(MainWindow);
-
-        xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance complete");
-
-        xeditor::diagnostics::Log("startup: applying LevelEditor theme begin");
-
-        level_editor::theme::ApplyUnityInspiredTheme();
-
-        xeditor::diagnostics::Log("startup: applying LevelEditor theme complete");
-
-
-
-        // io.FontDefault (not a per-frame PushFont) - xgpu::tools::imgui::BeginRendering() calls
-
-        // ImGui::DockSpace() internally, BEFORE LevelEditor's own render code ever runs, and ImGui's docking tab
-
-        // bar renders using whatever font is current AT THAT POINT - a PushFont in LevelEditor's own loop (after
-
-        // BeginRendering returns) is too late to affect it, which is exactly why the dock tab labels
-
-        // ("Resources"/"Assets"/...) kept rendering in the old default Consolas even after every panel's
-
-        // own content switched to Segoe UI. Overriding io.FontDefault instead affects ImGui::NewFrame()'s
-
-        // own g.Font reset, which runs before DockSpace() - this is process-global IO state, but safe here
-
-        // because every xGPU example is its own separate process (E10/E19-28 never call this line).
-
-        xeditor::diagnostics::Log("startup: selecting LevelEditor default font begin");
-
-        ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[4];
-
-        xeditor::diagnostics::Log("startup: selecting LevelEditor default font complete");
+            // io.FontDefault (not a per-frame PushFont) - xgpu::tools::imgui::BeginRendering() calls
+            // ImGui::DockSpace() internally, BEFORE any panel's own render code ever runs, and ImGui's docking
+            // tab bar renders using whatever font is current AT THAT POINT.
+            xeditor::diagnostics::Log("startup: selecting LevelEditor default font begin");
+            ImGui::GetIO().FontDefault = ImGui::GetIO().Fonts->Fonts[4];
+            xeditor::diagnostics::Log("startup: selecting LevelEditor default font complete");
         }
 
-
-
         //
-
-        // ECS setup - first xGPU example to own an xecs::game_mgr::instance. A unique_ptr (not a plain
-
-        // stack value) specifically so Phase 8's PollGameReload can destroy and reconstruct the whole world
-
-        // in place - see LevelEditor_GamePlugin.h's own comment on why that's the correct, sufficient operation
-
-        // for a hot reload rather than something narrower.
-
+        // Open the project - every resource editor (Level included) needs it open before it can be created.
+        // Historically this located the repo root by searching the executable's own path for the first literal
+        // "xGPU" substring; fixed to walk UP the executable's own ancestor directories and pick the first
+        // (closest) one that actually has a bootstrapped example.lionprj\Cache\Plugins - i.e. finding the repo
+        // root structurally, never by name (a worktree checkout nested under a folder that ALSO contains "xGPU"
+        // earlier in its path broke the substring match).
         //
-
-        xeditor::diagnostics::Log("startup: constructing ECS game manager begin");
-        pGameMgr = std::make_unique<xecs::game_mgr::instance>();
-
-        xeditor::diagnostics::Log("startup: constructing ECS game manager complete");
-
-
-
-        xeditor::diagnostics::Log("startup: registering host components begin");
-
-        RegisterHostComponents(*pGameMgr);
-
-        xeditor::diagnostics::Log("startup: registering host components complete");
-
-
-
-        // The game DLL, built from the project's script modules (LevelEditor_GameModuleSources.h) -
-
-        // loading it here, BEFORE RegisterSystems below locks the component registry, is what makes an
-
-        // initial load possible without a full reload; only a SUBSEQUENT swap (hot reload while already
-
-        // running) needs PollGameReload's destroy-and-recreate sequence. Missing/failing to load is not
-
-        // an error - LevelEditor runs exactly as before with no game loaded, matching the "user builds it, or
-
-        // LevelEditor does" direction: nothing has been built yet on a fresh checkout, and that's fine.
-
-        //
-
-        // Synchronous here (unlike a live focus-regain/Play-triggered recompile, which never blocks the
-
-        // render loop - see StartGameReload/PollGameReload) - this runs before the window has rendered its first
-
-        // frame at all, so there's no live UI to freeze yet; a one-time pause here on a fresh checkout
-
-        // is a materially different, much smaller cost than freezing an editor the user is actively
-
-        // working in.
-
-        //
-
-        // Gated behind XECS_BUILD_SHARED (only defined when CMake's XECS_BUILD_SHARED_LIBRARY option is
-
-        // ON - see CMakeLists.txt): a Game.dll only makes sense when
-
-        // xECSV2 itself is a shared library, since it depends on RegisterComponents/RegisterSystems
-
-        // mutating the ONE shared, cross-module component registry - in the default (non-shared) build,
-
-        // the generated script project would have no xECSV2.lib to link, so BuildGamePluginIfStale's own cmake invocation
-
-        // would just fail every single time it ran (once per focus-regain,
-
-        // forever). Confirmed live: that failure also silently cancelled every Play request, since
-
-        // PollGameReload's Failed branch clears State.m_bPlayRequested unconditionally - without this
-
-        // guard, Play never actually worked in the default build config at all.
-
-#if defined(XECS_BUILD_SHARED)
-
         {
-
-            GamePlugin.m_Paths = level_editor::MakeScriptProjectPaths();
-
-            // Synchronous, main-thread-only call site (see this block's own top comment) - safe to call
-
-            // GetLatestModuleSourceWriteTime() directly here, unlike StartGameReload's own background-
-
-            // thread call site (see BuildGamePluginIfStale's own comment on why that one takes it as a
-
-            // precomputed parameter instead).
-
-            // Only when there is none: the module list is not known yet (the project is opened below), and regenerating now
-            // would replace the modules of the last run with none.
-            if (!std::filesystem::exists(GamePlugin.m_Paths.m_CMakeLists))
-                level_editor::RegenerateGameModuleSources(GamePlugin.m_Paths);
-
-            level_editor::BuildGamePluginIfStale(GamePlugin, level_editor::GetLatestModuleSourceWriteTime(GamePlugin.m_Paths));
-
-            level_editor::LoadGamePluginComponents(*pGameMgr, GamePlugin, /*Generation*/ 1);
-
-        }
-
-#else
-
-        level_editor::LogGamePlugin("Game.dll: this build was configured without XECS_BUILD_SHARED_LIBRARY (see CMakeLists.txt) - Game.dll support is disabled, Play just ticks the host's own systems.");
-
-#endif
-
-
-
-        xeditor::diagnostics::Log("startup: registering host systems begin");
-
-        RegisterHostSystems(*pGameMgr);
-
-        xeditor::diagnostics::Log("startup: registering host systems complete");
-
-        xeditor::diagnostics::Log("startup: registering game plugin systems begin");
-
-        level_editor::RegisterGamePluginSystems(*pGameMgr, GamePlugin);
-
-        xeditor::diagnostics::Log("startup: registering game plugin systems complete");
-
-        {
-
             xeditor::diagnostics::Log("startup: opening project begin");
-
             TCHAR szModulePath[MAX_PATH];
-
             GetModuleFileName(NULL, szModulePath, MAX_PATH);
 
-
-
             std::filesystem::path RepoRoot;
-
             for (std::filesystem::path Dir = std::filesystem::path(szModulePath).parent_path(); ; )
-
             {
-
                 std::error_code Ec;
-
-                if (std::filesystem::exists(Dir / L"example.lionprj" / L"Cache" / L"Plugins", Ec) && !Ec)
-
-                {
-
-                    RepoRoot = Dir;
-
-                    break;
-
-                }
-
+                if (std::filesystem::exists(Dir / L"example.lionprj" / L"Cache" / L"Plugins", Ec) && !Ec) { RepoRoot = Dir; break; }
                 const std::filesystem::path Parent = Dir.parent_path();
-
-                if (Parent.empty() || Parent == Dir)
-
-                    break; // reached the filesystem root without finding a bootstrapped project
-
+                if (Parent.empty() || Parent == Dir) break; // reached the filesystem root without finding a bootstrapped project
                 Dir = Parent;
-
             }
 
-
-
             if (!RepoRoot.empty())
-
             {
-
                 const std::wstring ProjectPathW = (RepoRoot / L"example.lionprj").wstring();
-
                 TCHAR szFileName[MAX_PATH];
-
                 wcscpy_s(szFileName, MAX_PATH, ProjectPathW.c_str());
 
-
-
-                const std::filesystem::path ProjectPathForLog(szFileName);
-
-                const std::filesystem::path PluginPathForLog = ProjectPathForLog / "cache" / "plugins";
-
-                std::error_code PluginPathError;
-
-                const bool bPluginPathExists = std::filesystem::exists(PluginPathForLog, PluginPathError);
-
-                xeditor::diagnostics::Log
-
-                ( "startup: project path=%s plugin path=%s exists=%d ec=%d"
-
-                , ProjectPathForLog.string().c_str(), PluginPathForLog.string().c_str()
-
-                , bPluginPathExists ? 1 : 0, PluginPathError.value()
-
-                );
-
                 if (auto Err = e10::g_LibMgr.OpenProject(szFileName); Err)
-
                 {
-
                     xeditor::NotifyError(Err.getMessage());
-
                     xeditor::diagnostics::Log("startup: opening project failed");
-
                     xeditor::diagnostics::RemoveCrtReportHook();
-
                     xeditor::diagnostics::RemoveTerminateHandler();
-
                     xeditor::diagnostics::Stop();
-
                     return 1;
-
                 }
-
                 xeditor::diagnostics::Log("startup: opening project complete");
-
-
 
                 if (!bHeadless)
                 {
-                ImGuiIO& io = ImGui::GetIO();
-
-                static std::string IniSave = std::format("{}/Assets/imgui_level_editor.ini", xstrtool::To(szFileName));
-
-                io.IniFilename = IniSave.c_str();
+                    ImGuiIO& io = ImGui::GetIO();
+                    static std::string IniSave = std::format("{}/Assets/imgui_level_editor.ini", xstrtool::To(szFileName));
+                    io.IniFilename = IniSave.c_str();
                 }
-
-
-
-                ProjectPath = e10::g_LibMgr.m_ProjectPath;
-
-                xresource::g_Mgr.setRootPath(std::format(L"{}//Cache//Resources//Platforms//Windows", e10::g_LibMgr.m_ProjectPath));
-
-                pGameMgr->m_SceneMgr.m_ProjectPath  = ProjectPath;
-
-                pGameMgr->m_LevelMgr.m_ProjectPath  = ProjectPath;
-
-                pGameMgr->m_PrefabMgr.m_ProjectPath = ProjectPath;
-
-                pGameMgr->m_SystemMgr.m_ProjectPath = ProjectPath;
-
-
-
-                // Applies whatever Update-system order/enabled state was last saved through the System
-
-                // Registry panel - must run AFTER RegisterSystems<...>() above has populated
-
-                // m_SystemMgr's own update-system list; a missing file (nothing saved yet) is not an
-
-                // error, registration order simply stands as-is.
-
-                if (auto Err = pGameMgr->m_SystemMgr.Load(); Err)
-
-                    xeditor::NotifyError(std::format("Failed to load System Registry order: {}", Err.getMessage()));
-
-
-
-                if (auto Err = level_editor::LoadScriptConfig(ProjectPath, level_editor::g_ScriptConfig); Err)
-
-                    xeditor::NotifyError(std::format("Failed to load Script.config.txt: {}", Err.getMessage()));
-
-                // Keeps the generated script project (Cache\Script\CMakeLists.txt) in sync with whatever was actually persisted,
-
-                // regardless of how it got there (a fresh checkout has no generated project yet at all).
-
-#if defined(XECS_BUILD_SHARED)
-                // The module list is only known now: one that changed since the DLL was built (or a fresh checkout) needs a rebuild.
-                if (level_editor::RegenerateGameModuleSources(GamePlugin.m_Paths)) level_editor::StartGameReload(GamePlugin);
-#else
-                level_editor::RegenerateGameModuleSources(GamePlugin.m_Paths);
-#endif
-
             }
-
             else
-
             {
-
                 xeditor::diagnostics::Log("startup: could not locate a bootstrapped example.lionprj above the executable");
-
             }
-
         }
-
         xeditor::diagnostics::Log("startup: editor state and asset browser constructed");
 
-
-
-        // Lets entity_to_prefab_drop::OnDrop (a static, globally-registered object) reach the live
-
-        // GameMgr/State at drop time - see their own declaration comment for why this is safe here.
-
-        // Rebound by PollGameReload after a hot reload replaces *pGameMgr with a fresh instance.
-
-
-
-        level_editor::g_pGamePlugin = &GamePlugin;
-
-        xscene::g_MakePrefabDropHandler = &xscene::MakePrefabDropViaCommands;
-
-
-
-        // Visible from the start and never closable - browsing/creating Levels and Scenes is this
-
-        // editor's primary activity (not an occasional lookup), so it's a permanent, dockable part of the
-
-        // layout rather than a modal picker: DOCKABLE drops the bottom Close button and lets it dock like
-
-        // Level Editor/Entity Properties instead of floating as an undockable overlay. (The "+" pickers
-
-        // elsewhere in this file use a separate e10::assert_browser instance, level_editor::g_AssetBrowserPopup,
-
-        // which stays at the POPUP default.)
-
+        // Visible from the start and never closable - browsing/creating Levels and Scenes is this editor's
+        // primary activity, so it's a permanent, dockable part of the layout.
         AsserBrowser.setDisplayMode(e10::assert_browser::display_mode::DOCKABLE);
-
-        AsserBrowser.SetWindowName(level_editor::editor_tabs::kResourceBrowserWindow);
-
-            // Host Drawer owns Resources/Assets/Compilation/Project Settings — not Parent dock class.
-
+        AsserBrowser.SetWindowName(xlevel::editor_tabs::kResourceBrowserWindow);
         AsserBrowser.Show(true);
 
         EditorHost.m_pExternalWorkspace = &LevelEditorUndo;
         EditorHost.m_OnBeforeEdit        = xlevel::TryGateLevelMutation;
-        EditorHost.provide(CmdContext);
-        EditorHost.provide<xscene::scene_context>(CmdContext);
         EditorHost.provide(ChatLog);
         EditorHost.provide(ExitState);
         EditorHost.provide(ResourceEditors);
+        EditorHost.provide(AsserBrowser);
         if (!bHeadless)
         {
             EditorHost.provide(Device);
             EditorHost.provide(MainWindow);
         }
-#if defined(XECS_BUILD_SHARED)
-        PlayGate.m_IsBuilding = [&]() noexcept { return GamePlugin.m_bBuilding; };
-        PlayGate.m_StartBuild = [&]() noexcept { level_editor::StartGameReload(GamePlugin); };
-        EditorHost.provide(PlayGate);
-#endif
-        EditorHost.m_IdleWork.m_OnRun.Register<&level_editor::scene_sanity_scanner::Run>(SceneScanner);
         EditorHost.m_IdleWork.m_OnRun.Register<&e10::source_control::ScanAllLibrariesWhenIdle>();
-        GamePlugin.m_Events.m_OnCollectRequiredComponents.Register<&app::CollectRequiredComponents>(*this);
-        GamePlugin.m_Events.m_OnBeforeReload.Register<&app::BeforeReload>(*this);
-        GamePlugin.m_Events.m_OnAfterReload.Register<&app::AfterReload>(*this);
 
         if (auto Err = LevelEditorUndo.Init({}, false); !Err.empty())
-
             xeditor::NotifyError(std::format("LevelEditor: xundo Init failed: {}", Err));
 
-        xlevel::RegisterLevelEditorDescriptor();
+        // Level opens exactly like Texture does on double-click - the one difference is WHEN: Level is a
+        // singleton with no natural per-Guid identity of its own (see xlevel_session.h's own top comment), so
+        // it opens once here, at startup, rather than lazily on a browser click. Guid.m_Instance is left at its
+        // default (0) - Open()/the factory map key off Guid.m_Type only.
+        {
+            auto* pEditor = ResourceEditors.Open(xresource::full_guid{ {}, xecs::level::type_guid_v }, {});
+            pLevelSession = static_cast<xlevel::session*>(pEditor);
+            if (!pLevelSession) xeditor::NotifyError("LevelEditor: failed to construct the Level session");
+        }
 
-        EditorHost.provide(LevelHostSession);
-        LevelHostSession.Bind(CmdContext);
-        Commands.emplace(LevelEditorUndo, CmdContext.m_Undo, static_cast<xscene::scene_context*>(&CmdContext), &CmdContext);
-
-        LevelEditorHistory.AddSystem("LevelEditor", 1, LevelEditorUndo);
+        if (pLevelSession)
+        {
+            Commands.emplace(LevelEditorUndo, pLevelSession->m_Undo, static_cast<xscene::scene_context*>(&pLevelSession->m_CmdContext), &pLevelSession->m_CmdContext);
+            LevelEditorHistory.AddSystem("LevelEditor", 1, LevelEditorUndo);
+        }
 
         std::thread(level_editor::CommandConsolePipeThreadMain, std::ref(ConsolePipeBridge)).detach();
 
-
-
-        // Lets xeditor::Run() (LevelEditor_CommandContext.h, called by every UI-driven command - tree
-
-        // clicks, property edits, add/remove component, create/delete entity) log into this SAME console
-
-        // log too, not just pipe-driven/console-typed commands - direct user report: "route the users
-
-        // commands there as well... nothing showing up there yet."
-
-
-        // xproperty's default row tint (s_ColorCategories, xPropertyImGuiInspector.cpp) is a set of bright
-
-        // matplotlib-style categorical colors, tuned against ImGui's stock dark theme - against
-
-        // LevelEditor_Theme.h's darker/flatter Unity palette they read as a clashing, too-bright/too-saturated mess
-
-        // (direct user feedback: "the inspector right now looks horrible"). m_bRenderBackgroundDepth alone
-
-        // only stops DIFFERENT depths getting different hues - every row (including "Value"/"Target"
-
-        // leaves) still tinted from s_ColorCategories[0] (a light peachy tan). Real Unity's own Inspector
-
-        // doesn't tint rows at all - flat background, thin separators only - so both are disabled outright.
-
-        EntityInspector.m_Settings.m_bRenderBackgroundDepth   = false;
-
-        EntityInspector.m_Settings.m_bRenderLeftBackground    = false;
-
-        EntityInspector.m_Settings.m_bRenderRightBackground   = false;
-
-        // The inspector's own row spacing (m_FramePadding/m_ItemSpacing/m_TableFramePadding) is NOT tied
-
-        // to the ambient ImGuiStyle at all - Show() explicitly pushes these per-instance values on top
-
-        // (xPropertyImGuiInspector.cpp), which is why LevelEditor_Theme.h's global FramePadding/ItemSpacing
-
-        // reduction had zero visible effect on these rows (direct user report, with a comparison
-
-        // screenshot against Unity's own tightly-packed Transform/Position/Rotation/Scale rows: "Button
-
-        // spacing in ours still much larger vertically... headers too"). Tightened to match.
-
-        EntityInspector.m_Settings.m_FramePadding      = ImVec2(4.0f, 3.0f);   // was {1, 3.5} - +2px per direct user follow-up (the buttons/fields themselves, not the gap between rows)
-
-        // ItemSpacing.x specifically: this is what leaves an unpainted gap between a component header's
-
-        // own left box (TreeNodeEx) and its right-column fill (a separate AddRectFilled call) - confirmed
-
-        // by direct pixel measurement (an ~8px strip of raw background showing through at exactly 2x this
-
-        // value) after a direct user follow-up with a screenshot: "the dark divider that breaks the
-
-        // background color of the header... literally breaks it in two". Not a border/color issue (already
-
-        // checked) - genuinely unpainted space between two separately-drawn rects, from the columns' own
-
-        // gap reservation. Same fix as plugin_tab's own m_Settings override.
-
-        EntityInspector.m_Settings.m_ItemSpacing       = ImVec2(1.0f, 1.0f);   // was {0.5, 2.0}, then {4, 1}
-
-        EntityInspector.m_Settings.m_TableFramePadding = ImVec2(4.0f, 1.0f);   // was {2, 6}
-
-        e10::WireResourcePickerCallbacks(EntityInspector);
-
-        InspectorBridge.RegisterCallbacks(EntityInspector, CmdContext);
-
         WireAssetBrowser();
-
-        // Registered here (one-time setup), NOT lazily on the first render frame as this used to be (an
-
-        // "if (EditorToolbarHost.m_Items.empty())" check inside the per-frame code) - moved after finding
-
-        // a real bug: ImGui loads io.IniFilename automatically during the FIRST ImGui::NewFrame() call,
-
-        // which happens BEFORE the per-frame render code below ever runs once. With items only created
-
-        // lazily on that first render, RegisterSettingsHandler's own ReadLineFn (below) fired against a
-
-        // still-EMPTY m_Items during the actual ini load, found nothing named "Editor"/"Scene" to apply the
-
-        // saved edge/position to, and silently discarded it - by the time m_Items.push_back finally ran a
-
-        // moment later, the loaded data was already gone, so it looked LOADED (m_bInitialized flips true)
-
-        // but the values were just the hardcoded push_back defaults the whole time. Items must exist
-
-        // before the ini load happens, not after.
-
-        EditorToolbarHost.m_Items.push_back
-
-        ({ "Editor", ximgui::toolbar::toolbar_host_edge::Top, ximgui::toolbar::axis::Horizontal
-
-         , ImVec2(EditorToolbarWidth, EditorToolbarHeight), ImVec2(32.0f, 250.0f), ImVec2(24.0f, 24.0f) });
-
-        EditorToolbarHost.m_Items.push_back
-
-        ({ "Scene", ximgui::toolbar::toolbar_host_edge::Top, ximgui::toolbar::axis::Horizontal
-
-         , ImVec2(SceneToolbarWidth, EditorToolbarHeight), ImVec2(32.0f, 250.0f), ImVec2(24.0f, 72.0f) });
-
-
-
-        // toolbar_host_state has no serialization of its own (a real gap - direct user report: "the
-
-        // toolbars don't seem to save their position") - this persists each toolbar's dragged-to edge/
-
-        // position/order into the SAME imgui_level_editor.ini this app already writes every docked window's
-
-        // position into (io.IniFilename, set above). Must run before the first ImGui::NewFrame() of this
-
-        // run (it does - this is one-time setup code executed before "entering frame loop" below) AND
-
-        // after the items above are registered (see this block's own comment for why the order matters).
-
-        if (!bHeadless)
-            ximgui::toolbar::RegisterSettingsHandler(EditorToolbarHost, "LevelEditorToolbar");
-
-
 
         xeditor::diagnostics::Log("startup: initialization complete, entering frame loop");
 
-            // Host service hooks (10.C.1.4): Idle Work + SC idle + Game.dll focus-reload.
+        // Host service hooks: Idle Work + SC idle + Game.dll focus-reload.
         EditorHost.m_OnPumpServices = [&]() noexcept
         {
             e10::source_control::ScanNewlyOpenedLibraries();
         };
-        EditorHost.m_OnSourceChanged = [&]() noexcept { level_editor::StartGameReload(GamePlugin); };
-        EditorHost.m_OnFocusRegain = [&]() noexcept
+        EditorHost.m_OnSourceChanged = [this]() noexcept
+        {
+            if (pLevelSession) xlevel::StartGameReload(pLevelSession->m_GamePlugin);
+        };
+        EditorHost.m_OnFocusRegain = [this]() noexcept
         {
 #if defined(XECS_BUILD_SHARED)
-            level_editor::StartGameReload(GamePlugin);
+            if (pLevelSession) xlevel::StartGameReload(pLevelSession->m_GamePlugin);
 #endif
         };
-
         EditorHost.m_OnDrawerTab = [this](int TabIndex, const char* /*TabName*/) { DrawDrawerTab(TabIndex); };
-
-
 
         return 0;
     }
@@ -632,81 +192,34 @@ namespace level_editor
 
     inline void app::Shutdown()
     {
-
-
-
-
-
-
-
         xeditor::diagnostics::Log("shutdown: frame loop ended");
 
-
-
-        // Plugin systems live in GameMgr but their DestroyFunction code is in the DLL.
-
-        // Tear down GameMgr (and host/texture bridges) BEFORE FreeLibrary, or ~mgr
-
-        // jumps into unmapped memory on exit (callstack: ~mgr <- LevelEditor_Example).
-
+        // Plugin systems live in the Level session's world but their DestroyFunction code is in the DLL -
+        // dropping every open resource editor (Level's own session included) BEFORE FreeLibrary is what used to
+        // matter here; now it is just the generic open_resource_editors teardown, no separate ordering needed.
         ResourceEditors.m_List.clear();
+        pLevelSession = nullptr;
         EditorHost.withdraw<xeditor::open_resource_editors>();
+        EditorHost.withdraw<e10::assert_browser>();
         if (!bHeadless)
         {
             EditorHost.withdraw<xgpu::device>();
             EditorHost.withdraw<xgpu::window>();
         }
-
-        EditorHost.withdraw<xlevel::level_host_session>();
         EditorHost.release_current();
-
-        EditorHost.withdraw<xlevel::level_context>();
-        EditorHost.withdraw<xscene::scene_context>();
-
-        pGameMgr.reset();
-
-        level_editor::UnloadGamePlugin(GamePlugin);
-
-
 
         xeditor::diagnostics::Log("shutdown: game plugin unloaded");
 
-
-
-
-
-
-
         if (!bHeadless)
         {
-        xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown begin");
-
-
-
-        xgpu::tools::imgui::Shutdown();
-
-
-
-        xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown complete");
+            xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown begin");
+            xgpu::tools::imgui::Shutdown();
+            xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown complete");
         }
 
-
-
         xeditor::diagnostics::RemoveCrtReportHook();
-
-
-
         xeditor::diagnostics::RemoveTerminateHandler();
-
-
-
         xeditor::diagnostics::Log("shutdown: LevelEditor_Example return");
-
-
-
         xeditor::diagnostics::Stop();
-
-
-
     }
 }

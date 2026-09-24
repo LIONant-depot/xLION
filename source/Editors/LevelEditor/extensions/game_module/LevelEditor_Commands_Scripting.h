@@ -83,7 +83,7 @@ namespace level_editor::commands
             std::ofstream Out(FilePath, std::ios::binary);
             if (!Out.is_open()) return "AddScriptSourceFile: failed to create the file";
             Out.close();
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -113,7 +113,7 @@ namespace level_editor::commands
             if (SourceDb.empty()) return;
             std::error_code Ec;
             std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
@@ -154,7 +154,7 @@ namespace level_editor::commands
             std::error_code Ec;
             std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
             if (Ec) return "RemoveScriptSourceFile: failed to delete the file";
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -205,7 +205,7 @@ namespace level_editor::commands
             std::filesystem::create_directories(SourceDb, Ec);
             std::ofstream Out(SourceDb + L"\\" + FileName, std::ios::binary);
             if (Out.is_open()) Out.write(Content.data(), static_cast<std::streamsize>(Content.size()));
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
@@ -388,7 +388,7 @@ namespace level_editor::commands
 
             std::filesystem::rename(SourceDb + L"\\" + OldName, SourceDb + L"\\" + NewName, Ec);
             if (Ec) return "RenameScriptSourceFile: rename failed";
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -422,7 +422,7 @@ namespace level_editor::commands
             if (SourceDb.empty()) return;
             std::error_code Ec;
             std::filesystem::rename(SourceDb + L"\\" + NewName, SourceDb + L"\\" + OldName, Ec);
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hOldFileName, m_hNewFileName;
@@ -457,7 +457,7 @@ namespace level_editor::commands
             Refs.push_back(ModuleGuid);
             if (auto Err = SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig); Err)
                 return std::format("AddProjectModuleReference: {}", Err.getMessage());
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -474,7 +474,7 @@ namespace level_editor::commands
             if (auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid); It != Refs.end())
                 Refs.erase(It);
             SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hModule;
@@ -512,10 +512,10 @@ namespace level_editor::commands
             // consecutive module add/remove cycles through the real Play/reload path all correctly
             // reflected the change afterward.
             std::vector<xecs::scene::component_dependency> PluginOwnedBefore;
-            if (g_pGamePlugin && g_pGamePlugin->m_hModule)
+            if (xlevel::g_pGamePlugin && xlevel::g_pGamePlugin->m_hModule)
             {
-                game_plugin_candidate CurrentView{ g_pGamePlugin->m_hModule, {} };
-                PluginOwnedBefore = ProbeCandidateComponents(CurrentView);
+                xlevel::game_plugin_candidate CurrentView{ xlevel::g_pGamePlugin->m_hModule, {} };
+                PluginOwnedBefore = xlevel::ProbeCandidateComponents(CurrentView);
             }
 
             std::vector<xecs::scene::component_dependency> RequiredFromOpenScenes;
@@ -533,12 +533,12 @@ namespace level_editor::commands
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid); // restore in-memory state to match what's still on disk
                 return std::format("RemoveProjectModuleReference: {}", Err.getMessage());
             }
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
 
             // Only worth a real trial compile if removing this module could plausibly affect anything
             // currently open - skip it entirely (the common case) rather than pay a compile for a
             // guaranteed-safe removal.
-            if (!RequiredFromOpenScenes.empty() && g_pGamePlugin)
+            if (!RequiredFromOpenScenes.empty() && xlevel::g_pGamePlugin)
             {
                 // Wait for any in-flight ASYNC build already started elsewhere (window-focus-regain
                 // fires automatically - see StartGameReload's own comment) to finish first - a real
@@ -546,24 +546,24 @@ namespace level_editor::commands
                 // against the same output DLL raced, and whichever finished last won regardless of
                 // which fragment it was building from. Safe to .wait() without .get()'ing it, since
                 // PollGameReload (the only other consumer) runs on this same main thread.
-                if (g_pGamePlugin->m_bBuilding) g_pGamePlugin->m_BuildFuture.wait();
+                if (xlevel::g_pGamePlugin->m_bBuilding) xlevel::g_pGamePlugin->m_BuildFuture.wait();
 
-                const auto BuildResult = BuildGamePluginIfStale(*g_pGamePlugin, GetLatestModuleSourceWriteTime(g_pGamePlugin->m_Paths));
-                if (BuildResult == build_result::Rebuilt)
+                const auto BuildResult = xlevel::BuildGamePluginIfStale(*xlevel::g_pGamePlugin, GetLatestModuleSourceWriteTime(xlevel::g_pGamePlugin->m_Paths));
+                if (BuildResult == xlevel::build_result::Rebuilt)
                 {
-                    const std::uint32_t TrialGeneration = g_pGamePlugin->m_Token.m_Generation + 1000000; // scratch-only, never Commit'ed
-                    auto Candidate = PrepareGamePluginCandidate(g_pGamePlugin->m_Paths, TrialGeneration);
+                    const std::uint32_t TrialGeneration = xlevel::g_pGamePlugin->m_Token.m_Generation + 1000000; // scratch-only, never Commit'ed
+                    auto Candidate = xlevel::PrepareGamePluginCandidate(xlevel::g_pGamePlugin->m_Paths, TrialGeneration);
                     if (Candidate.m_hModule)
                     {
-                        const auto NewManifest = ProbeCandidateComponents(Candidate);
+                        const auto NewManifest = xlevel::ProbeCandidateComponents(Candidate);
                         std::unordered_set<std::uint64_t> Available;
                         for (auto& D : NewManifest) Available.insert(D.m_Guid.m_Value);
 
-                        auto Missing = CheckComponentCompatibility(RequiredFromOpenScenes, [&](xecs::component::type::guid Guid) noexcept
+                        auto Missing = xlevel::CheckComponentCompatibility(RequiredFromOpenScenes, [&](xecs::component::type::guid Guid) noexcept
                         {
                             return Available.contains(Guid.m_Value);
                         });
-                        DiscardGamePluginCandidate(Candidate);
+                        xlevel::DiscardGamePluginCandidate(Candidate);
 
                         if (!Missing.empty())
                         {
@@ -572,7 +572,7 @@ namespace level_editor::commands
                             // again (not the trial DLL this command just discarded).
                             Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid);
                             SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-                            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+                            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
 
                             std::string Names;
                             for (auto& Dep : Missing) Names += (Names.empty() ? "" : ", ") + Dep.m_Name;
@@ -616,7 +616,7 @@ namespace level_editor::commands
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(Idx), ModuleGuid);
             }
             SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hModule;
@@ -657,7 +657,7 @@ namespace level_editor::commands
 
         std::string Query() noexcept override
         {
-            RegenerateGameModuleSources(g_pGamePlugin->m_Paths);
+            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return "RegenerateProjectModuleSources: regenerated";
         }
     };
@@ -681,10 +681,10 @@ namespace level_editor::commands
             if (State.m_CurrentLevel.empty() && State.m_OpenScenes.empty())
                 return "SerializeRoundtrip: nothing open (open a Level first)";
 
-            const auto Path = level_editor::GetReloadBridgeSnapshotPath();
-            if (!level_editor::SaveSnapshot(World(), Path))
+            const auto Path = xlevel::GetReloadBridgeSnapshotPath();
+            if (!xlevel::SaveSnapshot(World(), Path))
                 return "SerializeRoundtrip: SaveSnapshot failed (see Game.dll log)";
-            if (!level_editor::LoadSnapshot(World(), Path))
+            if (!xlevel::LoadSnapshot(World(), Path))
                 return "SerializeRoundtrip: LoadSnapshot failed (see Game.dll log)";
             return std::format("SerializeRoundtrip: ok ({})", std::filesystem::path(Path).string());
         }

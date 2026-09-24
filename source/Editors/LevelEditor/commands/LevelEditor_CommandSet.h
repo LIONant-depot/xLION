@@ -95,8 +95,8 @@ namespace level_editor
         e10::commands::compile_pause_query_cmd           CmdCompilePause;
         e10::commands::compile_auto_query_cmd            CmdCompileAuto;
         e10::commands::compile_status_query_cmd          CmdCompileStatus;
-        level_editor::commands::run_sanity_check_query_cmd        CmdRunSanityCheck;
-        level_editor::commands::get_idle_tasks_query_cmd          CmdGetIdleTasks;
+        xlevel::commands::run_sanity_check_query_cmd        CmdRunSanityCheck;
+        xlevel::commands::get_idle_tasks_query_cmd          CmdGetIdleTasks;
         e10::commands::source_control_status_query_cmd   CmdSourceControlStatus;
         e10::commands::source_control_depot_status_query_cmd CmdSourceControlDepotStatus;
         e10::commands::source_control_refresh_query_cmd  CmdSourceControlRefresh;

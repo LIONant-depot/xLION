@@ -13,7 +13,6 @@
 #include "source/Editors/LevelEditor/LevelEditor_AppInit.h"
 #include "source/Editors/LevelEditor/LevelEditor_AppFrame.h"
 #include "source/Editors/LevelEditor/LevelEditor_AppFrameHeadless.h"
-#include "source/Editors/LevelEditor/LevelEditor_AppWorld.h"
 #include "source/Editors/LevelEditor/LevelEditor_AppToolbars.h"
 #include "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_AppAssetBrowser.h"
 
