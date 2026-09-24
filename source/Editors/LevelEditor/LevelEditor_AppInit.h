@@ -107,6 +107,12 @@ namespace level_editor
                 }
                 xeditor::diagnostics::Log("startup: opening project complete");
 
+                // Every xresource::loader<T>::Load() builds its path from this root - dropped during the
+                // Level-ownership split (it sat next to the Level-specific pGameMgr->*Mgr.m_ProjectPath lines
+                // that correctly moved into xlevel_session.h, but this one is resource-manager-global, not
+                // Level-specific, so it belongs here in the shell, not the plugin).
+                xresource::g_Mgr.setRootPath(std::format(L"{}//Cache//Resources//Platforms//Windows", e10::g_LibMgr.m_ProjectPath));
+
                 if (!bHeadless)
                 {
                     ImGuiIO& io = ImGui::GetIO();
