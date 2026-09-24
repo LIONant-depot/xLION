@@ -123,6 +123,7 @@ namespace xeditor
             bool                       m_bDiskMissed    = false;    // m_DiskLoad already .get() once and came up empty - a future can only be consumed once, never touch m_DiskLoad again after this flips true
             bool                       m_bGenerating    = false;    // disk missed - queued for a generation slot
             xgpu::texture               m_Scratch;                   // the render target, kept alive until the deferred readback below completes
+            xgpu::texture               m_ScratchDepth;              // depth companion for m_Scratch - see Generate()'s own comment for why a 3D type needs this
             std::vector<std::uint32_t> m_ReadbackPixels;
             int                        m_ReadbackWidth  = 0;
             int                        m_ReadbackHeight = 0;
@@ -240,6 +241,7 @@ namespace xeditor
                         }
                     }
                     Device.Destroy(std::move(Flight.m_Scratch));
+                    Device.Destroy(std::move(Flight.m_ScratchDepth));
                     It = m_InFlight.erase(It);
                     continue;
                 }
@@ -286,10 +288,25 @@ namespace xeditor
 
             if (!Ok(Device.Create(Flight.m_Scratch, { .m_Format = xgpu::texture::format::R8G8B8A8_UNORM, .m_Width = s_CellPixels, .m_Height = s_CellPixels, .m_isGamma = false }))) return false;
 
-            if (!m_pWindow) { Device.Destroy(std::move(Flight.m_Scratch)); return false; }   // headless host, no window to record with - see Init()'s own comment
+            // A depth companion for the scratch colour target: a real 3D mesh renderer (GeomStatic/
+            // GeomSkin, reusing their interactive preview's own pipeline, built with depth-test ON, the
+            // xgpu_pipeline.h default) needs a working depth buffer to sort overlapping triangles
+            // correctly - without one, a pipeline created with depth-test enabled still binds fine (xGPU
+            // pipelines aren't tied to a specific renderpass at creation) but has nothing to test/write
+            // against, and the result is an unsorted mess of overlapping triangles (confirmed live: the
+            // Puppy Static Geom thumbnail came out as flat interleaved facets, not a lit, occluded mesh,
+            // until this was added). A flat quad or unlit type (Texture) simply never enables depth-test
+            // on its own pipeline, so this extra attachment costs it nothing.
+            if (!Ok(Device.Create(Flight.m_ScratchDepth, { .m_Format = xgpu::texture::format::DEPTH_U16, .m_Width = s_CellPixels, .m_Height = s_CellPixels, .m_isGamma = false })))
+            {
+                Device.Destroy(std::move(Flight.m_Scratch));
+                return false;
+            }
+
+            if (!m_pWindow) { Device.Destroy(std::move(Flight.m_Scratch)); Device.Destroy(std::move(Flight.m_ScratchDepth)); return false; }   // headless host, no window to record with - see Init()'s own comment
 
             xgpu::renderpass Pass;
-            auto Attachments = std::array<xgpu::renderpass::attachment, 1>{ { Flight.m_Scratch } };
+            auto Attachments = std::array<xgpu::renderpass::attachment, 2>{ { Flight.m_Scratch, Flight.m_ScratchDepth } };
             if (Ok(Device.Create(Pass, { .m_Attachments = Attachments })))
             {
                 // cmd_buffer's own destructor ends the render pass (same RAII shape E22_FramebufferTarget.cpp
