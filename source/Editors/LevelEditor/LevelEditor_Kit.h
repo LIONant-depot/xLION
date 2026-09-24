@@ -53,7 +53,6 @@
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_AssetFiles.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_AssetBrowserCallbacks.h"
 
-#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Panel_SystemRegistry.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Panel_CommandConsole.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Panel_SourceControl.h"
 

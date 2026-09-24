@@ -37,7 +37,6 @@
 
 #include "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_Commands_ResourceEditors.h"
 
-#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ComponentCompatibility.h"
 
 #include "source/Editors/LevelEditor/LevelEditor_Theme.h"
 

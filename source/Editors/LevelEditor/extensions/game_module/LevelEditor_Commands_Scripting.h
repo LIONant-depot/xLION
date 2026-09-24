@@ -13,8 +13,6 @@
 // command_base shape in E10_Commands_Assets.h, since adding/removing a source file is the
 // same kind of reversible content operation, not a real external round-trip).
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"
-#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ProjectScriptConfig.h"
-#include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleSources.h"
 #include <fstream>
 
 namespace level_editor::commands
@@ -83,7 +81,7 @@ namespace level_editor::commands
             std::ofstream Out(FilePath, std::ios::binary);
             if (!Out.is_open()) return "AddScriptSourceFile: failed to create the file";
             Out.close();
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -113,7 +111,7 @@ namespace level_editor::commands
             if (SourceDb.empty()) return;
             std::error_code Ec;
             std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
@@ -154,7 +152,7 @@ namespace level_editor::commands
             std::error_code Ec;
             std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
             if (Ec) return "RemoveScriptSourceFile: failed to delete the file";
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -205,7 +203,7 @@ namespace level_editor::commands
             std::filesystem::create_directories(SourceDb, Ec);
             std::ofstream Out(SourceDb + L"\\" + FileName, std::ios::binary);
             if (Out.is_open()) Out.write(Content.data(), static_cast<std::streamsize>(Content.size()));
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
@@ -255,7 +253,7 @@ namespace level_editor::commands
     // SetScriptSourceFileContent - overwrites an EXISTING source_db file's content wholesale
     // (undoable - previous content snapshotted, same shape as RemoveScriptSourceFile's own backup).
     // The file itself must already exist (AddScriptSourceFile first) - this only ever changes bytes,
-    // never the file LIST, so it deliberately does NOT call RegenerateGameModuleSources(): a content-
+    // never the file LIST, so it deliberately does NOT call xlevel::RegenerateGameModuleSources(): a content-
     // only edit needs no cmake reconfigure, MSBuild picks up the changed timestamp on its own next
     // build (same "reconfigure only when the file list changes" rule the whole build integration
     // already follows). This is the ONLY command-bus path to actually write real code into a module -
@@ -351,7 +349,7 @@ namespace level_editor::commands
     //================================================================================================
     // RenameScriptSourceFile - renames a file within a Scripting resource's own source_db folder
     // (undoable). Changes the file LIST (not just content), so - unlike SetScriptSourceFileContent -
-    // this DOES call RegenerateGameModuleSources() on both Redo and Undo.
+    // this DOES call xlevel::RegenerateGameModuleSources() on both Redo and Undo.
     //================================================================================================
     struct rename_script_source_file_cmd : xlevel::commands::level_command
     {
@@ -388,7 +386,7 @@ namespace level_editor::commands
 
             std::filesystem::rename(SourceDb + L"\\" + OldName, SourceDb + L"\\" + NewName, Ec);
             if (Ec) return "RenameScriptSourceFile: rename failed";
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -422,7 +420,7 @@ namespace level_editor::commands
             if (SourceDb.empty()) return;
             std::error_code Ec;
             std::filesystem::rename(SourceDb + L"\\" + NewName, SourceDb + L"\\" + OldName, Ec);
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hOldFileName, m_hNewFileName;
@@ -451,13 +449,13 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(ModuleArg)) return "AddProjectModuleReference: bad arguments";
 
             const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
-            auto& Refs = g_ScriptConfig.m_ModuleRefs;
+            auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             if (std::find(Refs.begin(), Refs.end(), ModuleGuid) != Refs.end()) return {};
 
             Refs.push_back(ModuleGuid);
-            if (auto Err = SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig); Err)
+            if (auto Err = xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
                 return std::format("AddProjectModuleReference: {}", Err.getMessage());
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
         }
 
@@ -470,11 +468,11 @@ namespace level_editor::commands
         void Undo(xundo::undo_file& File) noexcept override
         {
             const auto ModuleGuid = e10::commands::ParseAssetGuid(xeditor::ReadString(File));
-            auto& Refs = g_ScriptConfig.m_ModuleRefs;
+            auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             if (auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid); It != Refs.end())
                 Refs.erase(It);
-            SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hModule;
@@ -495,7 +493,7 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(ModuleArg)) return "RemoveProjectModuleReference: bad arguments";
 
             const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
-            auto& Refs = g_ScriptConfig.m_ModuleRefs;
+            auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid);
             if (It == Refs.end()) return "RemoveProjectModuleReference: not a project module reference";
             // Captured as an INDEX, not kept as an iterator - Refs.erase(It) below invalidates It
@@ -528,12 +526,12 @@ namespace level_editor::commands
                         RequiredFromOpenScenes.push_back(Dep);
 
             Refs.erase(It);
-            if (auto Err = SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig); Err)
+            if (auto Err = xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
             {
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid); // restore in-memory state to match what's still on disk
                 return std::format("RemoveProjectModuleReference: {}", Err.getMessage());
             }
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
 
             // Only worth a real trial compile if removing this module could plausibly affect anything
             // currently open - skip it entirely (the common case) rather than pay a compile for a
@@ -548,7 +546,7 @@ namespace level_editor::commands
                 // PollGameReload (the only other consumer) runs on this same main thread.
                 if (xlevel::g_pGamePlugin->m_bBuilding) xlevel::g_pGamePlugin->m_BuildFuture.wait();
 
-                const auto BuildResult = xlevel::BuildGamePluginIfStale(*xlevel::g_pGamePlugin, GetLatestModuleSourceWriteTime(xlevel::g_pGamePlugin->m_Paths));
+                const auto BuildResult = xlevel::BuildGamePluginIfStale(*xlevel::g_pGamePlugin, xlevel::GetLatestModuleSourceWriteTime(xlevel::g_pGamePlugin->m_Paths));
                 if (BuildResult == xlevel::build_result::Rebuilt)
                 {
                     const std::uint32_t TrialGeneration = xlevel::g_pGamePlugin->m_Token.m_Generation + 1000000; // scratch-only, never Commit'ed
@@ -571,8 +569,8 @@ namespace level_editor::commands
                             // regenerate the fragment so a LATER real reload rebuilds WITH the module
                             // again (not the trial DLL this command just discarded).
                             Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid);
-                            SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-                            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+                            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+                            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
 
                             std::string Names;
                             for (auto& Dep : Missing) Names += (Names.empty() ? "" : ", ") + Dep.m_Name;
@@ -596,7 +594,7 @@ namespace level_editor::commands
             if (!std::holds_alternative<xerr>(ModuleArg))
             {
                 const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
-                auto& Refs = g_ScriptConfig.m_ModuleRefs;
+                auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
                 if (auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid); It != Refs.end())
                     Index = static_cast<std::uint32_t>(std::distance(Refs.begin(), It));
             }
@@ -609,14 +607,14 @@ namespace level_editor::commands
             const auto ModuleGuid = e10::commands::ParseAssetGuid(xeditor::ReadString(File));
             std::uint32_t Index = 0; File.Read(Index);
 
-            auto& Refs = g_ScriptConfig.m_ModuleRefs;
+            auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             if (std::find(Refs.begin(), Refs.end(), ModuleGuid) == Refs.end())
             {
                 const auto Idx = std::min<std::size_t>(Index, Refs.size());
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(Idx), ModuleGuid);
             }
-            SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, g_ScriptConfig);
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
         xcmdline::parser::handle m_hModule;
@@ -635,9 +633,9 @@ namespace level_editor::commands
 
         std::string Query() noexcept override
         {
-            if (g_ScriptConfig.m_ModuleRefs.empty()) return "(empty)";
+            if (xlevel::g_ScriptConfig.m_ModuleRefs.empty()) return "(empty)";
             std::string Out;
-            for (auto& G : g_ScriptConfig.m_ModuleRefs)
+            for (auto& G : xlevel::g_ScriptConfig.m_ModuleRefs)
                 Out += e10::commands::FormatAssetGuid(G) + "\n";
             return Out;
         }
@@ -657,7 +655,7 @@ namespace level_editor::commands
 
         std::string Query() noexcept override
         {
-            RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return "RegenerateProjectModuleSources: regenerated";
         }
     };
