@@ -7,6 +7,14 @@
 // headless; nothing here is reached unless something (the resource browser) actually asks for a thumbnail.
 //
 // A resource never requested here (never scrolled into view) never has anything computed or written for it.
+//
+// This half owns NO GPU render target or render pass of its own - every thumbnail_renderer owns whatever
+// offscreen target(s) it needs internally (see xeditor_thumbnail.h's own comment) and hands back a
+// finished xbitmap; this cache's only jobs are asking a type's renderer to (keep) render(ing) a guid,
+// and SERIALIZING the result once it has one: writing it to the on-disk PNG cache
+// (xbmp::tools::writers::SaveSTDImage, the same real-PNG-via-stb_image_write path already used
+// elsewhere in this codebase for exactly this) and uploading it into the runtime atlas cell texture the
+// browser actually draws with.
 #include "source/Tools/Editor/xeditor_thumbnail.h"
 #include "source/Tools/Editor/xeditor_resource_editor.h"
 #include "source/xGPU.h"
@@ -97,12 +105,12 @@ namespace xeditor
             m_InFlight.erase(Guid);
         }
 
-        // Registers the compile-completion hook once and remembers which window's command buffer to record
-        // a generation render into - call from wherever the app already sets up its long-lived singletons
-        // (this object itself needs to outlive both the registration and the window). Without a window
-        // (e.g. a headless CLI host), disk-cache hits still work fine; a genuine generation just never
-        // resolves, since there is nothing to render with - the same "no GPU, no preview" degradation every
-        // resource_editor already has (xeditor::open_resource_editors::m_pDevice's own comment).
+        // Registers the compile-completion hook once and remembers which window to hand each renderer for
+        // recording its own offscreen render - call from wherever the app already sets up its long-lived
+        // singletons (this object itself needs to outlive both the registration and the window). Without a
+        // window (e.g. a headless CLI host), disk-cache hits still work fine; a genuine generation just
+        // never resolves, since there is nothing to render with - the same "no GPU, no preview" degradation
+        // every resource_editor already has (xeditor::open_resource_editors::m_pDevice's own comment).
         void Init(xgpu::window& Window) noexcept
         {
             m_pWindow = &Window;
@@ -121,13 +129,7 @@ namespace xeditor
         {
             std::future<xbitmap>       m_DiskLoad;                  // valid while checking disk
             bool                       m_bDiskMissed    = false;    // m_DiskLoad already .get() once and came up empty - a future can only be consumed once, never touch m_DiskLoad again after this flips true
-            bool                       m_bGenerating    = false;    // disk missed - queued for a generation slot
-            xgpu::texture               m_Scratch;                   // the render target, kept alive until the deferred readback below completes
-            xgpu::texture               m_ScratchDepth;              // depth companion for m_Scratch - see Generate()'s own comment for why a 3D type needs this
-            std::vector<std::uint32_t> m_ReadbackPixels;
-            int                        m_ReadbackWidth  = 0;
-            int                        m_ReadbackHeight = 0;
-            bool                       m_bReadbackDone  = false;    // flipped by the window's own PageFlip() - see Generate()'s own comment
+            bool                       m_bStarted       = false;    // disk missed - already made at least one Render() call (counts once against the generation budget, further polls are free)
         };
 
         e10::plugin_icon_ref CellRef(int Cell) noexcept
@@ -197,54 +199,30 @@ namespace xeditor
             m_Order.push_front(Guid);
         }
 
-        // Advances every in-flight GUID by one step: picks up a finished disk-load (no GPU work at all), picks
-        // up a finished generation's deferred readback (also no GPU work - just a memcpy + a background disk
-        // write kickoff), or - for a confirmed disk miss - starts the one small, budgeted render (see
-        // Generate()'s own comment for why the actual pixel readback can't happen in that same call).
+        // The type's persistent renderer, created and Init()'d once on first use.
+        thumbnail_renderer* RendererFor(xgpu::device& Device, xresource::type_guid Type) noexcept
+        {
+            auto RendererIt = ThumbnailRendererFactories().find(Type);
+            if (RendererIt == ThumbnailRendererFactories().end()) return nullptr;
+
+            auto& pRenderer = m_Renderers[Type];
+            if (!pRenderer) pRenderer = RendererIt->second();
+            if (!pRenderer->Init(Device)) return nullptr;
+            return pRenderer.get();
+        }
+
+        // Advances every in-flight GUID by one step: picks up a finished disk-load (no GPU work at all), or
+        // - for a confirmed disk miss - polls the type's own renderer (see xeditor_thumbnail.h: it owns its
+        // own render target/readback entirely now, this just keeps asking until it hands back a bitmap).
+        // Starting a NEW render (this guid's first poll) is rate-limited so a big scroll can't stall a
+        // frame; a guid already mid-render is cheap to re-poll (its renderer just checks a flag) and never
+        // counts against the budget.
         void PollInFlight(xgpu::device& Device) noexcept
         {
-            int GenerationBudget = 2;   // new *generations* started this call; disk-hits/readback-completions above don't count
+            int StartBudget = 2;   // new renders STARTED this call; re-polling an already-started one is free
             for (auto It = m_InFlight.begin(); It != m_InFlight.end(); )
             {
                 auto& [Guid, Flight] = *It;
-
-                if (Flight.m_bGenerating)
-                {
-                    if (!Flight.m_bReadbackDone) { ++It; continue; }   // still waiting for this frame's PageFlip()
-
-                    if (Flight.m_ReadbackWidth == s_CellPixels && Flight.m_ReadbackHeight == s_CellPixels)
-                    {
-                        xbitmap Bmp;
-                        Bmp.CreateBitmap(s_CellPixels, s_CellPixels);
-                        {
-                            // GPU readback rows come out top-of-render-target-first from Device.ReadTexture,
-                            // but the on-disk PNG (row 0 = top, standard image convention) came out flipped -
-                            // confirmed against the source image directly, unlike the render/UV mapping itself
-                            // (already checked and correct). Flip vertically on the way into the bitmap that
-                            // both the PNG writer and the atlas upload below consume.
-                            auto Dst = Bmp.getMip<xcolori>(0);
-                            for (int y = 0; y < s_CellPixels; ++y)
-                                std::memcpy(Dst.data() + y * s_CellPixels, Flight.m_ReadbackPixels.data() + (s_CellPixels - 1 - y) * s_CellPixels, s_CellPixels * sizeof(std::uint32_t));
-                        }
-                        InsertBitmap(Device, Guid, Bmp);
-
-                        // The disk write doesn't need the GPU at all - background it.
-                        const std::wstring Path = DiskPath(Guid);
-                        if (!Path.empty())
-                        {
-                            std::async(std::launch::async, [Path, Bmp = std::move(Bmp)]() noexcept
-                            {
-                                std::error_code Ec;
-                                if (auto Parent = std::filesystem::path(Path).parent_path(); !Parent.empty()) std::filesystem::create_directories(Parent, Ec);
-                                (void)xbmp::tools::writers::SaveSTDImage(Path, Bmp);
-                            }).wait();   // TODO: track this future instead of blocking - acceptable for now, disk write of one small PNG
-                        }
-                    }
-                    Device.Destroy(std::move(Flight.m_Scratch));
-                    Device.Destroy(std::move(Flight.m_ScratchDepth));
-                    It = m_InFlight.erase(It);
-                    continue;
-                }
 
                 if (!Flight.m_bDiskMissed)
                 {
@@ -259,66 +237,37 @@ namespace xeditor
                     Flight.m_bDiskMissed = true;
                 }
 
-                // Disk missed - needs a real render. Rate-limited so a big scroll can't stall a frame.
-                if (GenerationBudget <= 0) { ++It; continue; }
-                --GenerationBudget;
-                if (Generate(Device, Guid, Flight)) { ++It; continue; }   // now waiting on m_bReadbackDone
+                // Disk missed - needs a real render.
+                if (!Flight.m_bStarted)
+                {
+                    if (StartBudget <= 0) { ++It; continue; }
+                    --StartBudget;
+                    Flight.m_bStarted = true;
+                }
+
+                if (!m_pWindow) { It = m_InFlight.erase(It); continue; }   // headless host - see Init()'s own comment
+
+                auto* pRenderer = RendererFor(Device, Guid.m_Type);
+                if (!pRenderer) { It = m_InFlight.erase(It); continue; }   // unregistered type or Init failure
+
+                xbitmap Bmp;
+                if (!pRenderer->Render(Device, *m_pWindow, Guid, Bmp)) { ++It; continue; }   // not ready yet - poll again next tick
+
+                InsertBitmap(Device, Guid, Bmp);
+
+                // The disk write doesn't need the GPU at all - background it.
+                const std::wstring Path = DiskPath(Guid);
+                if (!Path.empty())
+                {
+                    std::async(std::launch::async, [Path, Bmp = std::move(Bmp)]() noexcept
+                    {
+                        std::error_code Ec;
+                        if (auto Parent = std::filesystem::path(Path).parent_path(); !Parent.empty()) std::filesystem::create_directories(Parent, Ec);
+                        (void)xbmp::tools::writers::SaveSTDImage(Path, Bmp);
+                    }).wait();   // TODO: track this future instead of blocking - acceptable for now, disk write of one small PNG
+                }
                 It = m_InFlight.erase(It);
             }
-        }
-
-        // Starts the render half of generation and hands the resulting texture off to the window's own
-        // deferred ReadbackTexture (returns true) rather than reading it back here directly. A texture
-        // rendered into via StartRenderPass shares THIS frame's own command buffer with everything else the
-        // window draws this frame (ImGui included) - it is only actually GPU-complete once that whole frame's
-        // work is submitted and fence-waited, which happens inside the window's own PageFlip(), not the
-        // instant this function returns. Reading it back synchronously right here (the original approach)
-        // raced that submission: validation caught the scratch texture still at UNDEFINED, and the app
-        // crashed shortly after - direct proof from a live run, not a theoretical concern. Returns false if
-        // nothing was kicked off (unregistered type, Init failure, headless host - see m_pWindow's own
-        // comment) so the caller can drop the in-flight entry immediately, exactly as before.
-        bool Generate(xgpu::device& Device, xresource::full_guid Guid, in_flight& Flight) noexcept
-        {
-            auto RendererIt = ThumbnailRendererFactories().find(Guid.m_Type);
-            if (RendererIt == ThumbnailRendererFactories().end()) return false;
-
-            auto& pRenderer = m_Renderers[Guid.m_Type];
-            if (!pRenderer) pRenderer = RendererIt->second();
-            if (!pRenderer->Init(Device)) return false;
-
-            if (!Ok(Device.Create(Flight.m_Scratch, { .m_Format = xgpu::texture::format::R8G8B8A8_UNORM, .m_Width = s_CellPixels, .m_Height = s_CellPixels, .m_isGamma = false }))) return false;
-
-            // A depth companion for the scratch colour target: a real 3D mesh renderer (GeomStatic/
-            // GeomSkin, reusing their interactive preview's own pipeline, built with depth-test ON, the
-            // xgpu_pipeline.h default) needs a working depth buffer to sort overlapping triangles
-            // correctly - without one, a pipeline created with depth-test enabled still binds fine (xGPU
-            // pipelines aren't tied to a specific renderpass at creation) but has nothing to test/write
-            // against, and the result is an unsorted mess of overlapping triangles (confirmed live: the
-            // Puppy Static Geom thumbnail came out as flat interleaved facets, not a lit, occluded mesh,
-            // until this was added). A flat quad or unlit type (Texture) simply never enables depth-test
-            // on its own pipeline, so this extra attachment costs it nothing.
-            if (!Ok(Device.Create(Flight.m_ScratchDepth, { .m_Format = xgpu::texture::format::DEPTH_U16, .m_Width = s_CellPixels, .m_Height = s_CellPixels, .m_isGamma = false })))
-            {
-                Device.Destroy(std::move(Flight.m_Scratch));
-                return false;
-            }
-
-            if (!m_pWindow) { Device.Destroy(std::move(Flight.m_Scratch)); Device.Destroy(std::move(Flight.m_ScratchDepth)); return false; }   // headless host, no window to record with - see Init()'s own comment
-
-            xgpu::renderpass Pass;
-            auto Attachments = std::array<xgpu::renderpass::attachment, 2>{ { Flight.m_Scratch, Flight.m_ScratchDepth } };
-            if (Ok(Device.Create(Pass, { .m_Attachments = Attachments })))
-            {
-                // cmd_buffer's own destructor ends the render pass (same RAII shape E22_FramebufferTarget.cpp
-                // relies on).
-                auto CmdBuffer = m_pWindow->StartRenderPass(Pass);
-                (void)pRenderer->Draw(Device, CmdBuffer, Guid);
-            }
-            xeditor::DestroyGpu(&Device, Pass);
-
-            (void)m_pWindow->ReadbackTexture(Flight.m_Scratch, Flight.m_ReadbackPixels, Flight.m_ReadbackWidth, Flight.m_ReadbackHeight, Flight.m_bReadbackDone);
-            Flight.m_bGenerating = true;
-            return true;
         }
 
         void OnCompilationState(e10::library_mgr&, e10::library::guid, xresource::full_guid Guid, std::shared_ptr<e10::compilation::historical_entry::log>& Log) noexcept
