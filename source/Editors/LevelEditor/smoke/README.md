@@ -1,19 +1,26 @@
 # LevelEditor smoke tests
 
 Regression tests for the editor's **command surface** - the same commands the AI/CLI uses. They launch the
-real editor (`xGPU_unit_test.exe`), drive it through its Command Console pipe, and assert on replies.
+real editor (`xLION.exe`), drive it through its Command Console pipe, and assert on replies.
 
 ```bat
 pip install pytest
-cd source\Examples\LevelEditor_LevelSceneEditor\smoke
-python -m pytest -q                     # all tests (~20 s), launches the Release build itself
+cd source\Editors\LevelEditor\smoke
+python -m pytest -q                     # all tests, launches the Release build itself
 python -m pytest test_play.py -q        # one file
 python -m pytest -q --exe <path>        # a different build
 python -m pytest -q --update-golden     # accept a deliberate change to the command list
 ```
 
-Build first (`cmake --build Build\xGPUExamples.vs2022 --config Release --target xGPU_unit_test`), and close any
-running editor - the pipe (`\\.\pipe\xEditor_Console`) admits one server.
+Build first (MSBuild `Build\xLION.vs2022\xLION.sln`, target `xLION`, config `Release`), and close any running
+editor - the pipe (`\\.\pipe\xEditor_Console`) admits one server.
+
+**Known project-data gap:** the `level` fixture (`conftest.py`) opens `editor.levels()[0]` - the example
+project's first Level asset. This dev project currently has none (`ListLevels` replies empty), so every test
+that depends on `level` errors with `IndexError: list index out of range` at fixture setup, not a real
+regression - it fails the same way before and after any source change. `test_resource_editors.py` and the
+`editor`-only tests are unaffected (they don't need an open Level). Fix: create one real Level asset in
+`example.lionprj` via the asset browser or `CreateAsset`, then this whole class of failures goes away.
 
 ## How it works
 
@@ -70,6 +77,7 @@ def test_create_entity_undo_redo(level):
 | `test_play_more.py` | More play tests: pause/resume, step refusal, keep/discards tweaks |
 | `test_console_and_chat.py` | Console and chat: Say/GetLog round trip |
 | `test_read_only_queries.py` | Read-only queries: ListAssets, CompileStatus, etc. |
+| `test_resource_editors.py` | Every peer resource editor (Texture, Material, MaterialInstance, GeomStatic, GeomSkin, Skeleton, Font, AnimPackage) opens/closes cleanly, doesn't duplicate on reopen, coexists with others |
 | `test_robustness.py` | Robustness: commands with missing/malformed arguments |
 | `test_session_command_surface.py` | Session command surface: golden list |
 | `test_game_module_reload_more.py` | More game module reload tests |

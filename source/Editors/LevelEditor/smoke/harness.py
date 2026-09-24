@@ -256,3 +256,39 @@ class Editor:
         m = re.search(rf"^\s*{re.escape(path)} = (\S+)", self.describe(session, scene, entity), re.M)
         assert m, f"{path} not found in DescribeEntity for {entity}"
         return m[1]
+
+    # ------------------------------------------------------------------ libraries / assets (resource editors)
+    def libraries(self) -> list[tuple[str, str]]:
+        """[(guid, path)] from ListLibraries."""
+        return [(m[1], m[2].strip()) for l in self.cmd("ListLibraries").splitlines() if (m := re.match(r"(\S+)\s+(.*)", l))]
+
+    def list_assets(self, library: str, parent: str | None = None) -> list[tuple[str, str, str]]:
+        """[(guid, type, name)] - one folder level of ListAssets (Folder rows included)."""
+        cmd = f"ListAssets -Library {library}" + (f" -Parent {parent}" if parent else "")
+        out = []
+        for l in self.cmd(cmd).splitlines():
+            m = re.match(r"(\S+)\s+(\S+)\s+(.*)", l.strip())
+            if m:
+                out.append((m[1], m[2], m[3].strip()))
+        return out
+
+    def find_asset(self, type_name: str, library: str | None = None) -> tuple[str, str] | None:
+        """(guid, name) of the first non-Trash, non-"Default*" asset of type_name found by walking the asset
+        tree breadth-first. "Default*" placeholders are skipped - several are shipped uncompiled in this dev
+        project (empty Cache/Resources folder) and asserting on that is a separate, pre-existing gap, not
+        something a resource-editor smoke test should trip over."""
+        lib = library or self.libraries()[0][0]
+        queue: list[str | None] = [None]
+        seen: set[str | None] = set()
+        while queue:
+            parent = queue.pop(0)
+            if parent in seen:
+                continue
+            seen.add(parent)
+            for guid, typ, name in self.list_assets(lib, parent):
+                if typ == "Folder":
+                    if name != "Trash":
+                        queue.append(guid)
+                elif typ == type_name and "Default" not in name:
+                    return guid, name
+        return None
