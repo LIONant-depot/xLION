@@ -292,7 +292,7 @@ namespace level_editor
 
                 if (ImGui::Button("Strip and Continue", ImVec2(160, 0)))
                 {
-                    StripMissingComponentsFromOpenScenes(Ed, g_PendingReloadCompatibility->m_Missing);
+                    level_editor::StripMissingComponentsFromOpenScenes(Ed, g_PendingReloadCompatibility->m_Missing);
                     g_PendingReloadCompatibility.reset();
                     ImGui::CloseCurrentPopup();
                     if (g_pGamePlugin) StartGameReload(*g_pGamePlugin);

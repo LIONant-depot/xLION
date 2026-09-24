@@ -42,6 +42,13 @@
 #include "plugins/xscene.plugin/source/Editor/xscene_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_editor.h"
 
+// STAGE (a) of the LevelEditor-ownership move (see plugins/xlevel.plugin's own git history / the task that
+// landed this): the new xeditor::resource_editor-shaped Level session, compiled here alongside the
+// still-working level_editor::app below so both are checked by every build. It registers a factory but is
+// never opened yet (nothing calls ResourceEditors.Open() with xecs::level::type_guid_v) - purely additive,
+// zero behavior change until stage (b) flips the shell over and the old in-place rendering is deleted.
+#include "plugins/xlevel.plugin/source/Editor/xlevel_session.h"
+
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_AssetFiles.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_AssetBrowserCallbacks.h"

@@ -37,13 +37,13 @@ namespace level_editor
 
         if (PersistMode == persist_mode::RawSnapshotBridge)
         {
-            LoadSnapshot(*pGameMgr, GetReloadBridgeSnapshotPath());
+            level_editor::LoadSnapshot(*pGameMgr, GetReloadBridgeSnapshotPath());
             // Reattach the Scenes captured before the destroy - see CaptureOpenScenes/
             // ReattachOpenScenes's own comment for why zero translation is needed (entity IDs
             // round-trip identical through the raw snapshot). Repopulates State.m_OpenScenes'
             // worth of Scene objects (folders, entities, everything) so the Level tree survives a
             // mid-play reload intact, not just once Stop runs.
-            ReattachOpenScenes(*pGameMgr, std::move(m_ReloadCapture));
+            level_editor::ReattachOpenScenes(*pGameMgr, std::move(m_ReloadCapture));
 
             // The Level tree itself is gated on GameMgr.m_LevelMgr.Find(State.m_CurrentLevel) - a
             // SEPARATE manager from m_SceneMgr, ALSO destroyed by pGameMgr.reset() above, and the
@@ -69,7 +69,7 @@ namespace level_editor
             xlevel::OpenLevel(*pGameMgr, State, xresource::full_guid{ State.m_CurrentLevel.m_Instance, State.m_CurrentLevel.m_Type });
         }
 
-        LogWorldEntityCount(*pGameMgr, PersistMode == persist_mode::RawSnapshotBridge ? "Vn restore" : "V1/disk restore");
+        level_editor::LogWorldEntityCount(*pGameMgr, PersistMode == persist_mode::RawSnapshotBridge ? "Vn restore" : "V1/disk restore");
 
         // Re-resolve the selection against the freshly reloaded scene. The common case - nothing
         // about this specific entity changed, only the runtime world it lives in was rebuilt -
@@ -105,8 +105,8 @@ namespace level_editor
     inline void app::BeforeReload()
     {
         // Captured before the destroy, only for the raw snapshot bridge: entity ids round-trip identical through it.
-        m_ReloadCapture = CaptureOpenScenes(*pGameMgr, State);
-        SaveSnapshot(*pGameMgr, GetReloadBridgeSnapshotPath());
+        m_ReloadCapture = level_editor::CaptureOpenScenes(*pGameMgr, State);
+        level_editor::SaveSnapshot(*pGameMgr, GetReloadBridgeSnapshotPath());
         pGameMgr.reset();
     }
 
