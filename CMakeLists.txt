@@ -218,6 +218,13 @@ FetchAndPopulate("https://github.com/LIONant-depot/xeditor.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xGPU.git" "main")
 
 #
+# Shared 3D editor-viewport scaffolding (orbit+fly camera, ground grid/shadow map) - its own
+# Build/dependency/CMakeLists.txt registers the "xeditor_tools" component the same way xbmp_tools does
+# (one umbrella .cpp, no static lib), auto-add_subdirectory'd by FetchAndPopulate.
+#
+FetchAndPopulate("https://github.com/LIONant-depot/xeditor_tools.git" "main")
+
+#
 # Add ImGui files directly - identical component definition to xGPU's own
 #
 DefineInterfaceComponent(imgui "dependencies"
@@ -268,7 +275,7 @@ set(FRAG_SHADER_SOURCES
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_frag.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_frag.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_frag.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_GridShader_frag.glsl"
+  "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_frag.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_frag.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_frag.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_frag.glsl"
@@ -288,7 +295,7 @@ set(VERT_SHADER_SOURCES
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_vert.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_vert.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_vert.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_GridShader_vert.glsl"
+  "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_vert.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_vert.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_vert.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_vert.glsl"
@@ -393,8 +400,6 @@ set(XLION_COMMON_SOURCES
   "source/Editors/LevelEditor/LevelEditor_AppFrameHeadless.h"
   "source/Editors/LevelEditor/LevelEditor_AppInit.h"
   "source/Editors/LevelEditor/LevelEditor_AppToolbars.h"
-  "source/Editors/LevelEditor/LevelEditor_AppWorld.h"
-  "source/Editors/LevelEditor/LevelEditor_DemoContent.h"
   "source/Editors/LevelEditor/LevelEditor_EditorTabs.h"
   "source/Editors/LevelEditor/LevelEditor_Kit.h"
   "source/Editors/LevelEditor/LevelEditor_Main.cpp"
@@ -405,19 +410,6 @@ set(XLION_COMMON_SOURCES
   "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
   "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Chat.h"
   "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Panel_CommandConsole.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Commands_Scripting.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ComponentCompatibility.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleEvents.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleReload.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameModuleSources.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePlugin.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginBuild.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginLoad.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GamePluginLog.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_GameReloadSession.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Panel_SystemRegistry.h"
-  "source/Editors/LevelEditor/extensions/game_module/LevelEditor_ProjectScriptConfig.h"
-  "source/Editors/LevelEditor/extensions/idle_work/LevelEditor_SceneSanityScan.h"
 
   "source/Tools/Editor/xeditor_camera.h"
   "source/Tools/Editor/xeditor_console.h"
@@ -512,6 +504,9 @@ source_group(TREE "${CMAKE_SOURCE_DIR}/source" PREFIX "source" FILES ${XLION_COM
 find_package(OpenMP REQUIRED)
 target_link_libraries(${TARGET_PROJECT} PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(xLION_Headless PRIVATE OpenMP::OpenMP_CXX)
+
+# Shared 3D editor-viewport scaffolding (camera + grid) - the graphical target only; headless renders nothing.
+target_link_libraries(${TARGET_PROJECT} PRIVATE xeditor_tools)
 
 if(WIN32)
   target_link_libraries(${TARGET_PROJECT} PRIVATE Advapi32.lib)
