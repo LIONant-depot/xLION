@@ -5,8 +5,10 @@ set(COMPONENT_REGISTRY "")
 
 # Mirrors xGPU's own xECSV2 shared-library option (see dependencies/xGPU/CMakeLists.txt) - needed
 # for the same reason: the LevelEditor's Game.dll hot-reload system only works when xECSV2 is a
-# shared library both xLION and a future Game.dll can link against.
-option(XECS_BUILD_SHARED_LIBRARY "Build xECSV2 as its own shared library (xECSV2.dll) instead of compiling it directly into the target" ON)
+# shared library both xLION and a future Game.dll can link against. The library itself is now built
+# by the xLIONCore depot (see dependencies/xLIONCore), which compiles xECSV2 in as a dependency -
+# LIONCore.dll, not xECSV2.dll.
+option(XECS_BUILD_SHARED_LIBRARY "Build the ECS as its own shared library (LIONCore.dll) instead of compiling it directly into the target" ON)
 
 if(POLICY CMP0169)
   cmake_policy(SET CMP0169 OLD)
@@ -139,6 +141,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xserializer.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xscheduler.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xECS.git" "Lesson09_Prefabs")
 FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xLIONCore.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xundo.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
@@ -360,10 +363,10 @@ include_directories("${CMAKE_BINARY_DIR}/sprv_shaders_h")
 # xtextfile.cpp/my_properties.cpp/xPropertyImGuiInspector.cpp: xGPU's own CMakeLists.txt gets
 # these compiled in as a side effect of including unrelated examples (E20/E04) that happen to
 # #include them - not needed here (those examples aren't part of the port), so they're listed
-# directly instead. Each executable that needs them (this target AND xECSV2.dll, see the
-# XECS_BUILD_SHARED_LIBRARY block below) compiles its own private copy - not a name clash, two
-# separate binaries. Kept out of XLION_COMMON_SOURCES (below) since they don't live under
-# source/ - source_group(TREE ...) requires every file it's given to share that root.
+# directly instead. Each binary that needs them (this target AND LIONCore.dll, built by the
+# xLIONCore depot - see the XECS_BUILD_SHARED_LIBRARY block below) compiles its own private copy -
+# not a name clash, two separate binaries. Kept out of XLION_COMMON_SOURCES (below) since they
+# don't live under source/ - source_group(TREE ...) requires every file it's given to share that root.
 set(XLION_EXTRA_SOURCES
   "dependencies/xtextfile/source/xtextfile.cpp"
   "dependencies/xproperty/source/xcore/my_properties.cpp"
@@ -466,36 +469,24 @@ target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_
 target_compile_definitions(xLION_Headless PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
 
 if(XECS_BUILD_SHARED_LIBRARY)
-  add_library(xECSV2 SHARED
-    "dependencies/xECSV2/src/xecs.cpp"
-    "dependencies/xtextfile/source/xtextfile.cpp"
-    "dependencies/xproperty/source/xcore/my_properties.cpp"
-  )
-  target_include_directories(xECSV2 PRIVATE
-    "${CMAKE_SOURCE_DIR}"
-    "${CMAKE_SOURCE_DIR}/dependencies/xECSV2/src"
-    "${CMAKE_SOURCE_DIR}/dependencies/xerr"
-    "${CMAKE_SOURCE_DIR}/dependencies/xresource_guid"
-    "${CMAKE_SOURCE_DIR}/dependencies/xtextfile"
-    "${CMAKE_SOURCE_DIR}/dependencies/xproperty"
-    "${CMAKE_SOURCE_DIR}/dependencies/xresource_pipeline_v2"
-    "${CMAKE_SOURCE_DIR}/dependencies/xstrtool"
-    "${CMAKE_SOURCE_DIR}/dependencies/xcontainer"
-    "${CMAKE_SOURCE_DIR}/dependencies/xdelegate"
-    "${CMAKE_SOURCE_DIR}/dependencies/xscheduler"
-    "${CMAKE_SOURCE_DIR}/dependencies/xmath"
-    "${CMAKE_SOURCE_DIR}/dependencies/xbits"
-  )
-  target_compile_definitions(xECSV2 PRIVATE XECS_BUILD_SHARED XECS_EXPORTS)
-  if(WIN32)
-    target_link_libraries(xECSV2 PRIVATE Advapi32.lib)
-  endif()
-
-  target_link_libraries(${TARGET_PROJECT} PRIVATE xECSV2)
+  # The shared library itself (LIONCore.dll) is now built by the xLIONCore depot (fetched above),
+  # which compiles xECSV2 in as a dependency - see dependencies/xLIONCore/Build/dependency/CMakeLists.txt
+  # for the add_library block this used to be here directly. xLIONCore builds to its own natural
+  # per-target output folder (it doesn't know or care where any given consumer's exe lands); each
+  # executable that links it is responsible for copying it next to itself, conditionally
+  # (copy_if_different - a no-op once the DLL is already up to date) - a plain POST_BUILD step, not a
+  # RUNTIME_OUTPUT_DIRECTORY override on the dependency itself.
+  target_link_libraries(${TARGET_PROJECT} PRIVATE xLIONCore)
   target_compile_definitions(${TARGET_PROJECT} PRIVATE XECS_BUILD_SHARED)
+  add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONCore>" "$<TARGET_FILE_DIR:${TARGET_PROJECT}>"
+  )
 
-  target_link_libraries(xLION_Headless PRIVATE xECSV2)
+  target_link_libraries(xLION_Headless PRIVATE xLIONCore)
   target_compile_definitions(xLION_Headless PRIVATE XECS_BUILD_SHARED)
+  add_custom_command(TARGET xLION_Headless POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONCore>" "$<TARGET_FILE_DIR:xLION_Headless>"
+  )
 endif()
 
 source_group("Shaders" FILES ${GENERATED_HEADERS})
