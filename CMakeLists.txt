@@ -142,6 +142,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xscheduler.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xECS.git" "Lesson09_Prefabs")
 FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONCore.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xLIONRender.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xundo.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
@@ -450,10 +451,7 @@ set(XLION_PLUGIN_INCLUDES
 )
 
 add_executable(${TARGET_PROJECT} ${XLION_SOURCES})
-# dependencies/box3d/include: xlevel_session.h registers xlioncore::physics::rigid_body/system, whose
-# headers need box3d's own type declarations (b3BodyId, b3WorldId) to know their size/layout - box3d's
-# actual calls stay compiled only inside LIONCore.dll (see xlioncore_physics_system.h's own comment).
-target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/dependencies/box3d/include" ${XLION_PLUGIN_INCLUDES})
+target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
 # Target-wide (not per-file): imgui-node-editor's own internal headers try to enable this
 # themselves before their own <imgui.h> include, but that didn't reliably activate imgui.h's
 # operators for every TU that needed them here - defining it target-wide plus the
@@ -468,7 +466,7 @@ target_compile_definitions(${TARGET_PROJECT} PRIVATE EDITOR IMGUI_DEFINE_MATH_OP
 # the same components as the graphical target (xGPU/imgui) since there's no separate "core"
 # library to link against yet - see the port's own plan notes on why that split is deferred.
 add_executable(xLION_Headless ${XLION_HEADLESS_SOURCES})
-target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/dependencies/box3d/include" ${XLION_PLUGIN_INCLUDES})
+target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
 target_compile_definitions(xLION_Headless PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
 
 if(XECS_BUILD_SHARED_LIBRARY)
@@ -489,6 +487,27 @@ if(XECS_BUILD_SHARED_LIBRARY)
   target_compile_definitions(xLION_Headless PRIVATE XECS_BUILD_SHARED)
   add_custom_command(TARGET xLION_Headless POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONCore>" "$<TARGET_FILE_DIR:xLION_Headless>"
+  )
+
+  # LIONRender.dll - linked into BOTH targets, since xlevel_session.h (shared source) references
+  # xlionrender::Init/Draw either way and needs to link successfully. But its render SYSTEM is only
+  # ever registered when m_pDevice is non-null (xlevel_session.h's own RegisterHostSystems) - headless
+  # has no window/device to draw with, so it never runs there. Its component (Primitive) IS registered
+  # unconditionally in both, so headless scenes still carry the data - just never rendered. xLION.exe/
+  # xLION_Headless link it directly (ordinary import-lib linking, for the two always-present Init/Draw
+  # calls in xlionrender_api.h) as well as resolving its self-registration entry points at runtime via
+  # xlevel_plugin_dlls.h - the two are independent: direct linking for the fixed host-facing API,
+  # GetProcAddress for the ECS types.
+  target_link_libraries(${TARGET_PROJECT} PRIVATE xLIONRender)
+  target_compile_definitions(${TARGET_PROJECT} PRIVATE XLIONRENDER_BUILD_SHARED)
+  add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONRender>" "$<TARGET_FILE_DIR:${TARGET_PROJECT}>"
+  )
+
+  target_link_libraries(xLION_Headless PRIVATE xLIONRender)
+  target_compile_definitions(xLION_Headless PRIVATE XLIONRENDER_BUILD_SHARED)
+  add_custom_command(TARGET xLION_Headless POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONRender>" "$<TARGET_FILE_DIR:xLION_Headless>"
   )
 endif()
 
