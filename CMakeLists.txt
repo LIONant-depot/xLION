@@ -450,7 +450,10 @@ set(XLION_PLUGIN_INCLUDES
 )
 
 add_executable(${TARGET_PROJECT} ${XLION_SOURCES})
-target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
+# dependencies/box3d/include: xlevel_session.h registers xlioncore::physics::rigid_body/system, whose
+# headers need box3d's own type declarations (b3BodyId, b3WorldId) to know their size/layout - box3d's
+# actual calls stay compiled only inside LIONCore.dll (see xlioncore_physics_system.h's own comment).
+target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/dependencies/box3d/include" ${XLION_PLUGIN_INCLUDES})
 # Target-wide (not per-file): imgui-node-editor's own internal headers try to enable this
 # themselves before their own <imgui.h> include, but that didn't reliably activate imgui.h's
 # operators for every TU that needed them here - defining it target-wide plus the
@@ -465,7 +468,7 @@ target_compile_definitions(${TARGET_PROJECT} PRIVATE EDITOR IMGUI_DEFINE_MATH_OP
 # the same components as the graphical target (xGPU/imgui) since there's no separate "core"
 # library to link against yet - see the port's own plan notes on why that split is deferred.
 add_executable(xLION_Headless ${XLION_HEADLESS_SOURCES})
-target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
+target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/dependencies/box3d/include" ${XLION_PLUGIN_INCLUDES})
 target_compile_definitions(xLION_Headless PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
 
 if(XECS_BUILD_SHARED_LIBRARY)
