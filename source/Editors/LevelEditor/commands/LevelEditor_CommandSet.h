@@ -19,6 +19,9 @@ namespace level_editor
         xscene::commands::toggle_multi_select_cmd           CmdToggleMultiSelect;
         xscene::commands::clear_selection_cmd               CmdClearSelection;
         xscene::commands::set_property_cmd                  CmdSetProperty;
+        xscene::commands::translate_cmd                     CmdTranslate;
+        xscene::commands::rotate_cmd                        CmdRotate;
+        xscene::commands::scale_cmd                         CmdScale;
         xscene::commands::revert_override_cmd               CmdRevertOverride;
         xscene::commands::apply_overrides_cmd               CmdApplyOverrides;
         xscene::commands::revert_hierarchy_overrides_cmd    CmdRevertHierarchyOverrides;
@@ -118,6 +121,9 @@ namespace level_editor
         , CmdToggleMultiSelect(Level, pScene)
         , CmdClearSelection(Level, pScene)
         , CmdSetProperty(Level, pScene)
+        , CmdTranslate(Level, pScene)
+        , CmdRotate(Level, pScene)
+        , CmdScale(Level, pScene)
         , CmdRevertOverride(Level, pScene)
         , CmdApplyOverrides(Level, pScene)
         , CmdRevertHierarchyOverrides(Level, pScene)

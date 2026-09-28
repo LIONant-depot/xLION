@@ -146,6 +146,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xLIONRender.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xundo.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
+FetchAndPopulate("https://github.com/CedricGuillemet/ImGuizmo.git" "master")
 
 # xproperty's own imgui-inspector example header (xPropertyImGuiInspector.h) falls back to a
 # same-directory example "my_properties.h" stub (guard MY_PROPERTIES_H, missing several
@@ -258,6 +259,11 @@ DefineInterfaceComponent(imgui-node-editor "dependencies"
   "imgui_node_editor.h"
   "imgui_node_editor_api.cpp"
   "imgui_node_editor_internal.h"
+)
+
+DefineInterfaceComponent(ImGuizmo "dependencies"
+  "src/ImGuizmo.h"
+  "src/ImGuizmo.cpp"
 )
 
 #
