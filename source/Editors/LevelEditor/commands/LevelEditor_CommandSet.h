@@ -58,6 +58,7 @@ namespace level_editor
         level_editor::commands::serialize_roundtrip_query_cmd     CmdSerializeRoundtrip;
         xlevel::commands::describe_entity_query_cmd         CmdDescribeEntity;
         xlevel::commands::list_component_types_query_cmd    CmdListComponentTypes;
+        xlevel::commands::list_systems_query_cmd            CmdListSystems;
         xscene::commands::set_entity_reference_cmd          CmdSetEntityReference;
         xlevel::commands::play_query_cmd                    CmdPlay;
         xlevel::commands::pause_query_cmd                   CmdPause;
@@ -160,6 +161,7 @@ namespace level_editor
         , CmdSerializeRoundtrip(Level, pEditor)
         , CmdDescribeEntity(Level, pEditor)
         , CmdListComponentTypes(Level, pEditor)
+        , CmdListSystems(Level, pEditor)
         , CmdSetEntityReference(Level, pScene)
         , CmdPlay(Workspace, pEditor)
         , CmdPause(Workspace, pEditor)
