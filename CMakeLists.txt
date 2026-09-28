@@ -465,15 +465,22 @@ target_include_directories(${TARGET_PROJECT} PRIVATE "${CMAKE_SOURCE_DIR}" ${XLI
 # that actually works. NOMINMAX: xgpu_imgui_breach.cpp (folded into LevelEditor_Main.cpp, see
 # there) #includes <windows.h> without it, whose min/max macros otherwise break every later
 # std::...::max()/min() call in the SAME translation unit (e.g. xbitmap's xcolor_inline.h).
-target_compile_definitions(${TARGET_PROJECT} PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
+# XLION_EDITOR/XLION_GAME: the real axis this engine cares about is Editor-vs-Game, independent of
+# Headless-vs-graphical (both xLION and xLION_Headless below are Editor builds - Headless is just
+# "the editor without ImGui", still has Play/Stop/a loaded-but-not-running state; a shipped Game
+# target, whenever one exists, would define XLION_GAME instead here - load-time and about-to-run
+# are the same moment there, unlike in the editor). Not to be confused with the unrelated bare
+# EDITOR macro below (imgui-node-editor's own internal requirement, coincidentally same name).
+target_compile_definitions(${TARGET_PROJECT} PRIVATE EDITOR XLION_EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
 
 # xLION_Headless - no window/device/ImGui at runtime (see LevelEditor_App::Init's bHeadless
 # branch), driven entirely by the same command system over the Command Console pipe. Still links
 # the same components as the graphical target (xGPU/imgui) since there's no separate "core"
 # library to link against yet - see the port's own plan notes on why that split is deferred.
+# Still an Editor build (see XLION_EDITOR/XLION_GAME comment above) - Headless is orthogonal.
 add_executable(xLION_Headless ${XLION_HEADLESS_SOURCES})
 target_include_directories(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
-target_compile_definitions(xLION_Headless PRIVATE EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
+target_compile_definitions(xLION_Headless PRIVATE EDITOR XLION_EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX)
 
 if(XECS_BUILD_SHARED_LIBRARY)
   # The shared library itself (LIONCore.dll) is now built by the xLIONCore depot (fetched above),
