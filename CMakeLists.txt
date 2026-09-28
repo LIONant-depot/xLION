@@ -517,8 +517,43 @@ if(XECS_BUILD_SHARED_LIBRARY)
   )
 endif()
 
+# Plugin editor sources (xlevel_session.h, xscene_editor.h, every xscene/xlevel/xskeleton/...
+# command and panel file, etc.) live entirely under plugins/*.plugin/source/ and are reached only
+# through #include chains starting at LevelEditor_Main.cpp plus the XLION_PLUGIN_INCLUDES search
+# path above - never listed as an explicit CMake source. Visual Studio's Solution Explorer only
+# shows files MSBuild knows about, so none of this was ever browsable there (direct user report:
+# "I should be able to find all the important headers in the visual studio solution without having
+# to open explorer"). GLOB_RECURSE here is a deliberate exception to XLION_COMMON_SOURCES's own
+# hand-maintained-list convention above: this is IDE browsability only, never build correctness, so
+# a new plugin header just needs one reconfigure to appear instead of also requiring a
+# CMakeLists.txt edit to stay visible - CONFIGURE_DEPENDS re-globs automatically when the plugin
+# tree changes, without needing a manual "touch CMakeLists.txt".
+file(GLOB_RECURSE XLION_PLUGIN_HEADERS CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/plugins/*.plugin/source/*.h"
+  "${CMAKE_SOURCE_DIR}/plugins/*.plugin/source/*.hpp"
+  "${CMAKE_SOURCE_DIR}/plugins/*.plugin/source/*.inl"
+)
+file(GLOB_RECURSE XLION_PLUGIN_CPPS CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/plugins/*.plugin/source/*.cpp"
+)
+# Every plugin .cpp except the two already compiled directly into xLION.exe (XLION_EXTRA_SOURCES,
+# above) is an asset compiler's main()/implementation or a runtime resource loader - each built by
+# that plugin's own separate CMakeLists.txt (plugins/*.plugin/build/...), not this target. Listed
+# here as HEADER_FILE_ONLY so they're browsable in this solution too without compiling them a
+# second time (a duplicate-symbol link error) or pulling them out of whatever actually builds them.
+set(XLION_PLUGIN_CPPS_COMPILED_ELSEWHERE
+  "${CMAKE_SOURCE_DIR}/plugins/xmaterial.plugin/source/Graph/xmaterial_graph.cpp"
+  "${CMAKE_SOURCE_DIR}/plugins/xmaterial.plugin/source/Graph/xmaterial_graph_node.cpp"
+)
+list(REMOVE_ITEM XLION_PLUGIN_CPPS ${XLION_PLUGIN_CPPS_COMPILED_ELSEWHERE})
+set_source_files_properties(${XLION_PLUGIN_CPPS} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+target_sources(${TARGET_PROJECT} PRIVATE ${XLION_PLUGIN_HEADERS} ${XLION_PLUGIN_CPPS})
+target_sources(xLION_Headless PRIVATE ${XLION_PLUGIN_HEADERS} ${XLION_PLUGIN_CPPS})
+
 source_group("Shaders" FILES ${GENERATED_HEADERS})
 source_group(TREE "${CMAKE_SOURCE_DIR}/source" PREFIX "source" FILES ${XLION_COMMON_SOURCES})
+source_group(TREE "${CMAKE_SOURCE_DIR}/plugins" PREFIX "plugins" FILES ${XLION_PLUGIN_HEADERS} ${XLION_PLUGIN_CPPS})
 
 find_package(OpenMP REQUIRED)
 target_link_libraries(${TARGET_PROJECT} PRIVATE OpenMP::OpenMP_CXX)
