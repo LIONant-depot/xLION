@@ -1,5 +1,12 @@
 /.vs
-/Build
+# Only the generated project tree is ignored, not Build/ itself - CreateProject.bat (the
+# double-click project-setup script, same convention as xGPU's own Build/CreateProject.bat) lives
+# directly in Build/ and needs to be tracked.
+/Build/xLION.vs2022
+/Build/CrashDumps
+/Build/_transform_impl_scratch
+/Build/_*.txt
+/Build/_*.py
 /dependencies
 /plugins
 /example.lionprj

@@ -491,13 +491,13 @@ if(XECS_BUILD_SHARED_LIBRARY)
   # (copy_if_different - a no-op once the DLL is already up to date) - a plain POST_BUILD step, not a
   # RUNTIME_OUTPUT_DIRECTORY override on the dependency itself.
   target_link_libraries(${TARGET_PROJECT} PRIVATE xLIONCore)
-  target_compile_definitions(${TARGET_PROJECT} PRIVATE XECS_BUILD_SHARED)
+  target_compile_definitions(${TARGET_PROJECT} PRIVATE XECS_BUILD_SHARED XLIONCORE_BUILD_SHARED)
   add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONCore>" "$<TARGET_FILE_DIR:${TARGET_PROJECT}>"
   )
 
   target_link_libraries(xLION_Headless PRIVATE xLIONCore)
-  target_compile_definitions(xLION_Headless PRIVATE XECS_BUILD_SHARED)
+  target_compile_definitions(xLION_Headless PRIVATE XECS_BUILD_SHARED XLIONCORE_BUILD_SHARED)
   add_custom_command(TARGET xLION_Headless POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONCore>" "$<TARGET_FILE_DIR:xLION_Headless>"
   )
