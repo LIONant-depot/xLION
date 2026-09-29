@@ -73,10 +73,10 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins")
 endif()
 
 # xscene.plugin, xlevel.plugin, xscript_module.plugin - the Scene/Level editors and the scripting
-# core LevelEditor is actually built on. Header-only (nothing to compile ahead of time), so - same
-# as xGPU's own root CMakeLists.txt - they're never in Install.bat's PLUGINS loop, just cloned
-# straight here and referenced through the plugins/ worm hole above.
-foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin)
+# core LevelEditor is actually built on - plus xPhysicsMaterial.plugin (its editor). Header-only
+# (nothing to compile ahead of time), so - same as xGPU's own root CMakeLists.txt - they're never in
+# Install.bat's PLUGINS loop, just cloned straight here and referenced through the plugins/ worm hole above.
+foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xPhysicsMaterial.plugin)
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}/source")
         execute_process(
             COMMAND git clone --depth 1 https://github.com/LIONant-depot/${HeaderOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}"

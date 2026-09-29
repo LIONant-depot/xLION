@@ -14,6 +14,7 @@
 #include "plugins/xanim_package.plugin/source/Editor/xanim_package_editor.h"
 #include "plugins/xgeom_skin.plugin/source/Editor/xgeom_skin_editor.h"
 #include "plugins/xskeleton.plugin/source/Editor/xskeleton_editor.h"
+#include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
