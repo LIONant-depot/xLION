@@ -16,7 +16,8 @@ namespace level_editor
             ResourceEditors.SyncToHost(EditorHost);
 
             const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
-            level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
+            if (!xlevel::Services().bInitialBuild)
+                level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
             if (EditorHost.m_ConsoleLog.size() != ConsoleLogCountBefore)
                 EditorHost.m_IdleWork.NotifyActivity();
 

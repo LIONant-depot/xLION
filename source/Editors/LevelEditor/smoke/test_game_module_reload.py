@@ -4,6 +4,7 @@ Play is what triggers it. The recompile-check finds the DLL stale (its inputs ar
 restores the open level in a fresh world before entering Play. The level must come back exactly as it was.
 """
 import os
+import pytest
 from pathlib import Path
 
 from harness import REPO
@@ -12,6 +13,8 @@ GAME_SOURCE = REPO / "plugins" / "xscript_module.plugin" / "source" / "Runtime" 
 
 
 def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(editor, level):
+    if "the project has no script modules" in editor.log_text():
+        pytest.skip("the example project has no script modules, so there is no Game.dll to rebuild")
     before = {scene: level.entities(scene) for scene, _ in level.scenes}
     reloads_before = editor.log_text().count("[Vn restore]")
 

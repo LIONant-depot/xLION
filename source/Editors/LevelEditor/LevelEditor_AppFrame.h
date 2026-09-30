@@ -54,9 +54,13 @@ namespace level_editor
     // user is working on.
     inline void app::PumpLevels()
     {
-        auto Pending = std::move(xlevel::g_PendingOpenLevels);
-        xlevel::g_PendingOpenLevels.clear();
-        for (auto& LevelGuid : Pending) OpenLevelEditor(LevelGuid);
+        // While the first Game.dll is still building (the editor started without a usable one) the Levels wait for it.
+        if (!xlevel::Services().bInitialBuild)
+        {
+            auto Pending = std::move(xlevel::g_PendingOpenLevels);
+            xlevel::g_PendingOpenLevels.clear();
+            for (auto& LevelGuid : Pending) OpenLevelEditor(LevelGuid);
+        }
 
         ResourceEditors.DropClosed();
 
@@ -90,8 +94,10 @@ namespace level_editor
         // xlevel::session::PumpBeforeFrame's own comment for why this can never move into Render().
         PumpLevels();
 
+        // The command pipe waits for the first Game.dll build too: a script sees the editor as ready only once its Levels can open.
         const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
-        level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
+        if (!xlevel::Services().bInitialBuild)
+            level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
         if (EditorHost.m_ConsoleLog.size() != ConsoleLogCountBefore)
             EditorHost.m_IdleWork.NotifyActivity();
 
