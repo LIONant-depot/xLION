@@ -168,7 +168,7 @@ namespace level_editor::commands
             auto* pEditors = FindResourceEditors();
             auto* pEditor  = pEditors ? pEditors->Find(e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
             if (!pEditor) return "ResourceEditorCommand: no open editor for that resource";
-            return xeditor::host::run_on(pEditor->getUndo(), xeditor::Base64Decode(std::get<std::string>(CmdArg)));
+            return xeditor::host::current()->run_on(pEditor->getUndo(), xeditor::Base64Decode(std::get<std::string>(CmdArg)));
         }
         xcmdline::parser::handle m_hAsset, m_hCmd;
     };

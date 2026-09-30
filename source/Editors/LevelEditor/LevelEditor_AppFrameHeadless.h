@@ -12,7 +12,8 @@ namespace level_editor
 
         while (!ExitState.bRequested)
         {
-            if (pLevelSession) pLevelSession->PumpBeforeFrame();
+            PumpLevels();
+            ResourceEditors.SyncToHost(EditorHost);
 
             const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
             level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
@@ -21,8 +22,10 @@ namespace level_editor
 
             EditorHost.pump_services();
 
-            if (pLevelSession && pLevelSession->m_State.m_PlayState == xlevel::level_state::play_state::Playing)
-                pLevelSession->m_pGameMgr->Run();
+            ForEachLevelSession([](xlevel::session& S)
+            {
+                if (S.m_State.m_PlayState == xlevel::level_state::play_state::Playing) S.m_pGameMgr->Run();
+            });
 
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }

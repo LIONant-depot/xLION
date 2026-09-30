@@ -40,20 +40,41 @@ def test_list_folders_format(level):
 
 def test_open_level_on_open_level(level):
     """OpenLevel on an open level says so."""
-    level.ed.cmd("Close -Save 0")
-    [lvl] = level.ed.levels()
-
-    level.ed.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
-    assert "already open" in level.ed.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
+    assert "already open" in level.ed.cmd(f"OpenLevel -Level {level.guid}")
 
 
-def test_open_level_unsaved_edits_refused(level):
-    """OpenLevel of a different level over unsaved edits is refused."""
+def _other_level(level):
     others = [l for l in level.ed.levels() if l[0] != level.guid]
     if not others:
         pytest.skip("the example project has only one Level")
-    level.new_entity()
-    assert "unsaved edits" in level.ed.cmd(f"OpenLevel -Level {others[0][0]}")
+    return others[0]
+
+
+def test_two_levels_open_side_by_side(level):
+    """A second Level opens in its own editor next to the first; closing it leaves the first alone."""
+    guid, name = _other_level(level)
+    assert "Opened" in level.ed.cmd(f"OpenLevel -Level {guid}")
+    try:
+        names = [s.name for s in level.ed.sessions()]
+        assert level.name in names and name in names
+        assert level.entities()                                    # the first Level is still addressable by name
+    finally:
+        level.ed.cmd("Close -Save 0")                              # the newest Level is the one the workspace commands act on
+    assert name not in [s.name for s in level.ed.sessions()]
+    assert level.name in [s.name for s in level.ed.sessions()]
+
+
+def test_opening_another_level_keeps_unsaved_edits(level):
+    """Opening another Level no longer closes (or asks about) the one being edited."""
+    guid, name = _other_level(level)
+    entity = level.new_entity()
+    assert level.dirty()
+    assert "Opened" in level.ed.cmd(f"OpenLevel -Level {guid}")
+    try:
+        assert entity in level.entities()
+        assert level.dirty()
+    finally:
+        level.ed.cmd("Close -Save 0")
 
 
 def test_close_scene(level):

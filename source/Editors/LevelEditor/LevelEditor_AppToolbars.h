@@ -23,7 +23,11 @@ namespace level_editor
             e10::RenderSourceControlPanel(EditorHost.m_Workspace);
             break;
         case 3:
-            xeditor::RenderIdleWorkPanel(EditorHost.m_IdleWork, pLevelSession && pLevelSession->m_pGameMgr && !pLevelSession->m_State.m_OpenScenes.empty());
+            {
+                bool bAnyScenes = false;
+                ForEachLevelSession([&](xlevel::session& S) { bAnyScenes |= S.m_pGameMgr && !S.m_State.m_OpenScenes.empty(); });
+                xeditor::RenderIdleWorkPanel(EditorHost.m_IdleWork, bAnyScenes);
+            }
             break;
         case 4:
             xlevel::RenderGamePluginLogPanel(/*bEmbedded*/ true);

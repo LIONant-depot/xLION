@@ -60,18 +60,11 @@
 // plugins/xlevel.plugin/source/Editor/xlevel_session.h's xlevel::session, the same shape every other resource
 // editor (Texture, Material, GeomStatic, ...) already used.
 //
-// pLevelSession is a raw, non-owning pointer to the one Level session Open() constructs at startup - it is a
-// SINGLETON (see xlevel_session.h's own top comment for why: no per-Guid identity, never destroyed for the
-// life of the process), so this pointer stays valid for as long as `app` does. Commands (still built here,
-// against the session's own CmdContext/Undo for its "Level" half) and WireAssetBrowser's open-asset routing
-// both reach into it directly. command_set's ~32 Level-tagged commands (entity/scene/play mutation) are
-// already registered on pLevelSession->m_Undo, not a shell-owned system - true since stage (b) - so
-// host::dispatch()'s Name\Command already reaches them; physically relocating those command *objects* into
-// xlevel::session itself (so command_set holds only the ~50 Workspace-tagged ones) is left for a follow-up -
-// one of them (CmdSerializeRoundtrip) is defined in a shell-only file
-// (extensions/game_module/LevelEditor_Commands_Scripting.h) that xlevel_session.h cannot see without a real
-// include-order untangling, and that's a bigger, separate piece of work than the AddSystem/
-// m_pExternalWorkspace removal this stage is actually about.
+// A Level is a resource like any other: every open Level has its own xlevel::session in ResourceEditors, created by
+// ResourceEditors.Open(LevelGuid) (double-click, drop, the OpenLevel command) and gone when the Level is closed. The
+// commands addressed to one Level by name (Name\Command) are built per session (level_command_set, kept in the
+// session). The workspace commands that act on "the Level the user is working on" (Play, Save, Close, ...) are aimed
+// at the active session, or at IdleLevel - a session with no Level that is never shown - when none is open.
 //
 //-----------------------------------------------------------------------------------
 
@@ -109,7 +102,8 @@ namespace level_editor
         xeditor::host                     EditorHost;
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
 
-        xlevel::session*                  pLevelSession = nullptr; // the one Level session Open() constructs at startup - see this file's own top comment
+        std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open
+        xlevel::level_context*            LastLevelTarget = nullptr;
 
         xundo::history                        LevelEditorHistory;
 
@@ -125,6 +119,10 @@ namespace level_editor
 
         void WireAssetBrowser();
         void DrawDrawerTab(int TabIndex);
+
+        std::string OpenLevelEditor(xresource::full_guid LevelGuid);   // opens (or focuses) the Level's editor; the OpenLevel command's reply
+        void        PumpLevels();                                       // once a frame, before anything draws: open what was asked for, drop what closed, pump each editor
+        template<typename T_FN> void ForEachLevelSession(T_FN&& Fn);    // every open Level editor (not IdleLevel)
 
         // bHeadless=true skips window/device/ImGui init entirely - the editor still runs its full command
         // system (ECS, undo, asset browser, Command Console pipe), just with no GPU/UI. See

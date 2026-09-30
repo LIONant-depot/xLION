@@ -150,21 +150,21 @@ namespace level_editor
         if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
             xeditor::NotifyError(std::format("LevelEditor: xundo Init failed: {}", Err));
 
-        // Level opens exactly like Texture does on double-click - the one difference is WHEN: Level is a
-        // singleton with no natural per-Guid identity of its own (see xlevel_session.h's own top comment), so
-        // it opens once here, at startup, rather than lazily on a browser click. Guid.m_Instance is left at its
-        // default (0) - Open()/the factory map key off Guid.m_Type only.
+        // A Level opens exactly like Texture does: ResourceEditors.Open(LevelGuid) creates its editor when it is asked for
+        // (see OpenLevelEditor). Each new editor gets the commands addressed to it by name (Name\Command is resolved by
+        // host::dispatch() through open_resource_editors::SyncToHost, like for Texture).
+        xlevel::g_OnSessionCreated = [](xlevel::session& Session) noexcept
         {
-            auto* pEditor = ResourceEditors.Open(xresource::full_guid{ {}, xecs::level::type_guid_v }, {});
-            pLevelSession = static_cast<xlevel::session*>(pEditor);
-            if (!pLevelSession) xeditor::NotifyError("LevelEditor: failed to construct the Level session");
-        }
+            Session.m_ShellCommands = std::make_shared<level_command_set>
+                (Session.m_Undo, static_cast<xscene::scene_context*>(&Session.m_CmdContext), &Session.m_CmdContext);
+        };
+        xlevel::g_OpenLevelSession = [this](xresource::full_guid LevelGuid) { return OpenLevelEditor(LevelGuid); };
 
-        // No more LevelEditorHistory.AddSystem("LevelEditor", ...) - Level is a normal host.m_Sessions entry
-        // (see open_resource_editors::SyncToHost), so host::dispatch()'s own Name\Command resolution already
-        // reaches it by display name, the same way it already reaches Texture.
-        if (pLevelSession)
-            Commands.emplace(EditorHost.m_Workspace, pLevelSession->m_Undo, static_cast<xscene::scene_context*>(&pLevelSession->m_CmdContext), &pLevelSession->m_CmdContext);
+        // The editor without a Level: it brings the game module up and is what the workspace commands act on until a
+        // Level is open. It is not in ResourceEditors, so it is never drawn or listed.
+        IdleLevel = std::make_unique<xlevel::session>(xresource::full_guid{}, e10::library::guid{}, ResourceEditors.m_pDevice);
+        LastLevelTarget = &IdleLevel->m_CmdContext;
+        Commands.emplace(EditorHost.m_Workspace, LastLevelTarget);
 
         std::thread(level_editor::CommandConsolePipeThreadMain, std::ref(ConsolePipeBridge)).detach();
 
@@ -179,12 +179,12 @@ namespace level_editor
         };
         EditorHost.m_OnSourceChanged = [this]() noexcept
         {
-            if (pLevelSession) xlevel::StartGameReload(pLevelSession->m_GamePlugin);
+            xlevel::StartGameReload(xlevel::Services().Plugin);
         };
         EditorHost.m_OnFocusRegain = [this]() noexcept
         {
 #if defined(XECS_BUILD_SHARED)
-            if (pLevelSession) xlevel::StartGameReload(pLevelSession->m_GamePlugin);
+            xlevel::StartGameReload(xlevel::Services().Plugin);
 #endif
         };
         EditorHost.m_OnDrawerTab = [this](int TabIndex, const char* /*TabName*/) { DrawDrawerTab(TabIndex); };
@@ -205,7 +205,10 @@ namespace level_editor
         // dropping every open resource editor (Level's own session included) BEFORE FreeLibrary is what used to
         // matter here; now it is just the generic open_resource_editors teardown, no separate ordering needed.
         ResourceEditors.m_List.clear();
-        pLevelSession = nullptr;
+        IdleLevel.reset();
+        xlevel::ShutdownLevelServices();
+        xlevel::g_OnSessionCreated = {};
+        xlevel::g_OpenLevelSession = {};
         EditorHost.withdraw<xeditor::open_resource_editors>();
         EditorHost.withdraw<e10::assert_browser>();
         if (!bHeadless)

@@ -235,8 +235,8 @@ class Editor:
         return out
 
     def levels(self) -> list[tuple[str, str]]:
-        """[(guid, name)] from ListLevels."""
-        return [(m[1], m[2].strip()) for l in self.cmd("ListLevels").splitlines() if (m := re.match(r"(\w{16})\s+(.*)", l))]
+        """[(guid, name)] from ListLevels, sorted by name (the editor's own order is not stable)."""
+        return sorted(((m[1], m[2].strip()) for l in self.cmd("ListLevels").splitlines() if (m := re.match(r"(\w{16})\s+(.*)", l))), key=lambda g: g[1])
 
     def play_state(self) -> str:
         return re.search(r"PlayState=(\w+)", self.cmd("GetPlayState"))[1]

@@ -100,6 +100,7 @@ namespace xeditor
                 if (!U || !U->is_borrowed()) return false;
                 for (auto& E : m_List)
                     if (E && E->m_bOpen && U->m_pBorrowedUndo == &E->getUndo()) return false;
+                std::erase_if(Host.m_WriteLocks, [&](const host::write_lock& L) noexcept { return L.pWriter == U.get(); });   // a closed editor holds no write locks
                 return true;
             });
 
@@ -119,11 +120,17 @@ namespace xeditor
             }
         }
 
+        // Drops the editors that closed themselves. Never while one of them is being rendered.
+        void DropClosed() noexcept
+        {
+            std::erase_if(m_List, [](auto& E) noexcept { return !E || !E->m_bOpen; });
+        }
+
         // Once a frame: drops the closed editors and renders the rest.
         void RenderAll() noexcept
         {
             if (auto* pHost = host::current()) SyncToHost(*pHost);
-            std::erase_if(m_List, [](auto& E) noexcept { return !E || !E->m_bOpen; });
+            DropClosed();
             for (auto& E : m_List) E->Render();
         }
     };

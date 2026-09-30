@@ -2,6 +2,76 @@
 
 namespace level_editor
 {
+    template<typename T_FN>
+    void app::ForEachLevelSession(T_FN&& Fn)
+    {
+        for (auto& E : ResourceEditors.m_List)
+            if (E && E->m_bOpen)
+                if (auto* pSession = dynamic_cast<xlevel::session*>(E.get())) Fn(*pSession);
+    }
+
+    // Opens a Level in its own editor (or brings the one it already has to the front) and builds the OpenLevel command's reply.
+    inline std::string app::OpenLevelEditor(xresource::full_guid LevelGuid)
+    {
+        const std::uint64_t Value = LevelGuid.m_Instance.m_Value;
+        if (auto* pOpen = ResourceEditors.Find(LevelGuid); pOpen)
+        {
+            pOpen->Focus();
+            return std::format("OpenLevel: {:016X} is already open", Value);
+        }
+
+        auto* pEditor  = ResourceEditors.Open(LevelGuid, xeditor::open_resource_editors::FindLibraryOf(LevelGuid));
+        auto* pSession = dynamic_cast<xlevel::session*>(pEditor);
+        if (pSession == nullptr || pSession->m_State.m_CurrentLevel.empty())
+        {
+            if (pEditor) pEditor->m_bOpen = false;          // it never got a Level: drop it
+            return std::format("OpenLevel: failed to open {:016X} (unknown Level guid or load error)", Value);
+        }
+
+        // Listed right away, so the very next command can already be addressed to it (Name\Command).
+        ResourceEditors.SyncToHost(EditorHost);
+
+        // Component-registry compatibility plan, Phase 4: informational, not blocking - EnsureLoaded already soft-fails a
+        // per-entity missing-component-type case on its own; this surfaces it at the command's reply too.
+        std::vector<xecs::scene::component_dependency> Missing;
+        for (auto& SceneGuid : pSession->m_State.m_OpenScenes)
+            for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(e10::g_LibMgr.m_ProjectPath, SceneGuid))
+                if (!xscene::IsComponentInLiveRegistry(Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
+                    Missing.push_back(Dep);
+
+        std::string Result = std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
+        if (!Missing.empty())
+        {
+            std::string Names;
+            for (auto& Dep : Missing) Names += (Names.empty() ? "" : ", ") + Dep.m_Name;
+            Result += std::format(" - WARNING: {} component type(s) used by these scenes are not currently registered: {}", Missing.size(), Names);
+        }
+        return Result;
+    }
+
+    // Once a frame, at a clean point (before anything draws): open the Levels that were asked for, drop the editors that
+    // closed, pump the rest (recompile-check completion, deferred Stop, ...), and aim the workspace commands at the Level the
+    // user is working on.
+    inline void app::PumpLevels()
+    {
+        auto Pending = std::move(xlevel::g_PendingOpenLevels);
+        xlevel::g_PendingOpenLevels.clear();
+        for (auto& LevelGuid : Pending) OpenLevelEditor(LevelGuid);
+
+        ResourceEditors.DropClosed();
+
+        if (IdleLevel) IdleLevel->PumpBeforeFrame();
+        ForEachLevelSession([](xlevel::session& S) { S.PumpBeforeFrame(); });
+
+        xlevel::level_context* pTarget = xlevel::g_pActiveLevelContext;
+        if (pTarget == nullptr && IdleLevel) pTarget = &IdleLevel->m_CmdContext;
+        if (pTarget != LastLevelTarget && Commands)
+        {
+            Commands->SetLevelTarget(pTarget);
+            LastLevelTarget = pTarget;
+        }
+    }
+
     inline void app::Frame()
     {
         ++FrameNumber;
@@ -18,7 +88,7 @@ namespace level_editor
 
         // Checked unconditionally, every frame, BEFORE BeginRendering starts this frame - see
         // xlevel::session::PumpBeforeFrame's own comment for why this can never move into Render().
-        if (pLevelSession) pLevelSession->PumpBeforeFrame();
+        PumpLevels();
 
         const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
         level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
@@ -52,19 +122,15 @@ namespace level_editor
 
             auto RouteAsset = [this](xresource::full_guid Guid) noexcept
             {
-                if (!pLevelSession) return;
                 if (Guid.m_Type == xecs::level::type_guid_v)
                 {
-#if defined(XECS_BUILD_SHARED)
-                    if (xlevel::RequestOpenLevel(*pLevelSession->m_pGameMgr, pLevelSession->m_State, pLevelSession->m_Undo, Guid, /*bStartGameReload*/ true))
-                        xlevel::StartGameReload(pLevelSession->m_GamePlugin);
-#else
-                    xlevel::RequestOpenLevel(*pLevelSession->m_pGameMgr, pLevelSession->m_State, pLevelSession->m_Undo, Guid, /*bStartGameReload*/ false);
-#endif
+                    xlevel::QueueOpenLevel(Guid);       // opened at the start of the next frame (PumpLevels)
                 }
                 else if (Guid.m_Type == xecs::scene::type_guid_v)
                 {
-                    xscene::OpenScene(*pLevelSession->m_pGameMgr, pLevelSession->m_State, Guid);
+                    // A Scene goes into the Level the user is working on.
+                    if (auto* pCtx = xlevel::g_pActiveLevelContext; pCtx && !pCtx->State().m_CurrentLevel.empty())
+                        xscene::OpenScene(pCtx->World(), pCtx->State(), Guid);
                 }
             };
 
@@ -77,6 +143,13 @@ namespace level_editor
         // Every open resource editor (Level's own singleton session included) renders itself - see
         // xlevel_session.h's own Render() for what used to be hand-rendered here directly.
         ResourceEditors.RenderAll();
+
+        // With no Level open there is still a (empty) Level tab, like at startup: its File menu reaches the Asset Browser to open one.
+        {
+            bool bAnyLevel = false;
+            ForEachLevelSession([&](xlevel::session&) { bAnyLevel = true; });
+            if (!bAnyLevel && IdleLevel) IdleLevel->Render();
+        }
         // Host Drawer last so it stacks above Level and resource editor peer windows (same OS window).
         EditorHost.draw_host_drawers();
 

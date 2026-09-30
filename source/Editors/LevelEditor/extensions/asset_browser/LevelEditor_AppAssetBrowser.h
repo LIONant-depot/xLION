@@ -7,7 +7,7 @@ namespace level_editor
     // open-asset routing (Level / Texture), and the extra Project Settings sections.
     inline void app::WireAssetBrowser()
     {
-        e10::RegisterAssetBrowserCallbacks(AsserBrowser, EditorHost.m_Workspace, pLevelSession ? pLevelSession->m_Undo : EditorHost.m_Workspace, MainWindow);
+        e10::RegisterAssetBrowserCallbacks(AsserBrowser, EditorHost.m_Workspace, IdleLevel ? IdleLevel->m_Undo : EditorHost.m_Workspace, MainWindow);
         e10::RegisterSourceControlCallbacks(AsserBrowser, EditorHost.m_Workspace);
 
         // "Scripting" section in the merged Plugins/Project Settings tab (e10::plugin_tab,
@@ -49,20 +49,14 @@ namespace level_editor
             }
         });
 
-        // Double-click: a Level opens in the (singleton) Level session, a resource type with a registered editor
-        // (Texture, Static Geom, ...) opens in its own window, and every other type keeps today's inert
-        // setSelection-only default.
+        // Double-click: a resource type with a registered editor (Level, Texture, Static Geom, ...) opens in its own window,
+        // and every other type keeps today's inert setSelection-only default. A Level is queued rather than opened right
+        // here: a new Level editor builds a world, which waits for a clean point of the frame (PumpLevels).
         AsserBrowser.m_OnOpenAsset = [this](e10::library::guid LibraryGuid, xresource::full_guid AssetGuid)
             {
                 if (AssetGuid.m_Type == xecs::level::type_guid_v)
                 {
-                    if (!pLevelSession) return;
-#if defined(XECS_BUILD_SHARED)
-                    if (xlevel::RequestOpenLevel(*pLevelSession->m_pGameMgr, pLevelSession->m_State, pLevelSession->m_Undo, AssetGuid, /*bStartGameReload*/ true))
-                        pLevelSession->m_State.m_bPendingStartGameReloadAfterOpen = true;
-#else
-                    xlevel::RequestOpenLevel(*pLevelSession->m_pGameMgr, pLevelSession->m_State, pLevelSession->m_Undo, AssetGuid, /*bStartGameReload*/ false);
-#endif
+                    xlevel::QueueOpenLevel(AssetGuid);
                     return;
                 }
                 ResourceEditors.Open(AssetGuid, LibraryGuid);
