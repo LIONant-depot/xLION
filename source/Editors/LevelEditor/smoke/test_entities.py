@@ -67,3 +67,18 @@ def test_dirty_flag(level):
     
     level.cmd("Undo")
     assert not level.dirty()
+
+
+def test_rename_entity_undo_redo_and_clear(level):
+    """RenameEntity sets the display name, Undo/Redo follow it, -Clear 1 goes back to the id label."""
+    entity = level.new_entity()
+    before = level.entities()[entity]
+    level.ok(f"RenameEntity -Scene {level.scene} -Id {entity} -Name {b64('Big Floor')}")
+    assert level.entities()[entity] == "Big Floor"
+    assert "Undone" in level.cmd("Undo")
+    assert level.entities()[entity] == before
+    assert "Redone" in level.cmd("Redo")
+    assert level.entities()[entity] == "Big Floor"
+    level.ok(f"RenameEntity -Scene {level.scene} -Id {entity} -Clear 1")
+    assert level.entities()[entity] == before
+    assert "not found" in level.cmd(f"RenameEntity -Scene {level.scene} -Id DEADBEEF -Name {b64('x')}")

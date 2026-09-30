@@ -59,18 +59,16 @@ def test_remove_component_does_not_have_refused(level):
     """Removing a component that doesn't exist is refused."""
     entity = level.new_entity()
     _, _, transform = level.find_with_component("Transform")
-    
-    # Find a component the entity doesn't have (Name)
-    _, _, name = level.find_with_component("Name")
-    
-    assert "does not have" in level.cmd(f"RemoveComponent -Scene {level.scene} -Id {entity} -Component {name}")
+
+    # The new entity is empty, so it has no Transform to remove
+    assert "does not have" in level.cmd(f"RemoveComponent -Scene {level.scene} -Id {entity} -Component {transform}")
 
 
 def test_list_component_types(level):
-    """ListComponentTypes lists Transform and Name."""
+    """ListComponentTypes lists Transform and Primitive."""
     types = level.cmd("ListComponentTypes")
     assert "Transform" in types
-    assert "Name" in types
+    assert "Primitive" in types
 
 
 def test_describe_entity_format(level):
