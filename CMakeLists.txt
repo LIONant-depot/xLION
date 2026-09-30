@@ -88,6 +88,20 @@ foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xPhys
     endif()
 endforeach()
 
+# Config-only plugins (no source/ folder): they just register a resource type, its name and icon, with
+# the Asset Browser - without a clone here the type shows up with no icon and a raw guid for a name.
+foreach(ConfigOnlyPlugin xprefab.plugin)
+    if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${ConfigOnlyPlugin}/Plugin.config")
+        execute_process(
+            COMMAND git clone --depth 1 https://github.com/LIONant-depot/${ConfigOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${ConfigOnlyPlugin}"
+            RESULT_VARIABLE result
+        )
+        if(result)
+            message(FATAL_ERROR "Failed to clone ${ConfigOnlyPlugin}: ${result}")
+        endif()
+    endif()
+endforeach()
+
 # xmaterial.plugin hardcodes the pre-port path to the Command Console's text-editor widget
 # (source/Examples/E19_MaterialEditor/E19_TextEditor.h) - that file now lives at
 # source/Tools/Editor/xeditor_text_widget.h (see the port's own file-migration notes). Idempotent
