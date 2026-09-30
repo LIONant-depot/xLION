@@ -78,34 +78,21 @@ def test_get_idle_tasks(level):
 
 
 def test_compile_pause_toggle(level):
-    """CompilePause and CompileAuto toggle and report through CompileStatus."""
+    """CompilePause and CompileAuto -State are reported by CompileStatus; restored afterwards."""
     editor = level.ed
-    
-    # Get initial state
     status = editor.cmd("CompileStatus")
-    initial_auto = "CompileAuto=true" in status
-    
-    # Toggle CompilePause
-    editor.cmd("CompilePause")
-    status = editor.cmd("CompileStatus")
-    assert "CompilePause=true" in status
-    
-    # Toggle back
-    editor.cmd("CompilePause")
-    status = editor.cmd("CompileStatus")
-    assert "CompilePause=false" in status
-    
-    # Toggle CompileAuto if it was initially on
-    if initial_auto:
-        editor.cmd("CompileAuto")
-        status = editor.cmd("CompileStatus")
-        assert "CompileAuto=false" in status
-        editor.cmd("CompileAuto")  # Restore
-    else:
-        editor.cmd("CompileAuto")
-        status = editor.cmd("CompileStatus")
-        assert "CompileAuto=true" in status
-        editor.cmd("CompileAuto")  # Restore
+    was_paused = "Paused=true" in status
+    was_auto = "Auto=true" in status
+    try:
+        editor.cmd(f"CompilePause -State {'false' if was_paused else 'true'}")
+        assert f"Paused={'false' if was_paused else 'true'}" in editor.cmd("CompileStatus")
+
+        editor.cmd(f"CompileAuto -State {'false' if was_auto else 'true'}")
+        assert f"Auto={'false' if was_auto else 'true'}" in editor.cmd("CompileStatus")
+    finally:
+        editor.cmd(f"CompilePause -State {'true' if was_paused else 'false'}")
+        editor.cmd(f"CompileAuto -State {'true' if was_auto else 'false'}")
+
 
 
 def test_list_assets_stable(level):

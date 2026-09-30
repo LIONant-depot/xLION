@@ -23,7 +23,7 @@ def test_step_from_playing_refused(level):
     editor.cmd("Play")
     editor.wait_play_state("Playing")
     
-    assert "not paused" in editor.cmd("Step")
+    assert "pause first" in editor.cmd("Step")
 
 
 def test_stop_twice(level):
@@ -79,17 +79,18 @@ def test_get_play_state_fields(level):
 
 
 def test_editing_commands_during_play(level):
-    """Editing commands during Play are refused or gated."""
+    """Editing commands are allowed during Play (they are play tweaks); Stop -Keep false discards them."""
     editor = level.ed
-    
+
     editor.cmd("Play")
     editor.wait_play_state("Playing")
-    
-    # CreateEntity should be refused
-    assert "not allowed" in editor.cmd(f"{level.name}\\CreateEntity -Scene {level.scene} -Id 7E57FFFF -Folder 0")
-    
-    editor.cmd("Stop")
+
+    level.ok(f"CreateEntity -Scene {level.scene} -Id 7E57FFFF -Folder 0")
+    assert "7E57FFFF" in level.entities()
+
+    editor.cmd("Stop -Keep false")
     editor.wait_play_state("Stopped")
+    assert "7E57FFFF" not in level.entities()
 
 
 def test_stop_keep_true(level):

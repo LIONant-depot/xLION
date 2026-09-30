@@ -23,7 +23,8 @@ def test_remove_component_undo_redo(level):
     """Remove a component, undo restores it with prior values."""
     entity = level.new_entity()
     _, _, transform = level.find_with_component("Transform")
-    
+    level.ok(f"AddComponent -Scene {level.scene} -Id {entity} -Component {transform}")   # new entities are bare
+
     # Set a property before removing
     path = "Transform/Position/X"
     type_guid = level.property_type(entity, path)
@@ -75,7 +76,8 @@ def test_describe_entity_format(level):
     """DescribeEntity output format: [guid] Name for components, path = value (TypeGuid xxxxxxxx) for properties."""
     entity = level.new_entity()
     _, _, transform = level.find_with_component("Transform")
-    
+    level.ok(f"AddComponent -Scene {level.scene} -Id {entity} -Component {transform}")   # new entities are bare
+
     desc = level.describe(entity)
     assert f"[{transform}] Transform" in desc
     

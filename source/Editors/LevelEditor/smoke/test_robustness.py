@@ -17,8 +17,8 @@ WORKSPACE_COMMANDS = [
 SESSION_COMMANDS = [
     "CreateEntity", "DeleteEntity", "AddComponent", "RemoveComponent",
     "SetProperty", "DescribeEntity", "ListEntities", "ListFolders",
-    "Undo", "Redo", "Select", "ToggleMultiSelect", "ClearSelection",
-]
+    "Undo", "Redo", "Select", "ToggleMultiSelect", "RenameEntity",
+]   # ClearSelection takes no arguments, so it answers with an empty success reply
 
 
 def test_workspace_command_no_args(level):

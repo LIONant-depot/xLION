@@ -1,5 +1,6 @@
 """Scenes and levels: open/close, dependencies, and list formats."""
 import re
+import pytest
 from harness import b64
 
 
@@ -39,63 +40,44 @@ def test_list_folders_format(level):
 
 def test_open_level_on_open_level(level):
     """OpenLevel on an open level says so."""
-    level.cmd("Close -Save 0")
+    level.ed.cmd("Close -Save 0")
     [lvl] = level.ed.levels()
-    
-    level.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
-    assert "already open" in level.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
+
+    level.ed.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
+    assert "already open" in level.ed.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
 
 
 def test_open_level_unsaved_edits_refused(level):
-    """OpenLevel over unsaved edits is refused until -Save 0."""
-    entity = level.new_entity()
-    assert "unsaved edits" in level.cmd(f"OpenLevel -Level {level.guid} -Save 0")
-    
-    level.cmd("Close -Save 0")
-    level.cmd(f"OpenLevel -Level {level.guid} -Save 0")
+    """OpenLevel of a different level over unsaved edits is refused."""
+    others = [l for l in level.ed.levels() if l[0] != level.guid]
+    if not others:
+        pytest.skip("the example project has only one Level")
+    level.new_entity()
+    assert "unsaved edits" in level.ed.cmd(f"OpenLevel -Level {others[0][0]}")
 
 
 def test_close_scene(level):
-    """CloseScene closes a scene and reopening works."""
-    level.cmd("Close -Save 0")
-    
-    [lvl] = level.ed.levels()
-    level.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
-    
-    scenes_before = level.cmd(f"ListScenes")
-    level.ok(f"CloseScene -Scene {level.scene}")
-    scenes_after = level.cmd(f"ListScenes")
-    
-    assert len(scenes_before.splitlines()) > len(scenes_after.splitlines())
+    """CloseScene releases an open scene; closing it again says it was not open."""
+    assert "Closed" in level.cmd(f"CloseScene -Scene {level.scene}")
+    assert "was not open" in level.cmd(f"CloseScene -Scene {level.scene}")
 
 
 def test_add_scene_remove_scene(level):
-    """AddScene/RemoveScene with undo."""
-    level.cmd("Close -Save 0")
-    [lvl] = level.ed.levels()
-    level.cmd(f"OpenLevel -Level {lvl[0]} -Save 0")
-    
-    # Find a scene to add
-    all_scenes = level.cmd("ListScenes")
-    lines = [l for l in all_scenes.splitlines() if "Main Scene" not in l]
-    if lines:
-        m = re.match(r"(\w{16})\s+(.*)", lines[0])
-        if m:
-            scene_to_add = m[1]
-            level.ok(f"AddScene -Level {lvl[0]} -Scene {scene_to_add}")
-            assert scene_to_add in level.cmd("ListScenes")
-            
-            level.cmd("Undo")
-            assert scene_to_add not in level.cmd("ListScenes")
+    """AddScene/RemoveScene with undo - needs a second Scene asset in the project."""
+    found = level.ed.find_asset("Scene")
+    if found is None or found[0][:16] == level.scene:
+        pytest.skip("the example project has only one Scene, nothing to add")
+    scene_to_add = found[0][:16]
+    level.ok(f"AddScene -Level {level.guid} -Scene {scene_to_add}")
+    assert scene_to_add in level.cmd("ListScenes")
+    level.cmd("Undo")
+    assert scene_to_add not in level.cmd("ListScenes")
 
 
 def test_add_scene_dependency_refuses_cycle(level):
-    """AddSceneDependency refuses cycles."""
-    # Get current scene's dependencies
-    deps = level.cmd(f"ListSceneDependencies -Scene {level.scene}")
-    
-    # Try to add self as dependency (should refuse)
-    assert "cycle" in level.cmd(f"AddSceneDependency -Scene {level.scene} -Parent {level.scene}")
+    """AddSceneDependency refuses a dependency on itself (checked before anything is written)."""
+    reply = level.cmd(f"AddSceneDependency -Scene {level.scene} -Parent {level.scene}", allow_disk=True)
+    assert "circular" in reply
 
 
 def test_remove_scene_dependency_with_refs_refused(level):

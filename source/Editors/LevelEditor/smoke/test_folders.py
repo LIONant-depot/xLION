@@ -26,6 +26,7 @@ def test_create_nested_folder(level):
 def test_delete_folder_promotes_children(level):
     """DeleteFolder promotes entities and child folders to parent."""
     folder_id = "F0000001"
+    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {b64('Parent')}")
     entity = level.new_entity()
     
     # Move entity into folder
@@ -47,7 +48,9 @@ def test_move_to_folder(level):
     """MoveToFolder moves entity into folder and out to root."""
     entity = level.new_entity()
     folder_id = "F0000001"
-    
+    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {b64('TestFolder')}")
+
+    assert "folder not found" in level.cmd(f"MoveToFolder -Scene {level.scene} -Id {entity} -Folder F00000EE")
     level.ok(f"MoveToFolder -Scene {level.scene} -Id {entity} -Folder {folder_id}")
     assert entity in level.entities()
     
