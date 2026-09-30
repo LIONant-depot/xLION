@@ -45,6 +45,10 @@ The suite runs against the developer's real `example.lionprj`.
   test entities **after** the `Play` if you need both. Use the `level` fixture (clean) for any Play test.
 - Everything a test creates lives only in memory (`level.new_entity()` mints ids `7E57xxxx`) and is discarded by
   `Close -Save 0` in the fixture teardown.
+- `project_guard.py` (loaded by `pytest.ini`) makes that true even for Play: it snapshots `Descriptors/` and `Project.config/`
+  at the start and at the end deletes what the run created and puts the Scene/Level files it rewrote back byte for byte
+  (work in progress you had before the run is kept, not reset to git). It prints `[project_guard] put example.lionprj back`
+  when it had to. A run that is killed midway skips this, so run `git status` in `example.lionprj` after one.
 - A test must not depend on fixed entity ids from the project; discover them (`level.find_with_component("Transform")`).
 
 ## Writing a test
