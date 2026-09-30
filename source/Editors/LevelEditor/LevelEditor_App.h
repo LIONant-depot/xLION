@@ -21,6 +21,8 @@
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_play_session.h"
 
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_viewport_tools.h"
+
 #include "plugins/xscene.plugin/source/Editor/xscene_commands_scene_organization.h"
 
 #include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"

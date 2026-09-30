@@ -19,6 +19,7 @@ namespace level_editor
         xscene::commands::toggle_multi_select_cmd           CmdToggleMultiSelect;
         xscene::commands::clear_selection_cmd               CmdClearSelection;
         xscene::commands::set_property_cmd                  CmdSetProperty;
+        xscene::commands::snapshot_edit_cmd                 CmdSnapshotEdit;
         xscene::commands::translate_cmd                     CmdTranslate;
         xscene::commands::rotate_cmd                        CmdRotate;
         xscene::commands::scale_cmd                         CmdScale;
@@ -65,6 +66,7 @@ namespace level_editor
         xlevel::commands::step_query_cmd                    CmdStep;
         xlevel::commands::stop_query_cmd                    CmdStop;
         xlevel::commands::get_play_state_query_cmd          CmdGetPlayState;
+        xlevel::commands::edit_tool_query_cmd               CmdEditTool;
         xscene::commands::instantiate_prefab_cmd            CmdInstantiatePrefab;
         xscene::commands::move_to_folder_cmd                CmdMoveToFolder;
         xscene::commands::create_folder_cmd                 CmdCreateFolder;
@@ -122,6 +124,7 @@ namespace level_editor
         , CmdToggleMultiSelect(Level, pScene)
         , CmdClearSelection(Level, pScene)
         , CmdSetProperty(Level, pScene)
+        , CmdSnapshotEdit(Level, pScene)
         , CmdTranslate(Level, pScene)
         , CmdRotate(Level, pScene)
         , CmdScale(Level, pScene)
@@ -168,6 +171,7 @@ namespace level_editor
         , CmdStep(Workspace, pEditor)
         , CmdStop(Workspace, pEditor)
         , CmdGetPlayState(Workspace, pEditor)
+        , CmdEditTool(Level, pEditor)
         , CmdInstantiatePrefab(Level, pScene)
         , CmdMoveToFolder(Level, pScene)
         , CmdCreateFolder(Level, pScene)
