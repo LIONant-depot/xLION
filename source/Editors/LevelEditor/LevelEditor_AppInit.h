@@ -148,6 +148,7 @@ namespace level_editor
             // Keys: the actions' defaults (member_keys), then the base preset and this person's own file from
             // Project.config\Keymaps\<user>.keymap.txt (see ximgui_actions_keymap.h). The Drawer key is the first of them.
             EditorHost.provide(Actions);
+            Actions.m_pSearchBox = &xeditor::RenderTreeSearchBar;           // the palette's search box is the editors' one
             EditorHost.m_bDrawerToggleByAction = true;
 
             // Everything that goes wrong with the keys lands in the console log (the Commands tab, GetLog-style reports): setup

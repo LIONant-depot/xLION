@@ -49,6 +49,14 @@ namespace level_editor
             }
         });
 
+        // "Keymap" section: every action's keys as an xproperty inspector (dependencies/actions.imgui), saved in this person's own
+        // Project.config\Keymaps\<user>.keymap.txt. It has its own inspector; the tab's is shared with the other sections.
+        AsserBrowser.m_ExtraPluginTabSections.push_back(
+        {
+            "Keymap",
+            [this](xproperty::inspector& Tab) { ximgui::actions::DrawKeymapPage(Actions, Tab); }
+        });
+
         // Double-click: a resource type with a registered editor (Level, Texture, Static Geom, ...) opens in its own window,
         // and every other type keeps today's inert setSelection-only default. A Level is queued rather than opened right
         // here: a new Level editor builds a world, which waits for a clean point of the frame (PumpLevels).

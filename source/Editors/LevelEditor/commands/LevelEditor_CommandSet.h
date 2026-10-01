@@ -120,6 +120,8 @@ namespace level_editor
         level_editor::commands::list_actions_query_cmd            CmdListActions;
         level_editor::commands::run_action_query_cmd              CmdRunAction;
         level_editor::commands::action_problems_query_cmd         CmdActionProblems;
+        level_editor::commands::bind_key_query_cmd                CmdBindKey;
+        level_editor::commands::reset_key_query_cmd               CmdResetKey;
         level_editor::commands::press_keys_query_cmd              CmdPressKeys;
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
@@ -189,6 +191,8 @@ namespace level_editor
         , CmdListActions(Workspace, pEditor)
         , CmdRunAction(Workspace, pEditor)
         , CmdActionProblems(Workspace, pEditor)
+        , CmdBindKey(Workspace, pEditor)
+        , CmdResetKey(Workspace, pEditor)
         , CmdPressKeys(Workspace, pEditor)
         , CmdExplainLastKey(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
@@ -261,6 +265,8 @@ namespace level_editor
             CmdListActions.m_pDataBase = pEditor;
             CmdRunAction.m_pDataBase = pEditor;
             CmdActionProblems.m_pDataBase = pEditor;
+            CmdBindKey.m_pDataBase = pEditor;
+            CmdResetKey.m_pDataBase = pEditor;
             CmdPressKeys.m_pDataBase = pEditor;
             CmdExplainLastKey.m_pDataBase = pEditor;
             CmdOpenLevel.m_pDataBase = pEditor;

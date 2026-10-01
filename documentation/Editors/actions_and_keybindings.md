@@ -17,6 +17,10 @@ Built, compiled in Release, and covered by `smoke/test_actions.py` (the whole sm
 | Level editor actions: `Level/Save`, `Undo`, `Redo` and `Level/Viewport/ToolSelect|Move|Rotate|Scale` (the hand-written Ctrl+S/Z/Y and Q/W/E/R checks are gone); its File>Save and Save/Undo/Redo/Q/W/E/R toolbar buttons show the live key and why-not | `xlevel_session.h` |
 | Host action `Host/Drawer/Toggle` (Space) - the drawer key is now an ordinary rebindable action | `LevelEditor_App.h`, `xeditor/host.h` |
 | Pipe: `ListActions`, `RunAction -Path`, `PressKeys -Keys`, `ExplainLastKey` | `LevelEditor_Commands_Actions.h` |
+| **Command palette** (`Ctrl+Shift+P`, works inside text fields): search over what is live where you were working, Enter runs it, unavailable ones greyed with the reason | `ximgui_actions_ui.h`, `Host/Palette/Open` |
+| **Keymap page** in Project Settings ("Keymap"): an xproperty inspector over a reflected `std::map` (one row per action, key = action path, value = keys); typed edits, a "Set key" capture button and a "Reset" button per changed row; styled with the Project Settings tab's own inspector settings; edits are saved to your own keymap file | `ximgui_actions_ui.h` (`keymap_page`) |
+| xproperty: a text-keyed map shows its key as the row label | `xPropertyImGuiInspector.cpp` (`ElementLabel`) |
+| Pipe: `BindKey -Path -Keys` / `ResetKey -Path` (edit your keymap file), `ActionProblems` | `LevelEditor_Commands_Actions.h` |
 | Keymap files loaded at startup from `Project.config/Keymaps/<user>.keymap.txt` (+ base preset chain) | `LevelEditor_AppInit.h` |
 
 Differences from the design above that building it settled:
@@ -30,7 +34,7 @@ Differences from the design above that building it settled:
   Keys, and the pipe between frames, resolve against the last completed frame.
 - **Behaviour changes, deliberate**: Ctrl+S now needs one of the Level's windows to be focused (it used to fire whenever the editor was
   visible); Undo/Redo buttons are disabled when there is nothing to undo/redo (they were only disabled while playing).
-- **Not built yet**: the keymap page in Project Settings, the command palette, F1 pin/overlay, the status line, binding the inspector's
+- **Not built yet**: F1 pin/overlay, the status line, binding the inspector's
   `m_OnHelp`, the toolbar.imgui tooltip delegate, keys on enum values (Q/W/E/R are four actions for now), moving Save/Undo/Redo onto
   `xeditor::Run` commands, the other editors' keys (E10 files tab, tree F2/Delete, Texture, ...). Nothing is committed to the dependency
   repos yet, and `actions.imgui` has no remote: `CMakeLists.txt` can only fetch it (like toolbar.imgui) once it is published.

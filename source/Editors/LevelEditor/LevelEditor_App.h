@@ -12,6 +12,7 @@
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_App.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Actions.h"
 #include "dependencies/actions.imgui/ximgui_actions_keymap.h"
+#include "dependencies/actions.imgui/ximgui_actions_ui.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_level.h"
 
@@ -77,11 +78,13 @@ namespace level_editor
     // The shell's own actions (keys, menus, hints - see dependencies/actions.imgui): what is live whichever editor has the focus.
     struct host_actions
     {
-        xeditor::host* m_pHost = nullptr;       // xproperty creates objects by default construction, so the host is a pointer
+        xeditor::host*             m_pHost    = nullptr;   // xproperty creates objects by default construction, so these are pointers
+        ximgui::actions::context*  m_pActions = nullptr;
         host_actions() noexcept = default;
-        explicit host_actions(xeditor::host& Host) noexcept : m_pHost(&Host) {}
+        host_actions(xeditor::host& Host, ximgui::actions::context& Actions) noexcept : m_pHost(&Host), m_pActions(&Actions) {}
 
         void ToggleDrawer() noexcept { m_pHost->toggle_drawer_focused(); }
+        void OpenPalette()  noexcept { m_pActions->OpenPalette(); }
 
         XPROPERTY_DEF
         ( "Host", host_actions
@@ -89,6 +92,11 @@ namespace level_editor
             , obj_action<"Toggle", &host_actions::ToggleDrawer
                 , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Log, Commands...) of the window you are in">
                 , ximgui::actions::member_keys<"Space"> >
+            >
+        , obj_scope<"Palette"
+            , obj_action<"Open", &host_actions::OpenPalette
+                , member_help<"Search every action that is available where you are working, and run it">
+                , ximgui::actions::member_keys<"Ctrl+Shift+P", true> >
             >
         )
     };
@@ -123,7 +131,7 @@ namespace level_editor
 
         xeditor::host                     EditorHost;
         ximgui::actions::context          Actions;                 // keys / menu items / toolbar buttons / hints for the whole process (a host service)
-        host_actions                      HostActions{ EditorHost };
+        host_actions                      HostActions{ EditorHost, Actions };
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
 
         std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open

@@ -55,6 +55,7 @@ DISK_WRITERS = frozenset({
     "SourceControlLock", "SourceControlUnlock",
     "MakePrefab", "MakePrefabVariant", "ApplyOverrides",
     "AddSceneDependency", "RemoveSceneDependency",
+    "BindKey", "ResetKey",                       # write Project.config/Keymaps/<user>.keymap.txt
 })
 # Play (and Step from Stopped) saves the open level to disk first, so it is only safe on a clean document,
 # where that save rewrites identical content.
@@ -104,6 +105,14 @@ class Editor:
     def start(self, ready_timeout: float = 120.0) -> None:
         if not self.exe.is_file():
             raise FileNotFoundError(f"editor exe not found: {self.exe} (build xLION or pass --exe)")
+        # The pipe admits one server. If something already answers on it, it is somebody's editor (maybe a person's, with unsaved work):
+        # the tests must not drive it by accident. Close it, or run the suite when no editor is open.
+        try:
+            self._roundtrip("help", timeout=1.0)
+        except (OSError, TimeoutError):
+            pass
+        else:
+            raise RuntimeError("an editor is already running and owns the command pipe; close it before running the smoke tests (refusing to drive it)")
         self.log_dir.mkdir(exist_ok=True)
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")

@@ -15,6 +15,11 @@ The smoke suite (`source/Editors/LevelEditor/smoke`) now runs the **Debug** buil
 
 ## Not done yet (actions / keybindings)
 
+- **xproperty:** the inspector does not evaluate `member_override_check` (the "overridden" tint and revert button) for rows of a map or atomic array:
+  they go through a separate leaf branch (`xPropertyImGuiInspector.cpp`, "Atomic array"). The Keymap page therefore draws its own "Reset" in the
+  append hook. Fixing it in the inspector would give every list-of-values the prefab-style marker. Also: a map keyed by text now shows its key as the
+  row label (done, `ElementLabel`).
+
 - The Keymap page in Project Settings, the command palette, F1 pin/overlay, the status line.
 - Binding the inspector's `m_OnHelp` and a hint delegate on `toolbar.imgui` (so every tooltip comes from one system).
 - Keys on enum values (Q/W/E/R are four actions for now), `member_icon`.

@@ -72,3 +72,32 @@ def test_action_problems_are_reported(editor):
     reply = editor.cmd("ActionProblems")
     assert reply == "No problems" or "\n" in reply or ":" in reply, reply
     assert "are both on" not in reply, f"the default keys conflict with each other: {reply}"
+
+
+def test_rebinding_a_key_takes_effect_and_resets(editor):
+    """BindKey writes YOUR keymap file (project_guard puts Project.config back); the new key reaches the action, the old one no longer does."""
+    try:
+        assert editor.cmd("BindKey -Path Level/Redo -Keys F8", allow_disk=True) == "Level/Redo is bound to F8"
+        assert actions(editor)["Level/Redo"][0] == "F8"
+        assert "Level/Redo" in editor.cmd("PressKeys -Keys F8")
+        assert "Level/Redo" not in editor.cmd("PressKeys -Keys Ctrl+Y")
+    finally:
+        editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
+    assert actions(editor)["Level/Redo"][0] == "Ctrl+Y"
+    assert "Level/Redo" in editor.cmd("PressKeys -Keys Ctrl+Y")
+
+
+def test_unbinding_and_bad_bindings(editor):
+    try:
+        assert editor.cmd("BindKey -Path Level/Redo", allow_disk=True) == "Level/Redo is unbound"
+        assert actions(editor)["Level/Redo"][0] == ""
+        assert "no known action" in editor.cmd("BindKey -Path Nope/Nothing -Keys F9", allow_disk=True)
+        assert "not a key chord" in editor.cmd("BindKey -Path Level/Redo -Keys Ctrl+Banana", allow_disk=True)
+    finally:
+        editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
+    assert actions(editor)["Level/Redo"][0] == "Ctrl+Y"
+
+
+def test_the_palette_action_is_live_in_text_fields_too(editor):
+    a = actions(editor)
+    assert a["Host/Palette/Open"][0] == "Ctrl+Shift+P"

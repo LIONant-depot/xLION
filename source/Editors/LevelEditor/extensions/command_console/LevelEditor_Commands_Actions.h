@@ -77,6 +77,59 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hPath;
     };
 
+    struct bind_key_query_cmd : xundo::query_command_base
+    {
+        bind_key_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "BindKey", nullptr) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Binds an action to other keys in YOUR keymap file (Project.config/Keymaps/<user>.keymap.txt); no -Keys unbinds it. Usage: BindKey -Path Level/Redo [-Keys Ctrl+Shift+R]";
+        }
+        void RegisterArguments() noexcept override
+        {
+            m_hPath = m_Parser.addOption("Path", "The action's path (see ListActions)",             true,  1);
+            m_hKeys = m_Parser.addOption("Keys", "The keys, e.g. Ctrl+Shift+D or A,B; none = unbound", false, 1);
+        }
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            if (!pCtx) return kNoActions;
+            auto PathArg = m_Parser.getOptionArgAs<std::string>(m_hPath, 0);
+            if (std::holds_alternative<xerr>(PathArg)) return "BindKey: bad arguments";
+            const auto  Path = std::get<std::string>(PathArg);
+            auto        KeysArg = m_Parser.getOptionArgAs<std::string>(m_hKeys, 0);
+            const auto  Keys = std::holds_alternative<xerr>(KeysArg) ? std::string{} : std::get<std::string>(KeysArg);
+
+            bool bKnown = false;
+            for (auto& [pObj, Actions] : pCtx->Types()) for (auto& A : Actions) bKnown |= (A.m_Path == Path);
+            if (!bKnown) return std::format("BindKey: no known action '{}'", Path);
+            if (!Keys.empty() && ximgui::actions::ParseChords(Keys).empty()) return std::format("BindKey: '{}' is not a key chord", Keys);
+
+            pCtx->SetKeys(Path, Keys);
+            return Keys.empty() ? std::format("{} is unbound", Path) : std::format("{} is bound to {}", Path, Keys);
+        }
+        xcmdline::parser::handle m_hPath, m_hKeys;
+    };
+
+    struct reset_key_query_cmd : xundo::query_command_base
+    {
+        reset_key_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "ResetKey", nullptr) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Takes an action's keys out of YOUR keymap file, so it follows the preset / default again. Usage: ResetKey -Path Level/Redo";
+        }
+        void RegisterArguments() noexcept override { m_hPath = m_Parser.addOption("Path", "The action's path (see ListActions)", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            if (!pCtx) return kNoActions;
+            auto PathArg = m_Parser.getOptionArgAs<std::string>(m_hPath, 0);
+            if (std::holds_alternative<xerr>(PathArg)) return "ResetKey: bad arguments";
+            pCtx->ResetKeys(std::get<std::string>(PathArg));
+            return std::format("{} follows the default again", std::get<std::string>(PathArg));
+        }
+        xcmdline::parser::handle m_hPath;
+    };
+
     struct press_keys_query_cmd : xundo::query_command_base
     {
         press_keys_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "PressKeys", nullptr) { RegisterArguments(); }

@@ -1,6 +1,7 @@
 ActionProblems
 AddProjectModuleReference
 AddScriptSourceFile
+BindKey
 CaptureWindow
 Close
 CloseResourceEditor
@@ -42,6 +43,7 @@ RemoveScriptSourceFile
 RenameAsset
 RenameAssetFile
 RenameScriptSourceFile
+ResetKey
 ResourceEditorCommand
 RestoreAsset
 RestoreAssetFileFromTrash
