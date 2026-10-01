@@ -118,7 +118,7 @@ namespace level_editor
 
         // Keys pressed this frame go to the actions that were live in the last one; this frame's panels register theirs as they draw.
         Actions.NewFrame();
-        Actions.Global(HostActions, "Drawer", "Palette", "Keyboard");
+        Actions.Global(HostActions, "Drawer", "Palette", "Keyboard", "Explain");
 
         // Asset open drain (drawer works even with the Level peer tab closed): a newly created or just-selected
         // Level/Scene asset routes into the Level session the same way a double-click does through
@@ -164,6 +164,8 @@ namespace level_editor
         EditorHost.draw_host_drawers();
         ximgui::actions::DrawPalette(Actions);         // over everything
         ximgui::actions::DrawKeyboardOverlay(Actions);
+        ximgui::actions::DrawPinnedCard(Actions);
+        ximgui::actions::DrawStatusLine(Actions);
         Actions.EndFrame();
 
         xgpu::tools::imgui::Render();

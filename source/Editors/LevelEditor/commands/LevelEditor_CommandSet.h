@@ -118,6 +118,10 @@ namespace level_editor
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
         level_editor::commands::exit_query_cmd                    CmdExit;
         level_editor::commands::list_actions_query_cmd            CmdListActions;
+        level_editor::commands::list_gestures_query_cmd           CmdListGestures;
+        level_editor::commands::list_keymaps_query_cmd            CmdListKeymaps;
+        level_editor::commands::use_keymap_query_cmd              CmdUseKeymap;
+        level_editor::commands::save_keymap_as_query_cmd          CmdSaveKeymapAs;
         level_editor::commands::run_action_query_cmd              CmdRunAction;
         level_editor::commands::action_problems_query_cmd         CmdActionProblems;
         level_editor::commands::bind_key_query_cmd                CmdBindKey;
@@ -189,6 +193,10 @@ namespace level_editor
         , CmdGetLog(Workspace, pEditor)
         , CmdExit(Workspace, pEditor)
         , CmdListActions(Workspace, pEditor)
+        , CmdListGestures(Workspace, pEditor)
+        , CmdListKeymaps(Workspace, pEditor)
+        , CmdUseKeymap(Workspace, pEditor)
+        , CmdSaveKeymapAs(Workspace, pEditor)
         , CmdRunAction(Workspace, pEditor)
         , CmdActionProblems(Workspace, pEditor)
         , CmdBindKey(Workspace, pEditor)
@@ -263,6 +271,10 @@ namespace level_editor
             CmdGetLog.m_pDataBase = pEditor;
             CmdExit.m_pDataBase = pEditor;
             CmdListActions.m_pDataBase = pEditor;
+            CmdListGestures.m_pDataBase = pEditor;
+            CmdListKeymaps.m_pDataBase = pEditor;
+            CmdUseKeymap.m_pDataBase = pEditor;
+            CmdSaveKeymapAs.m_pDataBase = pEditor;
             CmdRunAction.m_pDataBase = pEditor;
             CmdActionProblems.m_pDataBase = pEditor;
             CmdBindKey.m_pDataBase = pEditor;

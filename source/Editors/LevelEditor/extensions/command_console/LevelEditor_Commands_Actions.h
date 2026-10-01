@@ -2,7 +2,7 @@
 #define LevelEditor_COMMANDS_ACTIONS_H
 #pragma once
 
-// ListActions / RunAction / PressKeys / ExplainLastKey - the AI/CLI face of the actions (keys, menus, toolbar buttons;
+// ListActions / ListGestures / RunAction / PressKeys / ExplainLastKey - the AI/CLI face of the actions (keys, menus, toolbar buttons;
 // see dependencies/actions.imgui and documentation/Editors/actions_and_keybindings.md). QUERY commands, like Say/Exit: pressing
 // a key is not itself an undo step - an action that edits a document goes through xeditor::Run, which is what records the step.
 //
@@ -37,6 +37,87 @@ namespace level_editor::commands
             auto* pCtx = ActionContext();
             return pCtx ? pCtx->List() : kNoActions;
         }
+    };
+
+    struct list_gestures_query_cmd : xundo::query_command_base
+    {
+        list_gestures_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "ListGestures", nullptr) {}
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Lists the mouse gestures the editor's surfaces declare: surface, what the mouse does (LMB click, RMB drag...), and its name. Usage: ListGestures";
+        }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            return pCtx ? pCtx->ListGestures() : kNoActions;
+        }
+    };
+
+    struct list_keymaps_query_cmd : xundo::query_command_base
+    {
+        list_keymaps_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "ListKeymaps", nullptr) {}
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Lists the keymaps your own keys can sit on, and which one they do now. Usage: ListKeymaps";
+        }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            if (!pCtx) return kNoActions;
+            if (!pCtx->m_Presets.m_List) return "No keymap is loaded";
+            std::string S = std::format("based on: {}\n", pCtx->m_Presets.m_Base.empty() ? "(the defaults)" : pCtx->m_Presets.m_Base);
+            for (const auto& Name : pCtx->m_Presets.m_List()) S += Name + "\n";
+            return S;
+        }
+    };
+
+    struct use_keymap_query_cmd : xundo::query_command_base
+    {
+        use_keymap_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "UseKeymap", nullptr) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Makes your own keys sit on another keymap (a preset in Project.config/Keymaps); no -Name goes back to the defaults. Usage: UseKeymap [-Name Vim]";
+        }
+        void RegisterArguments() noexcept override { m_hName = m_Parser.addOption("Name", "The keymap's name (see ListKeymaps)", false, 1); }
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            if (!pCtx) return kNoActions;
+            if (!pCtx->m_Presets.m_SetBase) return "No keymap is loaded";
+            auto Arg = m_Parser.getOptionArgAs<std::string>(m_hName, 0);
+            const std::string Name = std::holds_alternative<xerr>(Arg) ? std::string{} : std::get<std::string>(Arg);
+            if (!Name.empty())
+            {
+                const auto All = pCtx->m_Presets.m_List();
+                if (std::find(All.begin(), All.end(), Name) == All.end()) return std::format("UseKeymap: no keymap named '{}'", Name);
+            }
+            pCtx->m_Presets.m_SetBase(Name);
+            return Name.empty() ? "Your keys sit on the defaults" : std::format("Your keys sit on {}", Name);
+        }
+        xcmdline::parser::handle m_hName;
+    };
+
+    struct save_keymap_as_query_cmd : xundo::query_command_base
+    {
+        save_keymap_as_query_cmd(xundo::system& System, void*) noexcept : query_command_base(System, "SaveKeymapAs", nullptr) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override
+        {
+            return "Saves the keys you have changed (and the toolbars) as a new keymap in Project.config/Keymaps that others can sit on. Usage: SaveKeymapAs -Name Vim";
+        }
+        void RegisterArguments() noexcept override { m_hName = m_Parser.addOption("Name", "The new keymap's name", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto* pCtx = ActionContext();
+            if (!pCtx) return kNoActions;
+            if (!pCtx->m_Presets.m_SaveAs) return "No keymap is loaded";
+            auto Arg = m_Parser.getOptionArgAs<std::string>(m_hName, 0);
+            if (std::holds_alternative<xerr>(Arg)) return "SaveKeymapAs: bad arguments";
+            const std::string Why = pCtx->m_Presets.m_SaveAs(std::get<std::string>(Arg));
+            return Why.empty() ? std::format("Saved as {}", std::get<std::string>(Arg)) : std::format("SaveKeymapAs: {}", Why);
+        }
+        xcmdline::parser::handle m_hName;
     };
 
     struct action_problems_query_cmd : xundo::query_command_base
@@ -104,8 +185,13 @@ namespace level_editor::commands
             if (!bKnown) return std::format("BindKey: no known action '{}'", Path);
             if (!Keys.empty() && ximgui::actions::ParseChords(Keys).empty()) return std::format("BindKey: '{}' is not a key chord", Keys);
 
+            // The same check the keymap page's "Set key" does before it asks Replace / Cancel: another action of the same scope on that key.
+            std::string Clash;
+            for (const ImGuiKeyChord C : ximgui::actions::ParseChords(Keys))
+                if (const std::string Other = pCtx->FindClash(Path, C); !Other.empty()) { Clash = std::format(" ({} is also on {})", Other, ximgui::actions::ChordName(C)); break; }
+
             pCtx->SetKeys(Path, Keys);
-            return Keys.empty() ? std::format("{} is unbound", Path) : std::format("{} is bound to {}", Path, Keys);
+            return Keys.empty() ? std::format("{} is unbound", Path) : std::format("{} is bound to {}{}", Path, Keys, Clash);
         }
         xcmdline::parser::handle m_hPath, m_hKeys;
     };

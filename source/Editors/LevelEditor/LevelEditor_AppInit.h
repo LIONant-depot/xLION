@@ -153,6 +153,7 @@ namespace level_editor
             EditorHost.provide(ShortcutLabels);
             Actions.m_pShowHint = [](const ximgui::actions::hint_text& H) noexcept       // every action hint is the editors' one hint window
                 { xeditor::hint::Draw({ H.m_Topic, H.m_Body, H.m_Shortcut, H.m_Disabled, H.m_Detail }); };
+            WireKeymapNavigation();                                          // "Show in keymap" on a pinned card
             Actions.m_pSearchBox = &xeditor::RenderTreeSearchBar;           // the palette's search box is the editors' one
             EditorHost.m_bDrawerToggleByAction = true;
 

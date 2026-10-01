@@ -88,6 +88,7 @@ namespace level_editor
         void ToggleDrawer() noexcept { m_pHost->toggle_drawer_focused(); }
         void OpenPalette()  noexcept { m_pActions->OpenPalette(); }
         void ShowKeyboard() noexcept { m_pActions->OpenOverlay(); }
+        void Explain()      noexcept { m_pActions->Explain(); }
 
         XPROPERTY_DEF
         ( "Host", host_actions
@@ -96,10 +97,15 @@ namespace level_editor
                 , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Log, Commands...) of the window you are in">
                 , ximgui::actions::member_keys<"Space"> >
             >
+        , obj_scope<"Explain"
+            , obj_action<"Pin", &host_actions::Explain
+                , member_help<"Explains what the mouse rests on: keeps its hint card on screen, with what can be done to its key. Over nothing, shows the keyboard">
+                , ximgui::actions::member_keys<"F1"> >
+            >
         , obj_scope<"Keyboard"
             , obj_action<"Show", &host_actions::ShowKeyboard
-                , member_help<"Shows the keyboard: every key coloured by what it does where you are working">
-                , ximgui::actions::member_keys<"F1"> >
+                , member_help<"Shows the keyboard and the mouse: every key and button coloured by what it does where you are working">
+                , ximgui::actions::member_keys<"Shift+F1"> >
             >
         , obj_scope<"Palette"
             , obj_action<"Open", &host_actions::OpenPalette
@@ -200,6 +206,9 @@ namespace level_editor
         std::optional<command_set> Commands;
 
         void WireAssetBrowser();
+        bool m_bProjectSettingsHints = false;                       // the Project Settings inspector shows the editors' hint window for its properties
+        void BindProjectSettingsHints();
+        void WireKeymapNavigation();                                // "Show in keymap": the drawer on Project Settings, at the Keymap section
         void BindFilesActions();                                    // while the Assets tab is drawn: find its files_tab and make the Assets/... actions live
         void DrawDrawerTab(int TabIndex);
 

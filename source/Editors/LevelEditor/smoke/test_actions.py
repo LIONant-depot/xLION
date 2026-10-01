@@ -143,10 +143,74 @@ def test_list_actions_lists_each_action_once(editor):
 
 def test_the_keyboard_overlay_and_palette_are_actions(editor):
     a = actions(editor)
-    assert a["Host/Keyboard/Show"][0] == "F1"
+    assert a["Host/Explain/Pin"][0] == "F1"                # explains what the mouse rests on; over nothing, the keyboard
+    assert a["Host/Keyboard/Show"][0] == "Shift+F1"       # always the keyboard
     assert a["Host/Palette/Open"][0] == "Ctrl+Shift+P"
-    assert "Host/Keyboard/Show" in editor.cmd("PressKeys -Keys F1")
-    editor.cmd("PressKeys -Keys F1")                      # closes it again
+    assert "Host/Keyboard/Show" in editor.cmd("PressKeys -Keys Shift+F1")
+    editor.cmd("PressKeys -Keys Shift+F1")                # closes it again
+    assert "Host/Explain/Pin" in editor.cmd("PressKeys -Keys F1")       # nothing is hovered: the keyboard again
+    editor.cmd("PressKeys -Keys F1")
+
+
+def test_binding_a_key_another_action_has_is_reported(editor):
+    """The keymap page asks Replace / Cancel for this; BindKey says it in its reply (and still binds: the problems list shows the two)."""
+    try:
+        reply = editor.cmd("BindKey -Path Level/Redo -Keys Ctrl+Z", allow_disk=True)
+        assert reply == "Level/Redo is bound to Ctrl+Z (Level/Undo is also on Ctrl+Z)", reply
+        assert "Level/Undo and Level/Redo are both on Ctrl+Z" in editor.cmd("ActionProblems") or "Level/Redo and Level/Undo are both on Ctrl+Z" in editor.cmd("ActionProblems")
+    finally:
+        editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
+
+
+def test_a_keymap_can_be_saved_and_used_as_a_base(editor):
+    """My keys saved as a keymap in the project, which anyone's own file can then sit on (the keymap page's 'Based on' and 'Save my keys as it')."""
+    try:
+        editor.cmd("BindKey -Path Level/Redo -Keys F8", allow_disk=True)
+        assert editor.cmd("SaveKeymapAs -Name SmokeShared", allow_disk=True) == "Saved as SmokeShared"
+        assert "no letters" in editor.cmd("SaveKeymapAs -Name bad/name", allow_disk=True) or "letters, digits" in editor.cmd("SaveKeymapAs -Name bad/name", allow_disk=True)
+        editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
+        assert actions(editor)["Level/Redo"][0] == "Ctrl+Y"
+        assert "SmokeShared" in editor.cmd("ListKeymaps")
+        assert editor.cmd("UseKeymap -Name SmokeShared", allow_disk=True) == "Your keys sit on SmokeShared"
+        assert actions(editor)["Level/Redo"][0] == "F8"                       # the preset's key reaches the action
+        assert "based on: SmokeShared" in editor.cmd("ListKeymaps")
+        assert "no keymap named" in editor.cmd("UseKeymap -Name Nope", allow_disk=True)
+    finally:
+        editor.cmd("UseKeymap", allow_disk=True)
+        editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
+
+
+@pytest.mark.parametrize("type_name", ["GeomStatic", "AnimPackage"])
+def test_a_3d_preview_declares_its_mouse_gestures(editor, type_name):
+    """The preview of these editors says what the mouse does in it (the F1 view draws it on the mouse; the status line shows it)."""
+    guid, _ = _open_and_check(editor, type_name)
+    try:
+        try:
+            g = editor.wait_for("ListGestures", r"Preview\tRMB drag\tLook around", timeout=8)       # declared once the preview has drawn
+        except TimeoutError:
+            # The preview is only drawn while its dock tab is visible; after other tests opened and closed editors the saved layout can hide it.
+            pytest.skip(f"the {type_name} preview window is not visible in this layout")
+        assert "Preview\tWheel\tZoom" in g, g
+    finally:
+        editor.cmd(f"CloseResourceEditor -Asset {guid}")
+
+
+def test_surfaces_declare_their_mouse_gestures(editor):
+    """The Level's viewport and tree list what the mouse does on them (descriptions: the F1 view draws them on the mouse, the status line shows them)."""
+    g = editor.wait_for("ListGestures", r"Viewport\tWheel\tZoom", timeout=20)
+    for line in ("Viewport\tLMB click\tSelect", "Viewport\tCtrl+LMB click\tAdd / remove", "Viewport\tRMB drag\tLook around",
+                 "Viewport\tRMB drag + W A S D Q E\tFly", "Viewport\tMMB drag\tPan", "Level tree\tRMB click\tMenu"):
+        assert line in g, f"missing {line!r} in: {g}"
+
+
+def test_a_real_function_key_reaches_its_action(editor):
+    """WM_KEYDOWN to the window, through the Win32 key table, xGPU and ImGui (PressKeys skips all of that). Function keys were once read
+    as letters there (F1 as 'P'), and no injected chord could have shown it."""
+    editor.cmd("PressKeys -Keys Ctrl+Shift+P"); editor.cmd("PressKeys -Keys Ctrl+Shift+P")      # the last key that reached an action is now the palette
+    assert "Host/Palette/Open" in editor.cmd("ExplainLastKey")
+    editor.post_key(0x70)                                                                       # VK_F1
+    editor.wait_for("ExplainLastKey", r"Host/Explain/Pin", timeout=10)
+    editor.post_key(0x70)                                                                       # and it closes again
 
 
 def test_keys_of_editors_that_are_not_open_can_be_configured(editor):

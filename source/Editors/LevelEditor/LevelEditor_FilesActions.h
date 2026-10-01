@@ -48,6 +48,26 @@ namespace level_editor
     }
     inline void files_actions::Paste() noexcept { details::Tab(*this)->PasteClipboard(); }
 
+    // The Project Settings inspector (the asset browser's plugin tab) is a library's: its property help becomes the editors' hint window, like every
+    // other inspector. Done once, when the tab exists.
+    inline void app::BindProjectSettingsHints()
+    {
+        if (m_bProjectSettingsHints) return;
+        if (auto* pPlugin = AssetBrowser.FindTab<xresource_editor::plugin_tab>()) { xeditor::BindInspectorHints(*pPlugin); m_bProjectSettingsHints = true; }
+    }
+
+    // "Show in keymap" on a pinned card: the drawer open on its Project Settings tab (7), at the Keymap section.
+    inline void app::WireKeymapNavigation()
+    {
+        Actions.m_OnShowInKeymap = [this](const std::string&)
+        {
+            EditorHost.open_drawer_tab(ImGui::GetMainViewport(), 7);
+            if (auto* pPlugin = AssetBrowser.FindTab<xresource_editor::plugin_tab>())
+                for (int i = 0; i < static_cast<int>(AssetBrowser.m_ExtraPluginTabSections.size()); ++i)
+                    if (AssetBrowser.m_ExtraPluginTabSections[i].m_Label == "Keymap") pPlugin->m_SelectedExtraIndex = i;
+        };
+    }
+
     // Called every frame the Assets tab of the drawer is drawn: its files_tab, and the actions live while that window has the focus.
     inline void app::BindFilesActions()
     {

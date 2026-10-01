@@ -105,6 +105,26 @@ namespace xeditor
         if (auto* pCtx = ActionContext()) pCtx->Scope(Actions);
         return bShown;
     }
+
+    // What the mouse does in a 3D preview (listed on the mouse in the F1 view, and in the status line under the cursor). Descriptions only: the
+    // preview handles the mouse itself.
+    namespace gestures
+    {
+        using namespace ximgui::actions;
+        inline constexpr gesture orbit[] =
+        { { 0, mouse_input::Right,  mouse_kind::Drag,   "Look around", "Turns the view around what it looks at." }
+        , { 0, mouse_input::Middle, mouse_kind::Drag,   "Pan",         "Slides the view sideways and up / down." }
+        , { 0, mouse_input::Wheel,  mouse_kind::Scroll, "Zoom",        "Moves the view toward or away from what it looks at." } };
+        inline constexpr gesture orbit_no_pan[] =
+        { { 0, mouse_input::Right,  mouse_kind::Drag,   "Look around", "Turns the view around what it looks at." }
+        , { 0, mouse_input::Wheel,  mouse_kind::Scroll, "Zoom",        "Moves the view toward or away from what it looks at." } };
+    }
+
+    // Call where a 3D preview handles the mouse, inside its window: this window now declares the preview's gestures.
+    inline void PreviewGestures(bool bPan = true) noexcept
+    {
+        if (auto* pCtx = ActionContext()) pCtx->Gestures("Preview", bPan ? std::span<const ximgui::actions::gesture>(gestures::orbit) : std::span<const ximgui::actions::gesture>(gestures::orbit_no_pan));
+    }
 }
 
 #endif // XEDITOR_DOCUMENT_ACTIONS_H

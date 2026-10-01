@@ -221,6 +221,34 @@ class Editor:
         assert reply, f"{line!r} was accepted but should have been refused"
         return reply
 
+    def post_key(self, vk: int, hold: float = 0.15) -> None:
+        """A real key press for the editor's window: WM_KEYDOWN / WM_KEYUP posted to it, so it goes through the Win32 key table, xGPU's
+        keyboard and ImGui like a keystroke would (PressKeys skips all of that). Needs no focus. vk is a Win32 virtual-key code (VK_F1 = 0x70)."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        pid = self.proc.pid
+        found: list[int] = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(hwnd, _):
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
+                found.append(hwnd)
+            return True
+
+        user32.EnumWindows(each, 0)
+        if not found:
+            raise AssertionError("post_key: the editor has no visible window")
+        scan = user32.MapVirtualKeyW(vk, 0)
+        for hwnd in found:
+            user32.PostMessageW(hwnd, 0x0100, vk, 1 | (scan << 16))                      # WM_KEYDOWN
+        time.sleep(hold)                                                                    # a few frames, so ImGui sees it down
+        for hwnd in found:
+            user32.PostMessageW(hwnd, 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31)) # WM_KEYUP
+        time.sleep(0.1)
+
     def wait_for(self, line: str, pattern: str, *, timeout: float = 60.0, poll: float = 0.25) -> str:
         """Poll a query until its reply matches the regex."""
         deadline = time.monotonic() + timeout

@@ -15,20 +15,31 @@ The smoke suite (`source/Editors/LevelEditor/smoke`) now runs the **Debug** buil
 
 ## Not done yet (actions / keybindings)
 
-- `toolbar.imgui` still draws its own tooltip (it is an independent library; it needs a hook like the inspector's `m_OnHelp`), and xGPU's examples keep their own.
-- Wrong help texts found while looking at property hints: the Texture editor's "UAdress Mode" (also spelled that way) says "Size in bytes of the file".
+Everything in phases 1-5 of `actions_and_keybindings.md` is built (2026-10-02). What is left, and why it was not done:
+
+- **Toolbar editing UI.** Layouts load from the keymap files (`Toolbars` in a keymap), but the Level's Scene toolbar still has items that are not actions
+  (Frame, Pivot, Local), so there is no complete default layout to edit. Make those three actions first (and give Frame its key), then a layout editor
+  is a list of action paths with a picker.
+- **Keys on enum values** (`Viewport/Tool` as one property with a key per value) and `member_icon`: Q/W/E/R are four actions today, which is clear and
+  discoverable, so it was left.
+- **Save / Undo / Redo as `xeditor::Run` commands**: Undo and Redo are not undo steps themselves and Save is a query, so there is nothing to record. They stay direct calls.
+- **Gestures** are declared for the Level viewport and tree and for the 3D previews of Static Geom, Skin Geom, Skeleton, Anim Package and Texture. Not yet: the
+  Material and Material Instance previews (mesh_preview), Font, the asset browser (double-click opens, drag onto a Level), the Material node graph.
+- The status line does not yet show the "Tip: Ctrl+D" suggestion when an action with a key is used from the mouse.
+- xGPU's examples keep their own tooltips.
+- **The real keyboard path** is covered for function keys by `test_a_real_function_key_reaches_its_action` (WM_KEYDOWN posted to the window). Other keys, the
+  mouse, and how the keyboard/mouse view and the pinned card look were only verified by building and by the pipe, not by hand.
+- **Other editors' keys still hand-written**: the Material graph, the text widget, the camera fly keys (W A S D Q E while the right button is held).
+- **project_guard** warns that a run changed `Project.config/Keymaps/user.keymap.txt` (it holds the drawer binding written at startup and is not in the snapshot).
 
 - **xproperty:** the inspector does not evaluate `member_override_check` (the "overridden" tint and revert button) for rows of a map or atomic array:
   they go through a separate leaf branch (`xPropertyImGuiInspector.cpp`, "Atomic array"). The Keymap page therefore draws its own "Reset" in the
-  append hook. Fixing it in the inspector would give every list-of-values the prefab-style marker. Also: a map keyed by text now shows its key as the
-  row label (done, `ElementLabel`).
+  append hook. Fixing it in the inspector would give every list-of-values the prefab-style marker.
 
-- The Keymap page in Project Settings, the command palette, F1 pin/overlay, the status line.
-- Binding the inspector's `m_OnHelp` and a hint delegate on `toolbar.imgui` (so every tooltip comes from one system).
-- Keys on enum values (Q/W/E/R are four actions for now), `member_icon`.
-- Save/Undo/Redo still call functions directly, not `xeditor::Run` commands.
-- Other editors' keys still hand-written: xresource_editor files tab, Level tree F2/Delete, Texture (its Space overlaps the Drawer), Material graph, text widget, camera fly.
-- The real keyboard path and the hover hint / menu look were only verified through `PressKeys` (shared resolver) and the build, not by hand in the UI.
+- **xcontainer `unordered_lockless_map`** (found 2026-10-02): reading it again from inside one of its own read callbacks deadlocks as soon as another thread is
+  queued to write it (a grow, or a new type); the map blocks new readers while a writer waits. Two places in `xresource_editor_asset_mgr.h` did that
+  (`LoadInfo`, "Create a new asset") and were fixed by adding the child links after the callback. **Audit the rest** of the asset manager for a
+  `FindAs...` inside a `FindAs...` callback on the same map, and consider a debug assert in the map when a thread takes a read lock it already holds.
 
 ## Naming (done 2026-10-01, and what is left)
 
@@ -49,9 +60,5 @@ Left on purpose:
 
 ## Housekeeping
 
-- `actions.imgui` is committed locally on top of the official depot's first commit (`LIONant-depot/Actions.imgui`, LICENSE only) and
-  fetched by `CMakeLists.txt` next to toolbar.imgui. **Not pushed yet** - `git push` from `dependencies/actions.imgui` publishes it; until then
-  a fresh checkout would clone the empty depot.
-- **Nothing is committed** in: xLION (this repo), `dependencies/xproperty`, `dependencies/xeditor`, `plugins/xlevel.plugin`.
-  The four repos change together (xproperty: `member_dynamic_reason`, `m_OnHelp`, noexcept function members; xeditor: `host.h` drawer toggle,
-  `diagnostics.h` problems log; xlevel.plugin: `session_actions`).
+- Everything above is committed and pushed in the dependency and plugin repos (xproperty, actions.imgui, xeditor, xresource_pipeline_v2, xGPU, toolbar.imgui,
+  the plugins) and in xLION. `actions.imgui` is the official depot (`LIONant-depot/Actions.imgui`), fetched by `CMakeLists.txt` next to toolbar.imgui.

@@ -22,6 +22,8 @@ GetLog
 GetPlayState
 ListActions
 ListAssets
+ListGestures
+ListKeymaps
 ListLegalReferenceLibraries
 ListLevels
 ListLibraries
@@ -51,6 +53,7 @@ RunAction
 RunSanityCheck
 Save
 SaveAssets
+SaveKeymapAs
 Say
 SetScriptSourceFileContent
 SourceControlCommit
@@ -67,3 +70,4 @@ SourceControlUnlock
 Step
 Stop
 Undo
+UseKeymap

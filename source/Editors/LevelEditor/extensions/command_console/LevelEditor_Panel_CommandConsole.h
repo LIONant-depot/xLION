@@ -419,7 +419,23 @@ namespace level_editor
 
 
 
-            const auto Routable = History.GetRoutableCommands(); // {m_FullName, m_Help} per command - see xundo_history.h
+            // What can be typed here: the commands of the history (none registered any more), of the workspace and of every open session
+            // (Name\\Command), and the actions that are live - the palette's list - as "RunAction -Path ...". Rebuilt about once a second:
+            // it only matters while somebody types.
+            static std::vector<xundo::history::routable_command> Cached;
+            static int                                            CachedFrame = -1000;
+            if (ImGui::GetFrameCount() - CachedFrame > 60 || ImGui::GetFrameCount() < CachedFrame)
+            {
+                CachedFrame = ImGui::GetFrameCount();
+                Cached = History.GetRoutableCommands();                   // {m_FullName, m_Help} per command - see xundo_history.h
+                if (auto* pHost = xeditor::host::current())
+                {
+                    for (auto& R : pHost->routable_commands()) Cached.push_back({ std::move(R.m_FullName), std::move(R.m_Help) });
+                    if (auto* pActions = pHost->find<ximgui::actions::context>())
+                        for (auto& [Path, Help] : pActions->LiveActions()) Cached.push_back({ "RunAction -Path " + Path, Help });
+                }
+            }
+            const auto& Routable = Cached;
 
 
 

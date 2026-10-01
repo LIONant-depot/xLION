@@ -43,6 +43,7 @@ namespace level_editor
         case 7:
             AssetBrowser.SetDevice(Device);
             AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Project Settings");
+            BindProjectSettingsHints();
             break;
         default:
             break;
