@@ -1,0 +1,68 @@
+# Wishlist - things that would make the editor and the engine better to work with
+
+Kept while building things *with* the editor (the soccer challenge, 2026-10-02). Each line is something that cost time or would have saved
+it, written as the thing to add. Newest last. "AI" means a script or an assistant driving the editor through the command pipe; most of these help
+people just as much.
+
+Format: **what** - why it matters - where it would probably go.
+
+## Driving the editor
+
+1. **Open a project other than `example.lionprj`** (a command-line argument and/or a pipe command). The editor looks for `example.lionprj` above the
+   executable and opens only that, so a new game has to be made inside the example project. - `LevelEditor_AppInit.h` (startup project search).
+2. **A command that lists every command with its one-line help**, as data (`ListCommands -Help`). Today the `help` text lists names only, and asking a
+   command for `-h` through the pipe can be unsafe (the harness refuses it for commands that write data). The help lives in `getCommandHelp()` of each
+   command; one more query would expose it. - `xeditor::host::routable_commands()` already collects name + help (added for the console suggestions).
+3. **Document `CaptureWindow`** next to the pipe commands (it saves the editor window as png/bmp/tga/jpg). I nearly asked for it as a new feature: there is no
+   single page that lists what the pipe can do, with the help of each command (see 2).
+4. **A pipe command to say whether a modal or popup is open** and answer it (`AnswerDialog -Button Discard`). A hidden modal blocked all input once and
+   could only be reached through the debugger. - `xeditor/notify.h` and the modals in the Level plugin.
+
+## Making a game with script modules (found building the soccer example)
+
+5. **Game build status and errors through the pipe** (`GameBuildStatus`, or `GetLog -Source Game`). The compiler's errors for Game.dll only go to the
+   process's stdout and to the "Game.dll Log" panel; a script driving the editor had to read the editor's stdout file. - `game_plugin_state::m_LastStatus`.
+6. **Start the game build without pressing Play** (`BuildGame`). Today only Play, or the window regaining focus, runs the stale check, so a build with
+   nothing to play (or no Level open) cannot be asked for. - `StartGameReload` (`LevelEditor_GameReloadSession.h`).
+7. **Guard a game module against a crash on load**. A module whose systems query an engine component without telling the DLL (`XSCRIPT_USES_COMPONENT`, added
+   2026-10-02) read an unset bit id and took the whole editor down with an access violation while registering. The registration could be wrapped in a
+   structured-exception handler that unloads the DLL and reports "Game.dll crashed while registering ... " instead.
+8. **A module author's guide** (`plugins/xscript_module.plugin/documentation/`). The soccer game is the first script module in the repository. What a module
+   needs is spread over the plugin docs, the engine DLLs' sources and the ECS docs: the `.cpp` / header split (headers need `#pragma once`), that systems
+   run in reverse order of definition, that there is no frame time (each system keeps its own clock), how to query another entity, `XSCRIPT_USES_COMPONENT`.
+9. **Control the order of systems** (a priority argument to `XSCRIPT_REGISTER_SYSTEM`). Today the order is the reverse of the order the registrations
+   are constructed, which depends on the order of the `#include`s in the module's one `.cpp`.
+10. **A frame time for systems** (`GetDeltaTime()` on `xecs::system::instance`, fixed or real). The ECS has none; the physics system steps a fixed amount
+    and gameplay code has to read a clock itself.
+11. **Transparency in `Primitive`** (an `Alpha` property) so a shadow can be a semi-transparent black disc. The soccer shadows use the pitch's green made
+    darker, which looks the same only on a flat floor of one color.
+12. **A camera for games**: a `Camera` component and system, or at least a pipe command to place the Level viewport's camera. The viewport starts 15 units
+    from the origin and the play area has to be sized to fit what it sees.
+13. **Text in the game view** (a `Text` primitive). The soccer scoreboard is two bars that grow, for lack of a way to write a number.
+14. **Hot reload asserted in the soccer session** (`RegisterComponent` while the registry was locked). Cause: the generated Game.dll linked `xECSV2.lib`, a
+    second component registry, instead of `LIONCore.lib` (fixed in `LevelEditor_GameModuleSources.h`). Worth a check at load: "the DLL's registry is the
+    editor's registry" (compare the address of `s_Registry` through an export) would have named the problem in one line instead of two days.
+15. **Do not leave a debugger attached to the editor**: a non-invasive `cdb -pv` attach suspends every thread, and killing the debugger leaves them suspended
+    (the editor then looks hung). Resume with `ResumeThread` until the suspend count is zero. A "pause for N ms" pipe command would make a status dump
+    possible without a debugger.
+16. **The built-in component ids of a Game.dll were never filled in** (`entity`, `parent`, `children`, `ref_count`: every system that takes
+    `const xecs::component::entity&` in a `Foreach` asserted the first time it ran, in Play). `XecsPlugin_RegisterSystems` now calls
+    `SyncLocalBitIDs<>()`. A smoke test that runs one tiny system of a script module for a few frames would have caught it; none exists.
+17. **The viewport camera's pitch is upside down for a person**: a positive pitch looks at the level from under the ground (the ground disappears and
+    everything looks like a wall). `SetCamera -Pitch -50` is the usual look from above. Either flip the sign or say in `help` which way is up.
+18. **A floor at y = 0 is hidden by the editor grid plane** (both are coplanar, the grid wins). Everybody who makes a floor meets this; raise the floor a
+    few millimetres, or draw the grid with a depth bias.
+19. **Save the viewport camera with the Level** (and a way to say "this is the game's camera"). The soccer level opens with the default view, too close for a
+    28 x 18 pitch; the person has to orbit out by hand each time.
+20. **The Level Tree shows a `Runtime (7)` folder next to `Pitch`** once prefabs exist (seven prefabs were made, seven entries). It is not explained
+    anywhere; a tooltip saying what it holds (and that it is not part of the scene) would save a question.
+21. **A prefab cannot gain a component after it is made.** `ApplyOverrides` carries property changes up into the prefab asset but not an added component, and `MakePrefab` onto an existing asset guid answers "" and changes nothing. The soccer players got their physics components as per-instance overrides because of this. Wanted: `AddComponent` on the prefab asset itself (or ApplyOverrides that includes added/removed components), and a way to delete or replace a prefab asset from the pipe.
+22. **No pipe command deletes or replaces an asset** (`DeleteAsset`, `RenameFolder` ...). Mistakes in a script that builds assets leave orphans behind that only a person can remove.
+23. **The ECS has no frame time, and the physics stepped once per update** (about 900 times a second in Play, so the world ran 15 times too fast). The physics system now accumulates real time and steps fixed 1/60 s steps (`xlioncore_physics_system.h`), but the other systems still have to measure time themselves. A `GetDeltaTime()` and a fixed-step phase for systems (`FixedDt += Dt; while (FixedDt >= 1/60) { RunFixedSystems(); FixedDt -= 1/60; }`) would make the soccer module's `fixed_clock` unnecessary.
+24. **A module could not use the engine's component types.** The physics header registers its components in LIONCore, so including it in a game module registered them a second time. `XSCRIPT_IMPORT_ONLY` (xscript_registration.h) now gives a module the types without the registration; the CMake the editor generates also needed the `box3d/include` directory. A module author's guide should say so.
+25. **Physics constraints** (`PhysicsDynamics/Constraints/Translation`, `Constraints/Rotation`: three axes each, handed to Box3D's motion locks) are new. Still missing: a per-body gravity scale, a kick/impulse call (the soccer game builds one from `F = m * dV / dt`), and contact events (a goal is detected by position, not by a sensor).
+26. **Editing a share component in the Inspector was random** (fixed). Two causes: `SetProperty` from the command line did nothing (`SetLivePropertyValue` looked the scene context up through a global that is empty there), and in the Inspector the edited value was first written straight into the SHARED instance (every entity with that value uses the same one) before the command moved the entity to the family of the new value: the old family then held the new value too, and every later toggle landed on a slot with the wrong data. The Inspector now gets a per-frame copy of a share component (`m_ShareScratch` in the entity inspector bridge), so the command is the only thing that changes share data. Found by clicking with the real mouse from a script (`realclick_repro.py`: 21 of 30 clicks wrong before, 0 of 40 after). Still missing: a test that does this; the pipe has no click command, so a smoke test would need the harness to post real mouse input (WM_ messages were not enough, SetCursorPos + mouse_event worked).
+27. **Selecting an entity and then reloading the game crashed the editor.** The Inspector's cached values held type functions of the unloaded Game.dll (fixed: every Level session clears its inspector in `BeforeReload`). Anything else that caches values of game component types across a reload has the same problem; a list of such caches would be worth having.
+28. **`Play` refuses to run while a session has unsaved edits, and `Select` marks the Level dirty.** Selection is not an edit.
+29. **stdout of the editor is fully buffered when redirected to a file**, so a `printf` without a flush shows up late (it cost an hour here). The editor could switch stdout to line buffering at startup.
+

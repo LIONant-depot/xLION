@@ -99,3 +99,24 @@ def test_builder_components_are_labelled_for_the_ai(level):
     desc = level.describe(entity)
     assert f"[{collider}] PhysicsColliderBox  (data,builder)" in desc
     assert "PhysicsBodyProperties  (share,builder)" in desc
+
+
+def test_share_component_property_edit_undo_redo(level):
+    """A share component's value lives in a shared entity, so editing it moves the entity: the edit must land, and undo/redo must follow."""
+    entity = level.new_entity()
+    _, _, share = level.find_with_component("PhysicsBodyProperties")
+    level.ok(f"AddComponent -Scene {level.scene} -Id {entity} -Component {share}")
+
+    path = "PhysicsBodyProperties/AngularDamping"
+    type_guid = level.property_type(entity, path)
+    original = level.ed.property_value(level.name, level.scene, entity, path)
+    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {share} -Path {b64(path)}"
+             f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('0.250000')}")
+    assert level.ed.property_value(level.name, level.scene, entity, path) == "0.250000"
+
+    level.cmd("Undo")
+    assert level.ed.property_value(level.name, level.scene, entity, path) == original
+
+    level.cmd("Redo")
+    assert level.ed.property_value(level.name, level.scene, entity, path) == "0.250000"
+

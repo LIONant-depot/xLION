@@ -181,8 +181,13 @@ namespace level_editor
         // host::dispatch() through open_resource_editors::SyncToHost, like for Texture).
         xlevel::g_OnSessionCreated = [](xlevel::session& Session) noexcept
         {
+            // The viewport camera, to place it from the pipe (SetCamera / GetCamera) the way the mouse does.
+            xeditor::camera_access Camera;
+            Camera.m_pAngles   = &Session.m_Camera.m_Angles;
+            Camera.m_pDistance = &Session.m_Camera.m_Distance;
+            Camera.m_pTarget   = &Session.m_Camera.m_Target;
             Session.m_ShellCommands = std::make_shared<level_command_set>
-                (Session.m_Undo, static_cast<xscene::scene_context*>(&Session.m_CmdContext), &Session.m_CmdContext);
+                (Session.m_Undo, static_cast<xscene::scene_context*>(&Session.m_CmdContext), &Session.m_CmdContext, Camera);
         };
         xlevel::g_OpenLevelSession = [this](xresource::full_guid LevelGuid) { return OpenLevelEditor(LevelGuid); };
 

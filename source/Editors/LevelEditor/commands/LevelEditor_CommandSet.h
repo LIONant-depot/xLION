@@ -59,9 +59,13 @@ namespace level_editor
         xscene::commands::delete_folder_cmd                 CmdDeleteFolder;
         xscene::commands::make_prefab_cmd                   CmdMakePrefab;
         xscene::commands::make_prefab_variant_cmd           CmdMakePrefabVariant;
+        xeditor::camera_cmds::set_cmd                       CmdSetCamera;          // Name\SetCamera / GetCamera: the viewport's camera, placed the way the mouse would
+        xeditor::camera_cmds::get_cmd                       CmdGetCamera;
 
-        level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor) noexcept
-        : CmdSessionSave(Level, pEditor)
+        level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor, xeditor::camera_access Camera) noexcept
+        : CmdSetCamera(Level, Camera)
+        , CmdGetCamera(Level, Camera)
+        , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)
         , CmdToggleMultiSelect(Level, pScene)
