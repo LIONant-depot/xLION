@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "dependencies/xeditor/include/xeditor/hint.h"
 #include <chrono>
 #include <string>
 #include <regex>
@@ -914,7 +915,7 @@ void TextEditor::Render()
 
 				if (ImGui::IsMouseHoveringRect(lineStartScreenPos, end))
 				{
-					ImGui::BeginTooltip();
+					xeditor::hint::PlaceAwayFromEdges(16.0f, ImVec2(380.0f, 220.0f)); ImGui::BeginTooltip();
 					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
 					ImGui::Text("Error at line %d:", errorIt->first);
 					ImGui::PopStyleColor();
@@ -1060,18 +1061,14 @@ void TextEditor::Render()
 				auto it = mLanguageDefinition.mIdentifiers.find(id);
 				if (it != mLanguageDefinition.mIdentifiers.end())
 				{
-					ImGui::BeginTooltip();
-					ImGui::TextUnformatted(it->second.mDeclaration.c_str());
-					ImGui::EndTooltip();
+					xeditor::hint::Text("%s", it->second.mDeclaration.c_str());
 				}
 				else
 				{
 					auto pi = mLanguageDefinition.mPreprocIdentifiers.find(id);
 					if (pi != mLanguageDefinition.mPreprocIdentifiers.end())
 					{
-						ImGui::BeginTooltip();
-						ImGui::TextUnformatted(pi->second.mDeclaration.c_str());
-						ImGui::EndTooltip();
+						xeditor::hint::Text("%s", pi->second.mDeclaration.c_str());
 					}
 				}
 			}

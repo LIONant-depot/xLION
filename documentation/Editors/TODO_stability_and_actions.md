@@ -15,6 +15,9 @@ The smoke suite (`source/Editors/LevelEditor/smoke`) now runs the **Debug** buil
 
 ## Not done yet (actions / keybindings)
 
+- `toolbar.imgui` still draws its own tooltip (it is an independent library; it needs a hook like the inspector's `m_OnHelp`), and xGPU's examples keep their own.
+- Wrong help texts found while looking at property hints: the Texture editor's "UAdress Mode" (also spelled that way) says "Size in bytes of the file".
+
 - **xproperty:** the inspector does not evaluate `member_override_check` (the "overridden" tint and revert button) for rows of a map or atomic array:
   they go through a separate leaf branch (`xPropertyImGuiInspector.cpp`, "Atomic array"). The Keymap page therefore draws its own "Reset" in the
   append hook. Fixing it in the inspector would give every list-of-values the prefab-style marker. Also: a map keyed by text now shows its key as the

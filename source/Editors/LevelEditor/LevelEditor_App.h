@@ -12,6 +12,8 @@
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_App.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Actions.h"
 #include "dependencies/actions.imgui/ximgui_actions_keymap.h"
+#include "dependencies/xeditor/include/xeditor/shortcuts.h"
+#include "dependencies/xeditor/include/xeditor/hint.h"
 #include "dependencies/actions.imgui/ximgui_actions_ui.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_level.h"
@@ -85,6 +87,7 @@ namespace level_editor
 
         void ToggleDrawer() noexcept { m_pHost->toggle_drawer_focused(); }
         void OpenPalette()  noexcept { m_pActions->OpenPalette(); }
+        void ShowKeyboard() noexcept { m_pActions->OpenOverlay(); }
 
         XPROPERTY_DEF
         ( "Host", host_actions
@@ -92,6 +95,11 @@ namespace level_editor
             , obj_action<"Toggle", &host_actions::ToggleDrawer
                 , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Log, Commands...) of the window you are in">
                 , ximgui::actions::member_keys<"Space"> >
+            >
+        , obj_scope<"Keyboard"
+            , obj_action<"Show", &host_actions::ShowKeyboard
+                , member_help<"Shows the keyboard: every key coloured by what it does where you are working">
+                , ximgui::actions::member_keys<"F1"> >
             >
         , obj_scope<"Palette"
             , obj_action<"Open", &host_actions::OpenPalette
@@ -101,6 +109,46 @@ namespace level_editor
         )
     };
     XPROPERTY_REG(host_actions)
+    XIMGUI_ACTIONS_OWNER(host_actions)
+
+    // The Assets tab's file keys as actions (the tab itself is xresource_editor::files_tab; its methods are called in LevelEditor_FilesActions.h,
+    // after that header is included). Live while the Assets tab of the Host Drawer has the focus.
+    struct files_actions
+    {
+        void* m_pTab = nullptr;         // the files_tab, found each frame the Assets tab is drawn; null otherwise
+
+        void        Rename() noexcept;      const char* WhyNoRename() const noexcept;
+        void        Cut()    noexcept;      const char* WhyNoCut()    const noexcept;
+        void        Copy()   noexcept;      const char* WhyNoCopy()   const noexcept;
+        void        Paste()  noexcept;      const char* WhyNoPaste()  const noexcept;
+        void        Delete() noexcept;      const char* WhyNoDelete() const noexcept;
+
+        XPROPERTY_DEF
+        ( "Assets", files_actions
+        , obj_action<"Rename", &files_actions::Rename
+            , member_help<"Renames the selected file">
+            , ximgui::actions::member_keys<"F2">
+            , member_dynamic_reason<+[](const files_actions& A) noexcept -> const char* { return A.WhyNoRename(); }> >
+        , obj_action<"Cut", &files_actions::Cut
+            , member_help<"Cuts the selected files; Paste moves them to the folder you are in">
+            , ximgui::actions::member_keys<"Ctrl+X">
+            , member_dynamic_reason<+[](const files_actions& A) noexcept -> const char* { return A.WhyNoCut(); }> >
+        , obj_action<"Copy", &files_actions::Copy
+            , member_help<"Copies the selected files; Paste puts the copies in the folder you are in">
+            , ximgui::actions::member_keys<"Ctrl+C">
+            , member_dynamic_reason<+[](const files_actions& A) noexcept -> const char* { return A.WhyNoCopy(); }> >
+        , obj_action<"Paste", &files_actions::Paste
+            , member_help<"Pastes the cut or copied files into the folder you are in">
+            , ximgui::actions::member_keys<"Ctrl+V">
+            , member_dynamic_reason<+[](const files_actions& A) noexcept -> const char* { return A.WhyNoPaste(); }> >
+        , obj_action<"Delete", &files_actions::Delete
+            , member_help<"Moves the selected files to the trash (undoable)">
+            , ximgui::actions::member_keys<"Delete">
+            , member_dynamic_reason<+[](const files_actions& A) noexcept -> const char* { return A.WhyNoDelete(); }> >
+        )
+    };
+    XPROPERTY_REG(files_actions)
+    XIMGUI_ACTIONS_OWNER(files_actions)
 
     struct app
     {
@@ -132,6 +180,8 @@ namespace level_editor
         xeditor::host                     EditorHost;
         ximgui::actions::context          Actions;                 // keys / menu items / toolbar buttons / hints for the whole process (a host service)
         host_actions                      HostActions{ EditorHost, Actions };
+        files_actions                     FilesActions;            // the Assets tab's file keys
+        xeditor::shortcut_labels          ShortcutLabels;          // menus ask the host which key an action has (xeditor/shortcuts.h)
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
 
         std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open
@@ -150,6 +200,7 @@ namespace level_editor
         std::optional<command_set> Commands;
 
         void WireAssetBrowser();
+        void BindFilesActions();                                    // while the Assets tab is drawn: find its files_tab and make the Assets/... actions live
         void DrawDrawerTab(int TabIndex);
 
         std::string OpenLevelEditor(xresource::full_guid LevelGuid);   // opens (or focuses) the Level's editor; the OpenLevel command's reply

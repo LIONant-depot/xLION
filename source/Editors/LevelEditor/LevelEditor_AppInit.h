@@ -148,6 +148,11 @@ namespace level_editor
             // Keys: the actions' defaults (member_keys), then the base preset and this person's own file from
             // Project.config\Keymaps\<user>.keymap.txt (see ximgui_actions_keymap.h). The Drawer key is the first of them.
             EditorHost.provide(Actions);
+            AssetBrowser.m_bFileKeysByHost = true;                         // the Assets tab's file keys are the Assets/... actions (FilesActions)
+            ShortcutLabels.m_KeysOf = [this](std::string_view Path) { return Actions.KeysOfPath(Path); };
+            EditorHost.provide(ShortcutLabels);
+            Actions.m_pShowHint = [](const ximgui::actions::hint_text& H) noexcept       // every action hint is the editors' one hint window
+                { xeditor::hint::Draw({ H.m_Topic, H.m_Body, H.m_Shortcut, H.m_Disabled, H.m_Detail }); };
             Actions.m_pSearchBox = &xeditor::RenderTreeSearchBar;           // the palette's search box is the editors' one
             EditorHost.m_bDrawerToggleByAction = true;
 

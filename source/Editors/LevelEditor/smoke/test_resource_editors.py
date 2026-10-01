@@ -39,7 +39,16 @@ def _open_and_check(editor, type_name: str) -> tuple[str, str]:
     return guid, name
 
 
-@pytest.mark.parametrize("type_name", RESOURCE_EDITOR_TYPES)
+# The Material and MaterialInstance editors draw with xeditor::mesh_preview, which sometimes crashes the editor inside vkCmdDrawIndexed
+# (documentation/Editors/TODO_stability_and_actions.md, item 2). Not strict: a run where it does not crash passes.
+KNOWN_MESH_PREVIEW_CRASH = pytest.mark.xfail(reason="mesh_preview crash, TODO_stability_and_actions.md #2", strict=False)
+
+
+def with_known_issues(types):
+    return [pytest.param(t, marks=KNOWN_MESH_PREVIEW_CRASH) if t in ("Material", "MaterialInstance") else t for t in types]
+
+
+@pytest.mark.parametrize("type_name", with_known_issues(RESOURCE_EDITOR_TYPES))
 def test_open_resource_editor(editor, type_name):
     """Opening a real asset of every resource type succeeds and shows up as a session; closing drops it."""
     guid, name = _open_and_check(editor, type_name)

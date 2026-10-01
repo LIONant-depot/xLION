@@ -55,6 +55,7 @@
 // top-of-file include).
 
 #include "source/Tools/Editor/xeditor_text_widget.h"
+#include "dependencies/xeditor/include/xeditor/hint.h"
 
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
 
@@ -778,7 +779,7 @@ namespace level_editor
 
                         if (ImGui::IsItemHovered() && !Cmd.m_Help.empty())
 
-                            ImGui::SetTooltip("%s", Cmd.m_Help.c_str());
+                            xeditor::hint::Text("%s", Cmd.m_Help.c_str());
 
                         ImGui::PopID();
 

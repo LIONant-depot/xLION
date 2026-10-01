@@ -9,6 +9,7 @@
 #include "source/Tools/Editor/xeditor_resource_editor.h"
 #include "source/Tools/Editor/xeditor_inspector.h"
 #include "source/Tools/Editor/xeditor_toolbar.h"
+#include "source/Tools/Editor/xeditor_document_actions.h"
 #include "source/Tools/Editor/xeditor_resource_tab.h"
 #include "dependencies/xeditor/include/xeditor/full_editor_shell.h"
 #include "dependencies/xeditor/include/xeditor/commands.h"
@@ -527,6 +528,7 @@ namespace xeditor
 
         T_DOC                                   m_Document;
         xundo::system                           m_Undo;
+        document_actions                        m_Actions{ *this };         // Save / Undo / Redo / Compile as actions: their keys, menu items and hints (see xeditor_document_actions.h)
         std::vector<std::string>                m_ValidationErrors;
         document_cmds::save_cmd                 m_Save;
         document_cmds::compile_cmd              m_Compile;
@@ -563,6 +565,17 @@ namespace xeditor
         ~document_editor() noexcept override { xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this); }
 
         // ---- what a resource type overrides
+        // An editor with actions of its own (a preview key, say) makes them live here: called for every window of the editor, after Editor/... is.
+        virtual void RegisterActions(ximgui::actions::context&) noexcept {}
+
+        // ImGui::Begin for one of this editor's windows: its actions are live while that window has the focus.
+        bool BeginEditorWindow(const char* pTitle, bool* pOpen = nullptr, ImGuiWindowFlags Flags = 0) noexcept
+        {
+            const bool bShown = ImGui::Begin(pTitle, pOpen, Flags);
+            if (auto* pCtx = ActionContext()) { pCtx->Scope(m_Actions); RegisterActions(*pCtx); }
+            return bShown;
+        }
+
         virtual void OnDocumentReplaced() noexcept {}           // an undo rebuilt the content
         virtual void OnCompileStarted()   noexcept {}           // a compile of this resource began: the compiled files are about to be replaced, let go of them
         virtual void OnCompiled()         noexcept {}           // a compile of this resource finished: reload what shows it
@@ -603,6 +616,7 @@ namespace xeditor
 
         std::filesystem::file_time_type CompileStartTime() const noexcept { std::lock_guard Lock(m_CompileStartMutex); return m_CompileStart; }
 
+        static void ToolbarHint(void* pUser, const char* pAction) noexcept { HintFor(static_cast<document_editor*>(pUser)->m_Actions, pAction); }
         static void ToolbarSave(void* pUser) noexcept    { auto R = static_cast<document_editor*>(pUser)->m_Undo.Query("Save");    (void)R; }
         static void ToolbarCompile(void* pUser) noexcept { auto R = static_cast<document_editor*>(pUser)->m_Undo.Query("Compile"); (void)R; }
 
@@ -615,6 +629,8 @@ namespace xeditor
             Bar.m_Log               = m_CompilationLog;
             Bar.m_pValidationErrors = &m_ValidationErrors;
             Bar.m_OnSave            = &document_editor::ToolbarSave;
+            Bar.m_OnHint            = &document_editor::ToolbarHint;
+            Bar.m_pOpenFeedback     = &m_Actions.m_bOpenFeedback;
             Bar.m_OnCompile         = &document_editor::ToolbarCompile;
             Bar.m_pUser             = this;
             RenderEditorToolbar(Bar);
@@ -661,7 +677,7 @@ namespace xeditor
             for (auto& P : m_Panels)
             {
                 ImGui::SetNextWindowClass(&WindowClass);
-                if (ImGui::Begin(P.m_Title.c_str(), nullptr, P.m_Flags)) P.m_Render();
+                if (BeginEditorWindow(P.m_Title.c_str(), nullptr, P.m_Flags)) P.m_Render();      // the keys are live while this panel has the focus
                 ImGui::End();
             }
         }
@@ -688,7 +704,7 @@ namespace xeditor
             if (m_bCompiled) { m_bCompiled = false; OnCompiled(); }
             if (m_bCompileFailed) { m_bCompileFailed = false; OnCompileFailed(); }
 
-            const bool bVisible = ImGui::Begin(Title, &m_bOpen, Flags);
+            const bool bVisible = BeginEditorWindow(Title, &m_bOpen, Flags);        // ...and while the editor's own window does
             DrawEditorRootTabIcon(m_pDevice, m_Document.m_Guid.m_Type);          // every frame, even when the tab is not selected
             if (bVisible)
             {

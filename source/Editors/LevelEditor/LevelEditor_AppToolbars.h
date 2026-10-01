@@ -18,6 +18,7 @@ namespace level_editor
         case 1:
             AssetBrowser.SetDevice(Device);
             AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Assets");
+            BindFilesActions();
             break;
         case 2:
             xresource_editor::RenderSourceControlPanel(EditorHost.m_Workspace);

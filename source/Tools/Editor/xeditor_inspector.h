@@ -6,10 +6,28 @@
 // session owns its OWN instance (never a static shared across sessions). Thin wrapper
 // around xproperty::inspector so Texture/Material/... editors do not re-copy the same
 // AppendEntity / theme / ShowEmbedded boilerplate.
+#include "dependencies/xeditor/include/xeditor/hint.h"
+#include <format>
 #include "dependencies/xproperty/source/examples/imgui/xPropertyImGuiInspector.h"
 
 namespace xeditor
 {
+    // The help of a property is the editors' hint (xeditor/hint.h): the property's name as the topic, its help text as the body, the reason it is
+    // unavailable when it is, and the type and path as the small print. Every editor's inspector uses it, so a property hint looks like any other.
+    inline void BindInspectorHints(xproperty::inspector& Inspector) noexcept
+    {
+        Inspector.m_OnHelp.Register<+[](xproperty::inspector&, const xproperty::inspector::help_info& H, bool& bHandled)
+        {
+            const std::string Detail = std::format("{}  -  {}", H.m_pTypeName, H.m_Path);
+            hint::Draw({ H.m_pName
+                       , (H.m_pHelp && std::string_view(H.m_pHelp) != "<<No help>>") ? std::string_view(H.m_pHelp) : std::string_view{}
+                       , {}
+                       , H.m_pDisabledReason ? std::string_view(H.m_pDisabledReason) : std::string_view{}
+                       , Detail });
+            bHandled = true;
+        }>();
+    }
+
     // Same inspector chrome the Level Editor Entity Properties panel uses.
     // Row tint off + tight Unity-like spacing - not xresource_editor's ColorVScalar readability multipliers.
     inline void ApplyLevelEditorInspectorTheme(xproperty::inspector& Inspector) noexcept
@@ -20,6 +38,7 @@ namespace xeditor
         Inspector.m_Settings.m_FramePadding            = ImVec2(4.0f, 3.0f);
         Inspector.m_Settings.m_ItemSpacing             = ImVec2(1.0f, 1.0f);
         Inspector.m_Settings.m_TableFramePadding       = ImVec2(4.0f, 1.0f);
+        BindInspectorHints(Inspector);
     }
 
     // Mirror Entity Properties: framed headers use ImGuiCol_Header, but LevelEditor_Theme sets that to

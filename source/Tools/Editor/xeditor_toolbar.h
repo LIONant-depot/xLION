@@ -8,6 +8,7 @@
 // ImGuiWindowFlags_MenuBar to ImGui::Begin. Hosts must also PushStyleVar(WindowPadding, 0) around Begin/End like LevelEditor's Level Editor, or a hairline gap appears under the menu bar.
 // Feedback colors/layout follow xresource_editor's Compile + Feedback strip.
 #include "dependencies/xundo/source/xundo_system.h"
+#include "dependencies/xeditor/include/xeditor/hint.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "imgui.h"
@@ -26,6 +27,22 @@ namespace xeditor
         std::shared_ptr<xresource_editor::compilation::historical_entry::log>        m_Log;
         std::vector<std::string>*                                       m_pValidationErrors  = nullptr;
 
+        // The hint of a button, when the host has actions: called right after the button with the action's name (Undo / Redo / Save /
+        // Compile). Without it the button keeps its plain tooltip.
+        void (*m_OnHint)(void* pUser, const char* pAction) = nullptr;
+
+        // The Feedback action (F6) raises this; the toolbar opens the Feedback popup and clears it.
+        bool* m_pOpenFeedback = nullptr;
+
+        // Undo / Redo for an editor whose undo needs more than m_pUndo->Undo() (the Level editor checks the write lock and Play first).
+        // When set, the buttons call these; m_bUndoRedoEnabled false greys both out.
+        void (*m_OnUndo)(void* pUser) = nullptr;
+        void (*m_OnRedo)(void* pUser) = nullptr;
+        bool   m_bUndoRedoEnabled     = true;
+
+        // Drawn centred between the left buttons and the right (where Compile + Feedback sit): the Level editor's Play / Step.
+        void (*m_OnCenter)(void* pUser) = nullptr;
+
         void (*m_OnSave)(void* pUser)    = nullptr;
         void (*m_OnCompile)(void* pUser) = nullptr;
         void* m_pUser                    = nullptr;
@@ -42,22 +59,22 @@ namespace xeditor
 
         if (Model.m_pUndo)
         {
-            const bool bCanUndo = Model.m_pUndo->GetUndoIndex() > 0;
-            const bool bCanRedo = Model.m_pUndo->GetUndoIndex() < static_cast<int>(Model.m_pUndo->GetHistoryCount());
+            const bool bCanUndo = Model.m_bUndoRedoEnabled && Model.m_pUndo->GetUndoIndex() > 0;
+            const bool bCanRedo = Model.m_bUndoRedoEnabled && Model.m_pUndo->GetUndoIndex() < static_cast<int>(Model.m_pUndo->GetHistoryCount());
 
             if (!bCanUndo) ImGui::BeginDisabled();
             if (ImGui::Button(" \xEE\x9E\xA7 "))
-                Model.m_pUndo->Undo();
+                { if (Model.m_OnUndo) Model.m_OnUndo(Model.m_pUser); else Model.m_pUndo->Undo(); }
             if (!bCanUndo) ImGui::EndDisabled();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Undo the last change");
+            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Undo"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Undo the last change");
 
             ImGui::SameLine(0, 4);
 
             if (!bCanRedo) ImGui::BeginDisabled();
             if (ImGui::Button(" \xEE\x9E\xA6 "))
-                Model.m_pUndo->Redo();
+                { if (Model.m_OnRedo) Model.m_OnRedo(Model.m_pUser); else Model.m_pUndo->Redo(); }
             if (!bCanRedo) ImGui::EndDisabled();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Redo the last change");
+            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Redo"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Redo the last change");
 
             ImGui::SameLine(0, 8);
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -69,8 +86,10 @@ namespace xeditor
             if (ImGui::Button(" Save ") && Model.m_OnSave)
                 Model.m_OnSave(Model.m_pUser);
             if (!Model.m_bDirty) ImGui::EndDisabled();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save the descriptor");
+            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Save"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor");
         }
+
+        if (Model.m_OnCenter) Model.m_OnCenter(Model.m_pUser);
 
         if (Model.m_bCanCompile)
         {
@@ -103,7 +122,7 @@ namespace xeditor
             if (ImGui::Button("\xEF\x96\xB0 Compile ") && Model.m_OnCompile)
                 Model.m_OnCompile(Model.m_pUser);
             if (bBusy || bValidationFail) ImGui::EndDisabled();
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save the descriptor and trigger compilation");
+            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Compile"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor and trigger compilation");
 
             ImGui::SameLine(0, 4);
 
@@ -123,7 +142,10 @@ namespace xeditor
             }
 
             ImGui::PushStyleColor(ImGuiCol_Text, Color);
-            if (ImGui::Button("Feedback:\xee\xa5\xb2"))
+            bool bOpenFeedback = ImGui::Button("Feedback:\xee\xa5\xb2");
+            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Feedback"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Compilation / validation feedback");
+            if (Model.m_pOpenFeedback && *Model.m_pOpenFeedback) { *Model.m_pOpenFeedback = false; bOpenFeedback = true; }
+            if (bOpenFeedback)
             {
                 const ImVec2 ButtonPos  = ImGui::GetItemRectMin();
                 const ImVec2 ButtonSize = ImGui::GetItemRectSize();
@@ -159,7 +181,6 @@ namespace xeditor
                 ImGui::EndChild();
                 ImGui::EndPopup();
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Compilation / validation feedback");
 
             if (Model.m_Log)
             {

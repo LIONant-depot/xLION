@@ -37,6 +37,7 @@
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_compiler_tab.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_plugin_tab.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_files_tab.h"
+#include "source/Editors/LevelEditor/LevelEditor_FilesActions.h"
 
 //-----------------------------------------------------------------------------------
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).

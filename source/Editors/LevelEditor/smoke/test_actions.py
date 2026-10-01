@@ -3,7 +3,11 @@
 PressKeys resolves a chord exactly like a real key press, so every binding can be tested without OS keyboard input.
 None of these need an open Level: the editor without a Level has its own (never saved) Level editor, so its actions are live.
 """
+import time
+
 import pytest
+
+from test_resource_editors import RESOURCE_EDITOR_TYPES, _open_and_check, with_known_issues
 
 
 def actions(editor) -> dict[str, tuple[str, str]]:
@@ -101,3 +105,57 @@ def test_unbinding_and_bad_bindings(editor):
 def test_the_palette_action_is_live_in_text_fields_too(editor):
     a = actions(editor)
     assert a["Host/Palette/Open"][0] == "Ctrl+Shift+P"
+
+
+def test_level_entity_and_play_actions_say_why_they_cannot_run(editor):
+    a = actions(editor)
+    expected = {"Level/Entity/Delete": ("Delete", "nothing selected"), "Level/Entity/Rename": ("F2", "nothing selected"),
+                "Level/Stop": ("Shift+F5", "not playing")}
+    for path, (keys, why) in expected.items():
+        assert path in a, f"{path} is not live; got {sorted(a)}"
+        assert a[path] == (keys, why), f"{path}: {a[path]}"
+    assert a["Level/Play"][0] == "F5"                 # never pressed here: it would really start playing
+    assert editor.cmd("RunAction -Path Level/Entity/Delete").endswith("did not run: nothing selected")
+
+
+@pytest.mark.parametrize("type_name", with_known_issues(RESOURCE_EDITOR_TYPES))
+def test_every_resource_editor_gets_the_editor_actions(editor, type_name):
+    """Opening any resource editor makes Editor/Save, Undo, Redo, Compile live, with the same keys in every editor."""
+    guid, _ = _open_and_check(editor, type_name)
+    try:
+        time.sleep(0.7)                                   # the editor registers its scopes while it draws
+        a = actions(editor)
+        for path, keys in {"Editor/Save": "Ctrl+S", "Editor/Undo": "Ctrl+Z", "Editor/Redo": "Ctrl+Y", "Editor/Compile": "F5", "Editor/Feedback": "F6"}.items():
+            assert path in a and a[path][0] == keys, f"{type_name}: {path} -> {a.get(path)}; live: {sorted(a)}"
+        assert a["Editor/Save"][1] == "no changes to save" and a["Editor/Undo"][1] == "nothing to undo"
+        # each editor's own keys, besides the shared Editor/... ones
+        for path, keys in {"Texture": {"Texture/Preview/LightFollowsCamera": "L"}, "GeomStatic": {"GeomStatic/Preview/LightFollowsCamera": "F"}
+                           , "AnimPackage": {"AnimPackage/Preview/PlayPause": "P"}}.get(type_name, {}).items():
+            assert path in a and a[path][0] == keys, f"{type_name}: {path} -> {a.get(path)}; live: {sorted(a)}"
+    finally:
+        editor.cmd(f"CloseResourceEditor -Asset {guid}")
+
+
+def test_list_actions_lists_each_action_once(editor):
+    paths = [l.split("\t")[0] for l in editor.cmd("ListActions").splitlines() if l.strip()]
+    assert len(paths) == len(set(paths)), f"duplicates: {sorted(p for p in set(paths) if paths.count(p) > 1)}"
+
+
+def test_the_keyboard_overlay_and_palette_are_actions(editor):
+    a = actions(editor)
+    assert a["Host/Keyboard/Show"][0] == "F1"
+    assert a["Host/Palette/Open"][0] == "Ctrl+Shift+P"
+    assert "Host/Keyboard/Show" in editor.cmd("PressKeys -Keys F1")
+    editor.cmd("PressKeys -Keys F1")                      # closes it again
+
+
+def test_keys_of_editors_that_are_not_open_can_be_configured(editor):
+    """The keymap knows every editor's actions from the start (no editor of that type is open here): the Editor/... keys of the
+    resource editors and the Assets/... keys of the asset browser can be rebound before the editor is ever opened."""
+    try:
+        assert editor.cmd("BindKey -Path Editor/Compile -Keys F7", allow_disk=True) == "Editor/Compile is bound to F7"
+        assert editor.cmd("BindKey -Path Assets/Delete -Keys Ctrl+Delete", allow_disk=True) == "Assets/Delete is bound to Ctrl+Delete"
+    finally:
+        editor.cmd("ResetKey -Path Editor/Compile", allow_disk=True)
+        editor.cmd("ResetKey -Path Assets/Delete", allow_disk=True)
+    assert "ActionProblems" in editor.commands()
