@@ -144,6 +144,25 @@ namespace level_editor
         {
             EditorHost.provide(Device);
             EditorHost.provide(MainWindow);
+
+            // Keys: the actions' defaults (member_keys), then the base preset and this person's own file from
+            // Project.config\Keymaps\<user>.keymap.txt (see ximgui_actions_keymap.h). The Drawer key is the first of them.
+            EditorHost.provide(Actions);
+            EditorHost.m_bDrawerToggleByAction = true;
+
+            // Everything that goes wrong with the keys lands in the console log (the Commands tab, GetLog-style reports): setup
+            // problems as they are found, and every key that reached an action but could not run it.
+            Actions.m_OnProblem.Register<+[](ximgui::actions::context&, const std::string& Text) { xeditor::LogConsole("actions: " + Text, xeditor::log_source::System); }>();
+            Actions.m_OnInput.Register<+[](ximgui::actions::context&, const ximgui::actions::input_result& R)
+            {
+                if (!R.m_bRan) xeditor::LogConsole(std::format("actions: {} -> {} did not run: {}", R.m_Keys, R.m_Path, R.m_Reason.empty() ? "it reported a failure" : R.m_Reason), xeditor::log_source::System);
+            }>();
+            {
+                char User[256] = {};
+                size_t UserLen = 0;
+                getenv_s(&UserLen, User, sizeof(User), "USERNAME");
+                ximgui::actions::ApplyKeymapLayers(Actions, std::format(L"{}\\Project.config\\Keymaps", e10::g_LibMgr.m_ProjectPath), User);
+            }
         }
         EditorHost.m_IdleWork.m_OnRun.Register<&e10::source_control::ScanAllLibrariesWhenIdle>();
 

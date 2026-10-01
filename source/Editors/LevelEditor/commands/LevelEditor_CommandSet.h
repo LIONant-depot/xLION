@@ -117,6 +117,11 @@ namespace level_editor
         level_editor::commands::say_query_cmd                     CmdSay;
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
         level_editor::commands::exit_query_cmd                    CmdExit;
+        level_editor::commands::list_actions_query_cmd            CmdListActions;
+        level_editor::commands::run_action_query_cmd              CmdRunAction;
+        level_editor::commands::action_problems_query_cmd         CmdActionProblems;
+        level_editor::commands::press_keys_query_cmd              CmdPressKeys;
+        level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
         e10::commands::create_library_query_cmd          CmdCreateLibrary;
         e10::commands::list_legal_reference_libraries_query_cmd CmdListLegalReferenceLibraries;
@@ -181,6 +186,11 @@ namespace level_editor
         , CmdSay(Workspace, pEditor)
         , CmdGetLog(Workspace, pEditor)
         , CmdExit(Workspace, pEditor)
+        , CmdListActions(Workspace, pEditor)
+        , CmdRunAction(Workspace, pEditor)
+        , CmdActionProblems(Workspace, pEditor)
+        , CmdPressKeys(Workspace, pEditor)
+        , CmdExplainLastKey(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
         , CmdCreateLibrary(Workspace, pEditor)
         , CmdListLegalReferenceLibraries(Workspace, pEditor)
@@ -248,6 +258,11 @@ namespace level_editor
             CmdSay.m_pDataBase = pEditor;
             CmdGetLog.m_pDataBase = pEditor;
             CmdExit.m_pDataBase = pEditor;
+            CmdListActions.m_pDataBase = pEditor;
+            CmdRunAction.m_pDataBase = pEditor;
+            CmdActionProblems.m_pDataBase = pEditor;
+            CmdPressKeys.m_pDataBase = pEditor;
+            CmdExplainLastKey.m_pDataBase = pEditor;
             CmdOpenLevel.m_pDataBase = pEditor;
             CmdCreateLibrary.m_pDataBase = pEditor;
             CmdListLegalReferenceLibraries.m_pDataBase = pEditor;

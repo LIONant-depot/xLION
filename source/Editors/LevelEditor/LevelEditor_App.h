@@ -10,6 +10,8 @@
 
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Chat.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_App.h"
+#include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Actions.h"
+#include "dependencies/actions.imgui/ximgui_actions_keymap.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_level.h"
 
@@ -72,6 +74,26 @@
 
 namespace level_editor
 {
+    // The shell's own actions (keys, menus, hints - see dependencies/actions.imgui): what is live whichever editor has the focus.
+    struct host_actions
+    {
+        xeditor::host* m_pHost = nullptr;       // xproperty creates objects by default construction, so the host is a pointer
+        host_actions() noexcept = default;
+        explicit host_actions(xeditor::host& Host) noexcept : m_pHost(&Host) {}
+
+        void ToggleDrawer() noexcept { m_pHost->toggle_drawer_focused(); }
+
+        XPROPERTY_DEF
+        ( "Host", host_actions
+        , obj_scope<"Drawer"
+            , obj_action<"Toggle", &host_actions::ToggleDrawer
+                , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Log, Commands...) of the window you are in">
+                , ximgui::actions::member_keys<"Space"> >
+            >
+        )
+    };
+    XPROPERTY_REG(host_actions)
+
     struct app
     {
         xgpu::instance Instance;
@@ -100,6 +122,8 @@ namespace level_editor
         level_editor::commands::exit_state          ExitState;
 
         xeditor::host                     EditorHost;
+        ximgui::actions::context          Actions;                 // keys / menu items / toolbar buttons / hints for the whole process (a host service)
+        host_actions                      HostActions{ EditorHost };
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
 
         std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open

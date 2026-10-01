@@ -116,6 +116,10 @@ namespace level_editor
         }
         EditorHost.pump_services();
 
+        // Keys pressed this frame go to the actions that were live in the last one; this frame's panels register theirs as they draw.
+        Actions.NewFrame();
+        Actions.Global(HostActions, "Drawer");
+
         // Asset open drain (drawer works even with the Level peer tab closed): a newly created or just-selected
         // Level/Scene asset routes into the Level session the same way a double-click does through
         // WireAssetBrowser's m_OnOpenAsset - see that file's own comment.
@@ -158,6 +162,7 @@ namespace level_editor
         }
         // Host Drawer last so it stacks above Level and resource editor peer windows (same OS window).
         EditorHost.draw_host_drawers();
+        Actions.EndFrame();
 
         xgpu::tools::imgui::Render();
 

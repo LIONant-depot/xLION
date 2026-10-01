@@ -1,3 +1,4 @@
+ActionProblems
 AddProjectModuleReference
 AddScriptSourceFile
 CaptureWindow
@@ -14,9 +15,11 @@ DeleteAsset
 DeleteAssetFileToTrash
 DescribeAsset
 Exit
+ExplainLastKey
 GetIdleTasks
 GetLog
 GetPlayState
+ListActions
 ListAssets
 ListLegalReferenceLibraries
 ListLevels
@@ -29,6 +32,7 @@ OpenLevel
 OpenResourceEditor
 Pause
 Play
+PressKeys
 RecompileAll
 RecompileErrors
 Redo
@@ -41,6 +45,7 @@ RenameScriptSourceFile
 ResourceEditorCommand
 RestoreAsset
 RestoreAssetFileFromTrash
+RunAction
 RunSanityCheck
 Save
 SaveAssets

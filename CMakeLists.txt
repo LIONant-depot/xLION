@@ -226,6 +226,7 @@ if(EXISTS "${IMGUI_EXTRA_MATH_INL}")
 endif()
 
 FetchAndPopulate("https://github.com/LIONant-depot/toolbar.imgui.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/Actions.imgui.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xeditor.git" "main")
 
 #
@@ -459,6 +460,7 @@ set(XLION_HEADLESS_SOURCES ${XLION_COMMON_SOURCES} ${XLION_EXTRA_SOURCES} ${GENE
 
 set(XLION_PLUGIN_INCLUDES
   "${CMAKE_SOURCE_DIR}/dependencies/toolbar.imgui"
+  "${CMAKE_SOURCE_DIR}/dependencies/actions.imgui"
   "${CMAKE_SOURCE_DIR}/dependencies/xcmdline/source"
   "${CMAKE_SOURCE_DIR}/plugins/xgeom_static.plugin"
   "${CMAKE_SOURCE_DIR}/plugins/xgeom_skin.plugin"

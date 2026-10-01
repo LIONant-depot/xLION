@@ -6,13 +6,13 @@ real editor (`xLION.exe`), drive it through its Command Console pipe, and assert
 ```bat
 pip install pytest
 cd source\Editors\LevelEditor\smoke
-python -m pytest -q                     # all tests, launches the Release build itself
+python -m pytest -q                     # all tests, launches the DEBUG build itself (asserts exist only there)
 python -m pytest test_play.py -q        # one file
 python -m pytest -q --exe <path>        # a different build
 python -m pytest -q --update-golden     # accept a deliberate change to the command list
 ```
 
-Build first (MSBuild `Build\xLION.vs2022\xLION.sln`, target `xLION`, config `Release`), and close any running
+Build first (MSBuild `Build\xLION.vs2022\xLION.sln`, target `xLION`, config `Debug`), and close any running
 editor - the pipe (`\\.\pipe\xEditor_Console`) admits one server.
 
 **Known project-data gap:** the `level` fixture (`conftest.py`) opens `editor.levels()[0]` - the example
@@ -85,3 +85,9 @@ def test_create_entity_undo_redo(level):
 | `test_robustness.py` | Robustness: commands with missing/malformed arguments |
 | `test_session_command_surface.py` | Session command surface: golden list |
 | `test_game_module_reload_more.py` | More game module reload tests |
+
+## The problem report
+
+The run ends with an "editor problem report": every assert / CRT report / terminate / crash line the editor logged
+(`LevelEditor.problems.log` next to the exe - appended, never truncated, so an assert can no longer be lost to the next launch),
+and every distinct Vulkan validation error with its count. An assert fails the run even when all tests passed.

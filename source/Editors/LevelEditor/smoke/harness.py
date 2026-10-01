@@ -11,6 +11,7 @@ Edit commands return an EMPTY string on success and an error text on failure; qu
 """
 from __future__ import annotations
 
+import os
 import base64
 import ctypes
 import re
@@ -26,7 +27,8 @@ PIPE = r"\\.\pipe\xEditor_Console"
 SMOKE_DIR = Path(__file__).resolve().parent
 GOLDEN_DIR = SMOKE_DIR / "golden"
 REPO = SMOKE_DIR.parents[3]
-DEFAULT_EXE = REPO / "Build" / "xLION.vs2022" / "Release" / "xLION.exe"
+# Debug on purpose: asserts (CRT assert, IM_ASSERT, xproperty/xecs asserts) only exist there. Pass --exe for another build.
+DEFAULT_EXE = REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe"
 
 
 _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -105,7 +107,8 @@ class Editor:
         self.log_dir.mkdir(exist_ok=True)
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
-        self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT)
+        self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
+                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1"})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
             while time.monotonic() < deadline:
