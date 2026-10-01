@@ -85,3 +85,17 @@ def test_describe_entity_format(level):
     type_guid = level.property_type(entity, path)
     assert f"{path} = " in desc
     assert f"(TypeGuid {type_guid})" in desc
+
+
+def test_builder_components_are_labelled_for_the_ai(level):
+    """Builder components carry ",builder" in ListComponentTypes and DescribeEntity (the Inspector shows the same fact as a grey label)."""
+    import re
+    types = level.cmd("ListComponentTypes")
+    assert re.search(r"data,builder\s+PhysicsColliderBox", types)
+    assert re.search(r"share,builder\s+PhysicsBodyProperties", types)
+    assert re.search(r"data\s+Transform", types)                       # a plain component has no suffix
+
+    _, entity, collider = level.find_with_component("PhysicsColliderBox")
+    desc = level.describe(entity)
+    assert f"[{collider}] PhysicsColliderBox  (data,builder)" in desc
+    assert "PhysicsBodyProperties  (share,builder)" in desc
