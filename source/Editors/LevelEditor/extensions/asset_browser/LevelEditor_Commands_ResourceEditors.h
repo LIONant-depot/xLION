@@ -90,7 +90,7 @@ namespace level_editor::commands
             auto* pEditors = FindResourceEditors();
             if (!pEditors) return "OpenResourceEditor: no editor host";
 
-            const auto AssetGuid = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto AssetGuid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
             if (!xeditor::open_resource_editors::HasEditorFor(AssetGuid.m_Type)) return "OpenResourceEditor: this resource type has no editor";
 
             auto LibraryGuid = xeditor::open_resource_editors::FindLibraryOf(AssetGuid);
@@ -98,7 +98,7 @@ namespace level_editor::commands
             {
                 auto LibraryArg = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
                 if (std::holds_alternative<xerr>(LibraryArg)) return "OpenResourceEditor: bad arguments";
-                LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+                LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
             }
             if (LibraryGuid.empty()) return "OpenResourceEditor: no open library has that resource";
 
@@ -140,7 +140,7 @@ namespace level_editor::commands
             auto AssetArg = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
             if (std::holds_alternative<xerr>(AssetArg)) return "CloseResourceEditor: bad arguments";
             auto* pEditors = FindResourceEditors();
-            auto* pEditor  = pEditors ? pEditors->Find(e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
+            auto* pEditor  = pEditors ? pEditors->Find(xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
             if (!pEditor) return "CloseResourceEditor: no open editor for that resource";
             pEditor->m_bOpen = false;       // the host drops it at the start of the next frame
             return "";
@@ -166,7 +166,7 @@ namespace level_editor::commands
                 return "ResourceEditorCommand: bad arguments";
 
             auto* pEditors = FindResourceEditors();
-            auto* pEditor  = pEditors ? pEditors->Find(e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
+            auto* pEditor  = pEditors ? pEditors->Find(xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
             if (!pEditor) return "ResourceEditorCommand: no open editor for that resource";
             return xeditor::host::current()->run_on(pEditor->getUndo(), xeditor::Base64Decode(std::get<std::string>(CmdArg)));
         }

@@ -96,7 +96,7 @@ namespace level_editor
                 TCHAR szFileName[MAX_PATH];
                 wcscpy_s(szFileName, MAX_PATH, ProjectPathW.c_str());
 
-                if (auto Err = e10::g_LibMgr.OpenProject(szFileName); Err)
+                if (auto Err = xresource_editor::g_LibMgr.OpenProject(szFileName); Err)
                 {
                     xeditor::NotifyError(Err.getMessage());
                     xeditor::diagnostics::Log("startup: opening project failed");
@@ -111,7 +111,7 @@ namespace level_editor
                 // Level-ownership split (it sat next to the Level-specific pGameMgr->*Mgr.m_ProjectPath lines
                 // that correctly moved into xlevel_session.h, but this one is resource-manager-global, not
                 // Level-specific, so it belongs here in the shell, not the plugin).
-                xresource::g_Mgr.setRootPath(std::format(L"{}//Cache//Resources//Platforms//Windows", e10::g_LibMgr.m_ProjectPath));
+                xresource::g_Mgr.setRootPath(std::format(L"{}//Cache//Resources//Platforms//Windows", xresource_editor::g_LibMgr.m_ProjectPath));
 
                 if (!bHeadless)
                 {
@@ -129,9 +129,9 @@ namespace level_editor
 
         // Visible from the start and never closable - browsing/creating Levels and Scenes is this editor's
         // primary activity, so it's a permanent, dockable part of the layout.
-        AsserBrowser.setDisplayMode(e10::assert_browser::display_mode::DOCKABLE);
-        AsserBrowser.SetWindowName(xlevel::editor_tabs::kResourceBrowserWindow);
-        AsserBrowser.Show(true);
+        AssetBrowser.setDisplayMode(xresource_editor::asset_browser::display_mode::DOCKABLE);
+        AssetBrowser.SetWindowName(xlevel::editor_tabs::kResourceBrowserWindow);
+        AssetBrowser.Show(true);
 
         // EditorHost.m_Workspace IS the shell's framework-level workspace now - no more overriding it with a
         // separate app-owned system (stage (c): removed the m_pExternalWorkspace indirection entirely).
@@ -139,7 +139,7 @@ namespace level_editor
         EditorHost.provide(ChatLog);
         EditorHost.provide(ExitState);
         EditorHost.provide(ResourceEditors);
-        EditorHost.provide(AsserBrowser);
+        EditorHost.provide(AssetBrowser);
         if (!bHeadless)
         {
             EditorHost.provide(Device);
@@ -162,10 +162,10 @@ namespace level_editor
                 char User[256] = {};
                 size_t UserLen = 0;
                 getenv_s(&UserLen, User, sizeof(User), "USERNAME");
-                ximgui::actions::ApplyKeymapLayers(Actions, std::format(L"{}\\Project.config\\Keymaps", e10::g_LibMgr.m_ProjectPath), User);
+                ximgui::actions::ApplyKeymapLayers(Actions, std::format(L"{}\\Project.config\\Keymaps", xresource_editor::g_LibMgr.m_ProjectPath), User);
             }
         }
-        EditorHost.m_IdleWork.m_OnRun.Register<&e10::source_control::ScanAllLibrariesWhenIdle>();
+        EditorHost.m_IdleWork.m_OnRun.Register<&xresource_editor::source_control::ScanAllLibrariesWhenIdle>();
 
         if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
             xeditor::NotifyError(std::format("LevelEditor: xundo Init failed: {}", Err));
@@ -182,7 +182,7 @@ namespace level_editor
 
         // The editor without a Level: it brings the game module up and is what the workspace commands act on until a
         // Level is open. It is not in ResourceEditors, so it is never drawn or listed.
-        IdleLevel = std::make_unique<xlevel::session>(xresource::full_guid{}, e10::library::guid{}, ResourceEditors.m_pDevice);
+        IdleLevel = std::make_unique<xlevel::session>(xresource::full_guid{}, xresource_editor::library::guid{}, ResourceEditors.m_pDevice);
         LastLevelTarget = &IdleLevel->m_CmdContext;
         Commands.emplace(EditorHost.m_Workspace, LastLevelTarget);
 
@@ -195,7 +195,7 @@ namespace level_editor
         // Host service hooks: Idle Work + SC idle + Game.dll focus-reload.
         EditorHost.m_OnPumpServices = [&]() noexcept
         {
-            e10::source_control::ScanNewlyOpenedLibraries();
+            xresource_editor::source_control::ScanNewlyOpenedLibraries();
         };
         EditorHost.m_OnSourceChanged = [this]() noexcept
         {
@@ -230,7 +230,7 @@ namespace level_editor
         xlevel::g_OnSessionCreated = {};
         xlevel::g_OpenLevelSession = {};
         EditorHost.withdraw<xeditor::open_resource_editors>();
-        EditorHost.withdraw<e10::assert_browser>();
+        EditorHost.withdraw<xresource_editor::asset_browser>();
         if (!bHeadless)
         {
             EditorHost.withdraw<xgpu::device>();

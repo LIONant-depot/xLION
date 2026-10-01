@@ -18,7 +18,7 @@
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_scene_dependency.h"
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_LibraryDependency.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_library_dependency.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_workspace.h"
 
@@ -28,17 +28,17 @@
 
 #include "plugins/xscene.plugin/source/Editor/xscene_commands_scene_organization.h"
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_assets.h"
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_AssetFiles.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_asset_files.h"
 
 #include "source/Editors/LevelEditor/extensions/game_module/LevelEditor_Commands_Scripting.h"
 
 #include "plugins/xscene.plugin/source/Editor/xscene_commands_make_prefab.h"
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Compilation.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_compilation.h"
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_SourceControl.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_source_control.h"
 
 #include "source/Editors/LevelEditor/extensions/asset_browser/LevelEditor_Commands_ResourceEditors.h"
 
@@ -108,7 +108,7 @@ namespace level_editor
         xgpu::device   Device;
         xgpu::window   MainWindow;
 
-        // Same wiring E10 does: texture (and other) loaders Destroy via UserData.m_Device. Without this,
+        // Same wiring xresource_editor does: texture (and other) loaders Destroy via UserData.m_Device. Without this,
         // RegisterResource/ReleaseRef (Texture editor preview reload after Compile) crashes in device::Destroy
         // on a default-constructed empty device handle.
         resource_mgr_user_data ResourceMgrUserData{};
@@ -116,7 +116,7 @@ namespace level_editor
         //
         // Asset browser
         //
-        e10::assert_browser AsserBrowser;
+        xresource_editor::asset_browser AssetBrowser;
 
         //
         // Command/undo system - the shell's own framework-level workspace: asset CRUD, source control, compile,

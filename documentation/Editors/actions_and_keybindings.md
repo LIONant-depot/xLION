@@ -2,7 +2,7 @@
 
 > Status: **first slice built and tested** (2026-10-01) - see "Implementation status" below. The rest is design. Reference reading: *A 21st-Century Command and Keybinding System for
 > Creative Editors* (taken as a strong reference, not a spec). Facts about today's code come from a survey of
-> `xeditor`, `xundo`, `xcmdline`, `xproperty`, `xlevel.plugin`, `xscene.plugin`, E10 and the resource-editor plugins.
+> `xeditor`, `xundo`, `xcmdline`, `xproperty`, `xlevel.plugin`, `xscene.plugin`, xresource_editor and the resource-editor plugins.
 
 ## Implementation status (2026-10-01)
 
@@ -36,7 +36,7 @@ Differences from the design above that building it settled:
   visible); Undo/Redo buttons are disabled when there is nothing to undo/redo (they were only disabled while playing).
 - **Not built yet**: F1 pin/overlay, the status line, binding the inspector's
   `m_OnHelp`, the toolbar.imgui tooltip delegate, keys on enum values (Q/W/E/R are four actions for now), moving Save/Undo/Redo onto
-  `xeditor::Run` commands, the other editors' keys (E10 files tab, tree F2/Delete, Texture, ...). Nothing is committed to the dependency
+  `xeditor::Run` commands, the other editors' keys (xresource_editor files tab, tree F2/Delete, Texture, ...). Nothing is committed to the dependency
   repos yet, and `actions.imgui` has no remote: `CMakeLists.txt` can only fetch it (like toolbar.imgui) once it is published.
 
 ## 0. The rule this design follows: reuse, don't reinvent
@@ -223,7 +223,7 @@ default; there is no separate on/off flag. At startup the host binds `xeditor::H
 | xproperty inspector | Every label hover goes through `inspector::Help(const entry&)` (`xPropertyImGuiInspector.cpp:4199`). Enum-value help and truncated-string tooltips are separate (`:1275`, `:629`…). | `m_OnHelp(inspector&, const entry&, help_kind)`, next to the existing `m_On*` delegates. When it is bound, all of these call it instead of drawing. |
 | toolbar.imgui | Its own `BeginTooltip` (`ximgui_toolbar.h:333`) | the same: one delegate on `toolbar_host_state` |
 | xeditor `MenuItem` / `ToolbarButton`, `xeditor_toolbar.h` | hand-written `SetTooltip` | call `xeditor::Hint` directly |
-| E10, plugin panels | ~30 ad-hoc `SetTooltip` | `xeditor::Hint(subject)`, or the text fallback |
+| xresource_editor, plugin panels | ~30 ad-hoc `SetTooltip` | `xeditor::Hint(subject)`, or the text fallback |
 
 ## 5. Customising: per-user, shareable, in Project Settings
 
@@ -296,7 +296,7 @@ mechanism: it is one more thing the keymap layers carry.
 | `Editor/...` | `Ctrl+S` Save (works in text) · `Ctrl+Z` Undo · `Ctrl+Y` / `Ctrl+Shift+Z` Redo |
 | `Level/...` | `Delete` · `Ctrl+D` Duplicate · `F2` Rename · `Ctrl+X/C/V` · `Ctrl+A` · `Esc` Clear selection · `F5` Play · `Shift+F5` Stop |
 | `Level/Viewport/...` | `Q W E R` = values of `Tool` · `F` Frame selected · inside a tool: `W E R` mode, `Esc` done |
-| `Host/Assets/...` | `F2` · `Delete` · `Ctrl+X/C/V` · `Ctrl+A` (the E10 keys, unchanged) |
+| `Host/Assets/...` | `F2` · `Delete` · `Ctrl+X/C/V` · `Ctrl+A` (the xresource_editor keys, unchanged) |
 
 What this brings with it:
 
@@ -327,7 +327,7 @@ Working name: **`actions.imgui`** (namespace `ximgui::actions`, mirroring `ximgu
 |---|---|---|
 | **xproperty** (grows) | the disabled/hidden reason on `member_dynamic_flags`; the inspector's `m_OnHelp` delegate | (as today) |
 | **`actions.imgui`** (new depot) | `member_keys` / `member_icon` / `key_flags` tags (`member_user_data`: they don't need to be in xproperty); the scope map (`ActionScope`: window → object + path) and the per-frame resolver; `MenuItem` / `ToolbarButton`; the hint card (3 levels, F1 pin, status line); the palette; keymap layers load/save; the inspector-based keymap page | imgui, xproperty (+ its inspector and sprop/xtextfile serializer), xstrtool (fuzzy search) |
-| **xeditor** (thin adapter) | the `Host/...` and `Editor/...` objects; binding the hint delegates in xproperty, toolbar.imgui and E10 at startup; the `RunAction` / `PressKeys` / `ExplainLastKey` commands; registering the keymap page in Project Settings; the `Project.config/Keymaps/` location | `actions.imgui`, xundo, everything it uses today |
+| **xeditor** (thin adapter) | the `Host/...` and `Editor/...` objects; binding the hint delegates in xproperty, toolbar.imgui and xresource_editor at startup; the `RunAction` / `PressKeys` / `ExplainLastKey` commands; registering the keymap page in Project Settings; the `Project.config/Keymaps/` location | `actions.imgui`, xundo, everything it uses today |
 | **plugins** | `obj_action` / `member_keys` in their own `XPROPERTY_DEF`s | nothing new beyond the tag header |
 
 The boundary stays clean through two rules:
@@ -393,7 +393,7 @@ that config files benefit too, not only keymaps.
    Declare the first actions in the session `XPROPERTY_DEF`s and migrate the keys:
    - Drawer Space; Save/Undo/Redo (they stop bypassing commands);
    - Q/W/E/R/F; tree F2/Delete;
-   - the E10 keys; Texture Space (moved to `Texture/Preview`, so it no longer fights the Drawer).
+   - the xresource_editor keys; Texture Space (moved to `Texture/Preview`, so it no longer fights the Drawer).
 
    Add smoke tests that drive keys through `PressKeys`.
 4. **Find:** in `actions.imgui`, the hint card, the status line, the palette and F1. In xeditor, binding the delegates,

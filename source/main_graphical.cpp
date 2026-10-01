@@ -6,7 +6,7 @@ int RunLevelEditorGraphical();
 
 int main()
 {
-    // Without this, EnsureLibraryLoaded's process_info_job (E10_AssetMgr.h) submits work to
+    // Without this, EnsureLibraryLoaded's process_info_job (xresource_editor_asset_mgr.h) submits work to
     // xscheduler::g_System and then polls its state forever, since no worker thread was ever
     // started to actually process it - hangs the very first OpenProject call during startup,
     // before any window content is ever painted (a "not responding" blank white window, not a

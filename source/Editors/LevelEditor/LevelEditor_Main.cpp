@@ -29,14 +29,14 @@
 // global linked list (browser_registration_base::g_pHead) via a namespace-scope `inline` object at
 // the bottom of each file - nothing calls into them directly, so if the header itself is never
 // #include'd by anything actually linked into the binary, the registration constructor never runs
-// and e10::assert_browser::m_Tabs stays empty ("No browser tab matching ..." for every tab). In
+// and xresource_editor::asset_browser::m_Tabs stays empty ("No browser tab matching ..." for every tab). In
 // xGPU's own build these come along for free via E10_TextureResourcePipeline.cpp (not part of this
 // port), so they need the same explicit fold-in here.
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_asset_browser_virtual_tree_tab.h"
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_asset_browser_search_tab.h"
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_asset_browser_compiler_tab.h"
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_asset_browser_plugin_tab.h"
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_asset_browser_files_tab.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_virtual_tree_tab.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_search_tab.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_compiler_tab.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_plugin_tab.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_browser_files_tab.h"
 
 //-----------------------------------------------------------------------------------
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).

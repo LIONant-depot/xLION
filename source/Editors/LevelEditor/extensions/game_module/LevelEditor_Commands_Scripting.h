@@ -10,24 +10,24 @@
 // deliberately simpler: a Scripting resource is never "loaded live" into a running ECS world the
 // way a Scene is, so there's no async-safe live-editing manager needed here, just plain add/
 // remove/list file operations wrapped as xundo commands (matching CreateAsset/DeleteAsset's own
-// command_base shape in E10_Commands_Assets.h, since adding/removing a source file is the
+// command_base shape in xresource_editor_commands_assets.h, since adding/removing a source file is the
 // same kind of reversible content operation, not a real external round-trip).
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_Commands_Assets.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_assets.h"
 #include <fstream>
 
 namespace level_editor::commands
 {
     // Resolves an asset's own ".desc" folder as a real, absolute filesystem path (info.txt's own
     // path, minus the filename) - same getNodeInfo-based derivation RevertResourceWholeFolder
-    // (E10_Commands_SourceControl.h) already uses, just returning the ABSOLUTE path directly
+    // (xresource_editor_commands_source_control.h) already uses, just returning the ABSOLUTE path directly
     // instead of a library-root-relative key, since this is real filesystem I/O, not a git
     // pathspec. Empty return means the asset guid didn't resolve in the given library.
-    inline std::wstring ResolveAssetDescFolder(e10::library::guid LibraryGuid, xresource::full_guid AssetGuid) noexcept
+    inline std::wstring ResolveAssetDescFolder(xresource_editor::library::guid LibraryGuid, xresource::full_guid AssetGuid) noexcept
     {
         std::wstring FolderPath;
         // NOT noexcept - getNodeInfo's own function_traits deduction doesn't handle a noexcept
         // lambda's operator() type (xgpu_xcontainer_noexcept_lambda_trait_trap).
-        e10::g_LibMgr.getNodeInfo(LibraryGuid, AssetGuid, [&](const e10::library_db::info_node& Node)
+        xresource_editor::g_LibMgr.getNodeInfo(LibraryGuid, AssetGuid, [&](const xresource_editor::library_db::info_node& Node)
         {
             const auto SlashPos = Node.m_Path.find_last_of(L'\\');
             FolderPath = (SlashPos == std::wstring::npos) ? Node.m_Path : Node.m_Path.substr(0, SlashPos);
@@ -35,7 +35,7 @@ namespace level_editor::commands
         return FolderPath;
     }
 
-    inline std::wstring ScriptSourceDbFolder(e10::library::guid LibraryGuid, xresource::full_guid AssetGuid) noexcept
+    inline std::wstring ScriptSourceDbFolder(xresource_editor::library::guid LibraryGuid, xresource::full_guid AssetGuid) noexcept
     {
         const auto Desc = ResolveAssetDescFolder(LibraryGuid, AssetGuid);
         return Desc.empty() ? Desc : (Desc + L"\\source_db");
@@ -66,9 +66,9 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg))
                 return "AddScriptSourceFile: bad arguments";
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = e10::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return "AddScriptSourceFile: asset not found";
@@ -103,9 +103,9 @@ namespace level_editor::commands
             const std::string Asset       = xeditor::ReadString(File);
             const std::string FileNameB64 = xeditor::ReadString(File);
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(Asset);
-            const auto FileName    = e10::commands::DecodeAssetPath(FileNameB64);
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return;
@@ -142,9 +142,9 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg))
                 return "RemoveScriptSourceFile: bad arguments";
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = e10::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return "RemoveScriptSourceFile: asset not found";
@@ -172,9 +172,9 @@ namespace level_editor::commands
             std::string Content;
             if (!std::holds_alternative<xerr>(LibraryArg) && !std::holds_alternative<xerr>(AssetArg) && !std::holds_alternative<xerr>(FileNameArg))
             {
-                const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-                const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-                const auto FileName    = e10::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
+                const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+                const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+                const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
                 const auto SourceDb    = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
                 if (!SourceDb.empty())
                 {
@@ -193,9 +193,9 @@ namespace level_editor::commands
             const std::string FileNameB64 = xeditor::ReadString(File);
             const std::string Content     = xeditor::ReadString(File);
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(Asset);
-            const auto FileName    = e10::commands::DecodeAssetPath(FileNameB64);
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return;
@@ -230,8 +230,8 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg))
                 return "ListScriptSourceFiles: bad arguments";
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return "ListScriptSourceFiles: asset not found";
@@ -280,9 +280,9 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg) || std::holds_alternative<xerr>(ContentArg))
                 return "SetScriptSourceFileContent: bad arguments";
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = e10::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
             const auto Content     = xeditor::Base64Decode(std::get<std::string>(ContentArg));
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
@@ -312,9 +312,9 @@ namespace level_editor::commands
             std::string PrevContent;
             if (!std::holds_alternative<xerr>(LibraryArg) && !std::holds_alternative<xerr>(AssetArg) && !std::holds_alternative<xerr>(FileNameArg))
             {
-                const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-                const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-                const auto FileName    = e10::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
+                const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+                const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+                const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
                 const auto SourceDb    = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
                 if (!SourceDb.empty())
                 {
@@ -333,9 +333,9 @@ namespace level_editor::commands
             const std::string FileNameB64  = xeditor::ReadString(File);
             const std::string PrevContent  = xeditor::ReadString(File);
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(Asset);
-            const auto FileName    = e10::commands::DecodeAssetPath(FileNameB64);
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
+            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return;
@@ -372,10 +372,10 @@ namespace level_editor::commands
             if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(OldArg) || std::holds_alternative<xerr>(NewArg))
                 return "RenameScriptSourceFile: bad arguments";
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto OldName     = e10::commands::DecodeAssetPath(std::get<std::string>(OldArg));
-            const auto NewName     = e10::commands::DecodeAssetPath(std::get<std::string>(NewArg));
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            const auto OldName     = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(OldArg));
+            const auto NewName     = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(NewArg));
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return "RenameScriptSourceFile: asset not found";
@@ -411,10 +411,10 @@ namespace level_editor::commands
             const std::string OldB64 = xeditor::ReadString(File);
             const std::string NewB64 = xeditor::ReadString(File);
 
-            const auto LibraryGuid = e10::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = e10::commands::ParseAssetGuid(Asset);
-            const auto OldName     = e10::commands::DecodeAssetPath(OldB64);
-            const auto NewName     = e10::commands::DecodeAssetPath(NewB64);
+            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
+            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
+            const auto OldName     = xresource_editor::commands::DecodeAssetPath(OldB64);
+            const auto NewName     = xresource_editor::commands::DecodeAssetPath(NewB64);
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return;
@@ -448,12 +448,12 @@ namespace level_editor::commands
             auto ModuleArg = m_Parser.getOptionArgAs<std::string>(m_hModule, 0);
             if (std::holds_alternative<xerr>(ModuleArg)) return "AddProjectModuleReference: bad arguments";
 
-            const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
+            const auto ModuleGuid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
             auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             if (std::find(Refs.begin(), Refs.end(), ModuleGuid) != Refs.end()) return {};
 
             Refs.push_back(ModuleGuid);
-            if (auto Err = xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
+            if (auto Err = xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
                 return std::format("AddProjectModuleReference: {}", Err.getMessage());
             xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
             return {};
@@ -467,11 +467,11 @@ namespace level_editor::commands
 
         void Undo(xundo::undo_file& File) noexcept override
         {
-            const auto ModuleGuid = e10::commands::ParseAssetGuid(xeditor::ReadString(File));
+            const auto ModuleGuid = xresource_editor::commands::ParseAssetGuid(xeditor::ReadString(File));
             auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             if (auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid); It != Refs.end())
                 Refs.erase(It);
-            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+            xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
             xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
@@ -492,7 +492,7 @@ namespace level_editor::commands
             auto ModuleArg = m_Parser.getOptionArgAs<std::string>(m_hModule, 0);
             if (std::holds_alternative<xerr>(ModuleArg)) return "RemoveProjectModuleReference: bad arguments";
 
-            const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
+            const auto ModuleGuid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
             auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
             auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid);
             if (It == Refs.end()) return "RemoveProjectModuleReference: not a project module reference";
@@ -521,12 +521,12 @@ namespace level_editor::commands
             for (auto& D : PluginOwnedBefore) PluginOwnedGuids.insert(D.m_Guid.m_Value);
 
             for (auto& SceneGuid : State().m_OpenScenes)
-                for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(e10::g_LibMgr.m_ProjectPath, SceneGuid))
+                for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(xresource_editor::g_LibMgr.m_ProjectPath, SceneGuid))
                     if (PluginOwnedGuids.contains(Dep.m_Guid.m_Value))
                         RequiredFromOpenScenes.push_back(Dep);
 
             Refs.erase(It);
-            if (auto Err = xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
+            if (auto Err = xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
             {
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid); // restore in-memory state to match what's still on disk
                 return std::format("RemoveProjectModuleReference: {}", Err.getMessage());
@@ -569,7 +569,7 @@ namespace level_editor::commands
                             // regenerate the fragment so a LATER real reload rebuilds WITH the module
                             // again (not the trial DLL this command just discarded).
                             Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(OriginalIndex), ModuleGuid);
-                            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+                            xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
                             xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
 
                             std::string Names;
@@ -593,7 +593,7 @@ namespace level_editor::commands
             std::uint32_t Index = 0;
             if (!std::holds_alternative<xerr>(ModuleArg))
             {
-                const auto ModuleGuid = e10::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
+                const auto ModuleGuid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
                 auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
                 if (auto It = std::find(Refs.begin(), Refs.end(), ModuleGuid); It != Refs.end())
                     Index = static_cast<std::uint32_t>(std::distance(Refs.begin(), It));
@@ -604,7 +604,7 @@ namespace level_editor::commands
 
         void Undo(xundo::undo_file& File) noexcept override
         {
-            const auto ModuleGuid = e10::commands::ParseAssetGuid(xeditor::ReadString(File));
+            const auto ModuleGuid = xresource_editor::commands::ParseAssetGuid(xeditor::ReadString(File));
             std::uint32_t Index = 0; File.Read(Index);
 
             auto& Refs = xlevel::g_ScriptConfig.m_ModuleRefs;
@@ -613,7 +613,7 @@ namespace level_editor::commands
                 const auto Idx = std::min<std::size_t>(Index, Refs.size());
                 Refs.insert(Refs.begin() + static_cast<std::ptrdiff_t>(Idx), ModuleGuid);
             }
-            xlevel::SaveScriptConfig(e10::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
+            xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig);
             xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
         }
 
@@ -636,7 +636,7 @@ namespace level_editor::commands
             if (xlevel::g_ScriptConfig.m_ModuleRefs.empty()) return "(empty)";
             std::string Out;
             for (auto& G : xlevel::g_ScriptConfig.m_ModuleRefs)
-                Out += e10::commands::FormatAssetGuid(G) + "\n";
+                Out += xresource_editor::commands::FormatAssetGuid(G) + "\n";
             return Out;
         }
     };

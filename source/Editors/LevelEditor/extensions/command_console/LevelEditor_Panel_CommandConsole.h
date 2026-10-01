@@ -240,7 +240,7 @@ namespace level_editor
 
     // reassigning them. Direct user follow-up once told this: history now works like the Asset
 
-    // Browser's own path-history popup (E10_AssetBrowser.h's RenderPathHistoryPopup) - a small "History"
+    // Browser's own path-history popup (xresource_editor_asset_browser.h's RenderPathHistoryPopup) - a small "History"
 
     // button opens a click-to-recall popup (below) instead of relying on arrow keys at all; suggestions
 
@@ -798,9 +798,9 @@ namespace level_editor
 
             // submits, same as pressing Enter; History opens the click-to-recall popup (further below).
 
-            // Same history glyph as the Asset/Resource browsers' own history button (E10_AssetBrowser.h's
+            // Same history glyph as the Asset/Resource browsers' own history button (xresource_editor_asset_browser.h's
 
-            // "\xee\xa5\xb2", opened via assert_browser::RenderPathHistoryPopup) - direct user request to
+            // "\xee\xa5\xb2", opened via asset_browser::RenderPathHistoryPopup) - direct user request to
 
             // keep the icon language consistent across panels, no "History" text label (that panel has
 
@@ -822,7 +822,7 @@ namespace level_editor
 
             // Clear ("X") button - a REAL, separate widget drawn BEFORE the input, same structural
 
-            // pattern as the Asset/Resource browsers' own search box (E10_AssetBrowser.h's
+            // pattern as the Asset/Resource browsers' own search box (xresource_editor_asset_browser.h's
 
             // RenderSearchBar: its own "X" button is likewise a plain sequential widget to the LEFT of
 
@@ -982,7 +982,7 @@ namespace level_editor
 
             // History popup - direct user follow-up, matching the Asset Browser's own path-history
 
-            // popup (E10_AssetBrowser.h's RenderPathHistoryPopup): the History button opens a
+            // popup (xresource_editor_asset_browser.h's RenderPathHistoryPopup): the History button opens a
 
             // click-to-recall list instead of arrow-key browsing (which multiline can't support - see
 

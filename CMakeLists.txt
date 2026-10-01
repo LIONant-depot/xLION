@@ -301,12 +301,12 @@ set(FRAG_SHADER_SOURCES
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_frag.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_frag.glsl"
   "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_frag.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_frag.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_frag.glsl"
-  "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_frag.glsl"
-  "plugins/xskeleton.plugin/source/Editor/shaders/E23_ShadowGeneration_frag.glsl"
-  "plugins/xfont.plugin/source/Editor/shaders/E28_msdf_frag.glsl"
-  "plugins/xfont.plugin/source/Editor/shaders/E28_wire_frag.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_wireframe_frag.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_frag.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_wedge_fill_frag.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_shadow_generation_frag.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/xfont_msdf_frag.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/xfont_wire_frag.glsl"
   "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_frag.glsl"
   "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_frag.glsl"
   "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_cube_frag.glsl"
@@ -321,12 +321,12 @@ set(VERT_SHADER_SOURCES
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_vert.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinBasicShader_vert.glsl"
   "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_vert.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_vert.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_vert.glsl"
-  "plugins/xskeleton.plugin/source/Editor/shaders/E23_WedgeFill_vert.glsl"
-  "plugins/xskeleton.plugin/source/Editor/shaders/E23_ShadowGeneration_vert.glsl"
-  "plugins/xfont.plugin/source/Editor/shaders/E28_msdf_vert.glsl"
-  "plugins/xfont.plugin/source/Editor/shaders/E28_wire_vert.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_wireframe_vert.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_vert.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_wedge_fill_vert.glsl"
+  "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_shadow_generation_vert.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/xfont_msdf_vert.glsl"
+  "plugins/xfont.plugin/source/Editor/shaders/xfont_wire_vert.glsl"
   "source/Tools/Editor/shaders/xeditor_mesh_preview_full_vert.glsl"
   "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_2d_vert.glsl"
   "dependencies/xGPU/source/Examples/E10_TextureResourcePipeline/e10_3d_vert.glsl"
@@ -335,8 +335,8 @@ set(VERT_SHADER_SOURCES
 )
 
 set(GEOM_SHADER_SOURCES
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_WireFrame_geom.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/E21_DebugNormalRender_geom.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_wireframe_geom.glsl"
+  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_geom.glsl"
 )
 
 set(GENERATED_HEADERS)

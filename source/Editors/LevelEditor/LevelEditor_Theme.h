@@ -16,7 +16,7 @@
 //
 // Scoped to LevelEditor ONLY: this mutates the one global ImGuiStyle, but every xGPU example is its own
 // separate process invocation of xGPU_unit_test.exe (see LevelEditor_Example()'s own call site - this is
-// called once, right after xgpu::tools::imgui::CreateInstance()) - E10/E19-28 never call this
+// called once, right after xgpu::tools::imgui::CreateInstance()) - xresource_editor/E19-28 never call this
 // function, so their own look is byte-for-byte unaffected.
 namespace level_editor::theme
 {

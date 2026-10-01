@@ -1,14 +1,14 @@
 #pragma once
 
-#include "dependencies/xresource_pipeline_v2/source/editor/E10_InspectorPickers.h"
+#include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_inspector_pickers.h"
 
 // plugins/xmaterial.plugin's xmaterial_graph.cpp forward-declares RemapGUIDToString/
 // ResourceBrowserPopup at global scope, expecting whichever example is compiled alongside it to
 // supply a matching definition - this codebase's own convention (see E19/E20/E21/E24's near-
 // identical per-example copies, each with its own private g_AssetBrowserPopup) is normally
 // satisfied that way. LevelEditor doesn't compile any of those examples, so provide thin global-
-// scope forwards to the shared e10:: versions instead of duplicating their implementation - same
-// underlying e10::g_AssetBrowserPopup instance LevelEditor's own code already uses (LevelEditor_Kit.h),
+// scope forwards to the shared xresource_editor:: versions instead of duplicating their implementation - same
+// underlying xresource_editor::g_AssetBrowserPopup instance LevelEditor's own code already uses (LevelEditor_Kit.h),
 // so there's still only one popup, not a second disconnected one.
 //
 // Deliberately NOT `inline`: only ever defined here, in this one TU (LevelEditor_Main.cpp) - and
@@ -19,10 +19,10 @@
 // linker couldn't find them the first time around.
 void RemapGUIDToString(std::string& Name, const xresource::full_guid& PreFullGuid)
 {
-    e10::RemapGUIDToString(Name, PreFullGuid);
+    xresource_editor::RemapGUIDToString(Name, PreFullGuid);
 }
 
 void ResourceBrowserPopup(const void* pUID, bool& Open, xresource::full_guid& Output, std::span<const xresource::type_guid> Filters)
 {
-    e10::ResourceBrowserPopup(pUID, Open, Output, Filters);
+    xresource_editor::ResourceBrowserPopup(pUID, Open, Output, Filters);
 }

@@ -12,15 +12,15 @@ namespace level_editor
         switch (TabIndex)
         {
         case 0:
-            AsserBrowser.SetDevice(Device);
-            AsserBrowser.RenderEmbeddedTab(e10::g_LibMgr, xresource::g_Mgr, "Resources");
+            AssetBrowser.SetDevice(Device);
+            AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Resources");
             break;
         case 1:
-            AsserBrowser.SetDevice(Device);
-            AsserBrowser.RenderEmbeddedTab(e10::g_LibMgr, xresource::g_Mgr, "Assets");
+            AssetBrowser.SetDevice(Device);
+            AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Assets");
             break;
         case 2:
-            e10::RenderSourceControlPanel(EditorHost.m_Workspace);
+            xresource_editor::RenderSourceControlPanel(EditorHost.m_Workspace);
             break;
         case 3:
             {
@@ -36,12 +36,12 @@ namespace level_editor
             level_editor::DrawCommandConsolePanel(LevelEditorHistory, EditorHost.m_ConsoleLog, /*bEmbedded*/ true);
             break;
         case 6:
-            AsserBrowser.SetDevice(Device);
-            AsserBrowser.RenderEmbeddedTab(e10::g_LibMgr, xresource::g_Mgr, "Compilation");
+            AssetBrowser.SetDevice(Device);
+            AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Compilation");
             break;
         case 7:
-            AsserBrowser.SetDevice(Device);
-            AsserBrowser.RenderEmbeddedTab(e10::g_LibMgr, xresource::g_Mgr, "Project Settings");
+            AssetBrowser.SetDevice(Device);
+            AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Project Settings");
             break;
         default:
             break;

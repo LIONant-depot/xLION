@@ -35,7 +35,7 @@ namespace level_editor
         // per-entity missing-component-type case on its own; this surfaces it at the command's reply too.
         std::vector<xecs::scene::component_dependency> Missing;
         for (auto& SceneGuid : pSession->m_State.m_OpenScenes)
-            for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(e10::g_LibMgr.m_ProjectPath, SceneGuid))
+            for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(xresource_editor::g_LibMgr.m_ProjectPath, SceneGuid))
                 if (!xscene::IsComponentInLiveRegistry(Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
                     Missing.push_back(Dep);
 
@@ -124,11 +124,11 @@ namespace level_editor
         // Level/Scene asset routes into the Level session the same way a double-click does through
         // WireAssetBrowser's m_OnOpenAsset - see that file's own comment.
         {
-            AsserBrowser.SetDevice(Device);
-            AsserBrowser.EnsureInitialized(e10::g_LibMgr, xresource::g_Mgr);
+            AssetBrowser.SetDevice(Device);
+            AssetBrowser.EnsureInitialized(xresource_editor::g_LibMgr, xresource::g_Mgr);
 
-            e10::g_AssetBrowserPopup.SetDevice(Device);
-            e10::g_AssetBrowserPopup.RenderAsPopup(e10::g_LibMgr, xresource::g_Mgr);
+            xresource_editor::g_AssetBrowserPopup.SetDevice(Device);
+            xresource_editor::g_AssetBrowserPopup.RenderAsPopup(xresource_editor::g_LibMgr, xresource::g_Mgr);
 
             auto RouteAsset = [this](xresource::full_guid Guid) noexcept
             {
@@ -144,9 +144,9 @@ namespace level_editor
                 }
             };
 
-            if (auto NewAsset = AsserBrowser.getNewAsset(); NewAsset.empty() == false)
+            if (auto NewAsset = AssetBrowser.getNewAsset(); NewAsset.empty() == false)
                 RouteAsset(NewAsset);
-            else if (auto SelAsset = AsserBrowser.getSelectedAsset(); SelAsset.empty() == false)
+            else if (auto SelAsset = AssetBrowser.getSelectedAsset(); SelAsset.empty() == false)
                 RouteAsset(SelAsset);
         }
 

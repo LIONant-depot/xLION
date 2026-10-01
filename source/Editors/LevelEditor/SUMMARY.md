@@ -38,7 +38,7 @@ LevelEditor serves as both a practical editor for xECSV2 scenes and a reference 
   - Folder organization helpers (reparent, prune empty folders, delete)
   - Scene/Level lifecycle management (open/close, dependency cycle detection)
   - Entity reference tracking and cross-scene dependencies
-- **Design Pattern**: Header-only library following the same convention as `E10_AssetBrowser.h`
+- **Design Pattern**: Header-only library following the same convention as `xresource_editor_asset_browser.h`
 
 #### `LevelEditor_GamePlugin.h`
 - **Role**: Umbrella header for Game.dll hot-reload mechanics
@@ -136,7 +136,7 @@ Implements the undo/redo command infrastructure:
   - xGPU/xGPU/imgui setup and initialization
   - ECS `game_mgr::instance` creation and management
   - Plugin build/load system integration
-  - Asset browser integration (E10)
+  - Asset browser integration (xresource_editor)
   - Command/undo system initialization
   - Main frame loop with:
     - Automatic recompile detection (window focus regain, Play button)

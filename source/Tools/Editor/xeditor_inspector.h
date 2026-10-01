@@ -11,7 +11,7 @@
 namespace xeditor
 {
     // Same inspector chrome the Level Editor Entity Properties panel uses.
-    // Row tint off + tight Unity-like spacing - not E10's ColorVScalar readability multipliers.
+    // Row tint off + tight Unity-like spacing - not xresource_editor's ColorVScalar readability multipliers.
     inline void ApplyLevelEditorInspectorTheme(xproperty::inspector& Inspector) noexcept
     {
         Inspector.m_Settings.m_bRenderBackgroundDepth = false;
