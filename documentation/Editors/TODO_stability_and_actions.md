@@ -36,10 +36,17 @@ Everything in phases 1-5 of `actions_and_keybindings.md` is built (2026-10-02). 
   they go through a separate leaf branch (`xPropertyImGuiInspector.cpp`, "Atomic array"). The Keymap page therefore draws its own "Reset" in the
   append hook. Fixing it in the inspector would give every list-of-values the prefab-style marker.
 
-- **xcontainer `unordered_lockless_map`** (found 2026-10-02): reading it again from inside one of its own read callbacks deadlocks as soon as another thread is
-  queued to write it (a grow, or a new type); the map blocks new readers while a writer waits. Two places in `xresource_editor_asset_mgr.h` did that
-  (`LoadInfo`, "Create a new asset") and were fixed by adding the child links after the callback. **Audit the rest** of the asset manager for a
-  `FindAs...` inside a `FindAs...` callback on the same map, and consider a debug assert in the map when a thread takes a read lock it already holds.
+- **xcontainer `unordered_lockless_map`** (found and fixed 2026-10-02): reading a map again from inside one of its own read callbacks (a recursive walk, a
+  lookup of a child while holding the parent) is legitimate, but it deadlocked as soon as another thread was queued to write the map: the global lock stops
+  admitting readers while a writer waits, and the writer waits for this thread's own outer read. Fixed in the map: a thread remembers the maps whose read lock
+  it already holds (`details::read_holds`), a nested read just counts, and growing the map from inside a read of itself is left to the next call that is not
+  nested. Two call sites in `xresource_editor_asset_mgr.h` (and ListAssets, the Resources tree) were also restructured earlier; they are harmless now.
+  Still unsafe, and asserted in debug: needing the WHOLE map (resize / clear) while this thread is reading it.
+
+- **Lost windows** (found and fixed 2026-10-02): the xGPU ImGui backend registered ONE invented 10000x10000 "monitor" around the origin, so ImGui never kept a
+  window on a real display, and a modal ("Keep Play Mode Changes?") remembered at a position of another monitor layout opened in its own OS window out of
+  reach, with the input focus. Now the backend registers the real monitors (`UpdateMonitors`, refreshed every frame) and every modal popup has
+  `NoSavedSettings`. DPI scale is still 1.0 for every monitor.
 
 ## Naming (done 2026-10-01, and what is left)
 
