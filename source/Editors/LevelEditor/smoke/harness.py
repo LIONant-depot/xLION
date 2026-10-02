@@ -87,6 +87,20 @@ class CommandError(AssertionError):
     """An edit command answered with an error text instead of an empty success reply."""
 
 
+def quote(text: str) -> str:
+    """A value as the editor's command line wants it: in quotes, a quote as \\" and the backslashes in front of one doubled (the Windows command line rules)."""
+    out, backslashes = ['"'], 0
+    for ch in text:
+        if ch == "\\":
+            backslashes += 1
+        elif ch == '"':
+            out.append("\\" * (2 * backslashes + 1) + '"'); backslashes = 0
+        else:
+            out.append("\\" * backslashes + ch); backslashes = 0
+    out.append("\\" * (2 * backslashes) + '"')
+    return "".join(out)
+
+
 def b64(text: str) -> str:
     """Property paths and values travel as base64 of their TEXT form (not raw bytes)."""
     return base64.b64encode(text.encode()).decode()

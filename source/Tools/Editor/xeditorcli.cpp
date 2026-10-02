@@ -1,42 +1,61 @@
-// xeditorcli - generic CLI client for xeditor::ConsolePipeThreadMain, replacing the
-// per-editor-CLI pattern (NodeOSCLI.cpp) for editors built on the shared framework. One-shot
-// connect/send/read/exit, zero dependency on the rest of
-// xGPU, just Win32 + iostream.
+// xeditorcli - generic CLI client for xeditor::ConsolePipeThreadMain. One-shot connect / send / read / exit, zero dependency on the rest of xGPU, just Win32.
 //
-// Usage: xeditorcli "<command>" [--pipe \\.\pipe\Name]   (default pipe: \\.\pipe\xEditor_Console)
+// Usage:   xeditorcli <command line>
+//
+// Everything after the program name is sent to the editor exactly as it was typed - the raw command line, not argv: by the time main() runs the C runtime has already removed
+// quotes and processed backslashes, and a tool that rebuilds the command from argv can only guess what the person meant. The editor parses the line itself, with one set
+// of rules (Windows command line rules: "quotes" keep spaces, tabs and line breaks, a backslash only matters in front of a quote), so a command means the same typed here,
+// sent by a script, or run from the editor's own console:
+//
+//      xeditorcli LogViewSave -Name "my view" -Query "channel:game.* sev>=error"
+//      xeditorcli LogAttach -Path "C:\captures\crash 1.dmp" -Event 12
+//
+// The pipe is \\.\pipe\xEditor_Console, or the one in the XEDITOR_PIPE environment variable (the editor started with a pipe of its own, as the tests do).
 #include <windows.h>
 #include <iostream>
 #include <string>
-#include <vector>
 
 namespace
 {
     constexpr const char* kDefaultPipeName = "\\\\.\\pipe\\xEditor_Console";
+
+    // The command line without the program name: the first word, quoted or not, ends at the first space or tab outside quotes (CommandLineToArgvW's rule for argv[0]).
+    std::wstring ArgumentsOf(const wchar_t* pLine)
+    {
+        const wchar_t* p = pLine;
+        bool bQuoted = false;
+        while (*p && (bQuoted || (*p != L' ' && *p != L'\t')))
+        {
+            if (*p == L'"') bQuoted = !bQuoted;
+            ++p;
+        }
+        while (*p == L' ' || *p == L'\t') ++p;
+        std::wstring Rest = p;
+        while (!Rest.empty() && (Rest.back() == L' ' || Rest.back() == L'\t' || Rest.back() == L'\r' || Rest.back() == L'\n')) Rest.pop_back();
+        return Rest;
+    }
+
+    std::string Utf8(const std::wstring& Text)
+    {
+        if (Text.empty()) return {};
+        const int Size = WideCharToMultiByte(CP_UTF8, 0, Text.data(), static_cast<int>(Text.size()), nullptr, 0, nullptr, nullptr);
+        std::string Out(static_cast<std::size_t>(Size), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, Text.data(), static_cast<int>(Text.size()), Out.data(), Size, nullptr, nullptr);
+        return Out;
+    }
 }
 
-int main(int argc, char** argv)
+int main()
 {
-    if (argc < 2)
+    std::string Command = Utf8(ArgumentsOf(GetCommandLineW()));
+    if (Command.empty())
     {
-        std::cerr << "Usage: xeditorcli \"<command>\" [--pipe \\\\.\\pipe\\Name]\n";
+        std::cerr << "Usage: xeditorcli <command line>      (sent to the editor exactly as typed; XEDITOR_PIPE names another pipe)\n";
         return 1;
     }
 
     std::string PipeName = kDefaultPipeName;
-    std::vector<std::string> CommandWords;
-    for (int i = 1; i < argc; ++i)
-    {
-        if (std::string(argv[i]) == "--pipe" && i + 1 < argc) { PipeName = argv[++i]; continue; }
-        CommandWords.push_back(argv[i]);
-    }
-    if (CommandWords.empty())
-    {
-        std::cerr << "Usage: xeditorcli \"<command>\" [--pipe \\\\.\\pipe\\Name]\n";
-        return 1;
-    }
-
-    std::string Command = CommandWords[0];
-    for (std::size_t i = 1; i < CommandWords.size(); ++i) { Command += ' '; Command += CommandWords[i]; }
+    if (char Env[512]; GetEnvironmentVariableA("XEDITOR_PIPE", Env, sizeof(Env)) > 0 && GetEnvironmentVariableA("XEDITOR_PIPE", Env, sizeof(Env)) < sizeof(Env)) PipeName = Env;
 
     // A few short retries: the server side accepts one connection at a time and immediately loops
     // for the next one between requests, so ERROR_PIPE_BUSY just means "mid-turnaround."
@@ -54,6 +73,7 @@ int main(int argc, char** argv)
         return 2;
     }
 
+    // The editor reads up to the first line break that is not inside quotes, so this one ends the command (a quoted value may hold line breaks of its own).
     Command += '\n';
     DWORD BytesWritten = 0;
     WriteFile(hPipe, Command.data(), static_cast<DWORD>(Command.size()), &BytesWritten, nullptr);
