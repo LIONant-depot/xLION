@@ -3,7 +3,7 @@
 Play saves the open level first, so the `level` fixture (clean document) is required: the save then rewrites
 identical content, and the harness refuses to Play over unsaved edits.
 """
-from harness import b64
+from harness import quote
 
 
 def test_transport_cycle(editor, level):
@@ -39,8 +39,8 @@ def test_stop_asks_about_tweaks_and_keep_or_discard_is_honoured(editor, level):
     path = "Transform/Position/X"
     original = editor.property_value(level.name, scene, entity, path)
     type_guid = level.property_type(entity, path, scene)
-    tweak = (f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {b64(path)} -TypeGuid {type_guid}"
-             f" -Before {b64(original)} -After {b64('5.000000')}")
+    tweak = (f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {quote(path)} -TypeGuid {type_guid}"
+             f" -Before {quote(original)} -After {quote('5.000000')}")
 
     def play_and_tweak():
         editor.cmd("Play")

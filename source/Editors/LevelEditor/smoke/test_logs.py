@@ -3,7 +3,6 @@
 The build adapter is exercised with real MSVC/MSBuild output (LogSimulateBuild runs it through the same ring, adapter and store as a real
 Game.dll build), so the tests are fast and deterministic; one slow test checks the real build too.
 """
-import base64
 import os
 import re
 import secrets
@@ -11,11 +10,7 @@ import shutil
 
 import pytest
 
-from harness import REPO
-
-
-def b64(text: str) -> str:
-    return base64.b64encode(text.encode()).decode()
+from harness import REPO, quote
 
 
 def tail(reply: str) -> tuple[dict, list[dict]]:
@@ -59,7 +54,7 @@ def build_output(token: str) -> str:
 
 
 def simulate(editor, text: str, exit_code: int) -> int:
-    reply = run(editor, f"LogSimulateBuild -Text {b64(text)} -Exit {exit_code}")
+    reply = run(editor, f"LogSimulateBuild -Text {quote(text)} -Exit {exit_code}")
     m = re.search(r"operation (\d+)", reply)
     assert m, reply
     return int(m[1])
@@ -129,7 +124,7 @@ def test_search_matches_the_body_as_well_as_the_title(editor):
     token = secrets.token_hex(3)
     simulate(editor, build_output(token), 1)
     def query(text: str) -> list:
-        return tail(run(editor, f"LogEvents -Query64 {b64(text)}"))[1]       # base64: a phrase in quotes cannot go through the command line itself
+        return tail(run(editor, f"LogEvents -Query {quote(text)}"))[1]
     assert len(query(f'body:"see declaration" code:C2065 {token}_player')) == 1
     assert len(query(f'"see declaration" code:C2065 {token}_player')) == 1, "a plain search looks in the body too"
     assert query(f'body:undeclared code:C2065 {token}_player') == [], "a word that is only in the title is not in the body"
@@ -181,18 +176,18 @@ def test_a_successful_build_reports_success_and_its_warnings(editor):
 
 def test_a_query_sees_everything_pushed_before_it(editor):
     channel = f"test.barrier.{secrets.token_hex(3)}"
-    run(editor, f"LogEmit -Text {b64('x')} -Channel {channel} -Count 2000")
+    run(editor, f"LogEmit -Text {quote('x')} -Channel {channel} -Count 2000")
     values, _ = tail(run(editor, f'LogEvents -Query "channel:{channel}" -Limit 1'))
     assert values["Matched"] == "2000", "the ring is drained before the answer is built"
 
 
 def test_pages_do_not_skip_or_repeat_while_events_arrive(editor):
     channel = f"test.pages.{secrets.token_hex(3)}"
-    run(editor, f"LogEmit -Text {b64('a')} -Channel {channel} -Count 30")
+    run(editor, f"LogEmit -Text {quote('a')} -Channel {channel} -Count 30")
     values, first = tail(run(editor, f'LogEvents -Query "channel:{channel}" -Limit 12'))
     assert len(first) == 12 and values["Truncated"] == "true"
     cursor = values["Cursor"]
-    run(editor, f"LogEmit -Text {b64('later')} -Channel {channel} -Count 5")          # arrives between the pages
+    run(editor, f"LogEmit -Text {quote('later')} -Channel {channel} -Count 5")          # arrives between the pages
     seen = [r["Seq"] for r in first]
     while True:
         values, rows = tail(run(editor, f'LogEvents -Query "channel:{channel}" -Limit 12 -After {cursor}'))
@@ -205,7 +200,7 @@ def test_pages_do_not_skip_or_repeat_while_events_arrive(editor):
 
 def test_a_repeated_diagnostic_is_one_problem_with_a_count(editor):
     code = f"TEST.REPEAT.{secrets.token_hex(3).upper()}"
-    run(editor, f"LogEmit -Text {b64('the same failure')} -Severity error -Kind diagnostic -Code {code} -Count 1000")
+    run(editor, f"LogEmit -Text {quote('the same failure')} -Severity error -Kind diagnostic -Code {code} -Count 1000")
     values, problems = tail(run(editor, f"LogProblems -Query code:{code}"))
     assert len(problems) == 1 and problems[0]["Occurrences"] == "1000" and values["Occurrences"] == "1000"
     detail = run(editor, f"LogProblem -Id {problems[0]['Id']}")
@@ -215,7 +210,7 @@ def test_a_repeated_diagnostic_is_one_problem_with_a_count(editor):
 
 def test_a_log_event_is_not_a_problem(editor):
     code = f"TEST.LOGONLY.{secrets.token_hex(3).upper()}"
-    run(editor, f"LogEmit -Text {b64('just saying')} -Severity error -Kind log -Code {code}")
+    run(editor, f"LogEmit -Text {quote('just saying')} -Severity error -Kind log -Code {code}")
     _, problems = tail(run(editor, f"LogProblems -Query code:{code}"))
     assert problems == [], "only diagnostics become problems"
     _, events = tail(run(editor, f"LogEvents -Query code:{code}"))
@@ -225,7 +220,7 @@ def test_a_log_event_is_not_a_problem(editor):
 def test_a_multi_line_event_keeps_its_lines_and_is_one_row(editor):
     channel = f"test.lines.{secrets.token_hex(3)}"
     text = "first line is the title\n  second line, indented\nthird line"
-    run(editor, f"LogEmit -Text {b64(text)} -Channel {channel}")
+    run(editor, f"LogEmit -Text {quote(text)} -Channel {channel}")
     _, events = tail(run(editor, f'LogEvents -Query "channel:{channel}"'))
     assert len(events) == 1 and events[0]["Title"] == "first line is the title" and events[0]["Lines"] == "2"
     detail = run(editor, f"LogEvent -Id {events[0]['Seq']}")
@@ -235,7 +230,7 @@ def test_a_multi_line_event_keeps_its_lines_and_is_one_row(editor):
 def test_a_huge_body_is_cut_at_the_cap_and_says_so(editor):
     channel = f"test.cap.{secrets.token_hex(3)}"
     body = "\n".join(f"line {i:05d} " + "x" * 20 for i in range(4000))              # ~120 KB
-    run(editor, f"LogEmit -Text {b64('big' + chr(10) + body)} -Channel {channel}")
+    run(editor, f"LogEmit -Text {quote('big' + chr(10) + body)} -Channel {channel}")
     _, events = tail(run(editor, f'LogEvents -Query "channel:{channel}"'))
     detail = run(editor, f"LogEvent -Id {events[0]['Seq']}")
     assert "Summarized=true" in detail
@@ -289,7 +284,7 @@ def test_the_badge_counts_distinct_problems_that_still_need_attention(editor):
     token = secrets.token_hex(3)
     pid = emit_problem(editor, token)
     for _ in range(3):                                     # the same problem again: still one
-        run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity error -Channel test.p1 -Code P1.{token.upper()}")
+        run(editor, f"LogEmit -Text {quote('P1 problem ' + token)} -Kind diagnostic -Severity error -Channel test.p1 -Code P1.{token.upper()}")
     now = badge(editor)
     assert now["errors"] == before["errors"] + 1 and now["new"] == before["new"] + 1, "problems are counted, not occurrences"
     run(editor, f"LogAcknowledge -Id {pid}")
@@ -397,7 +392,7 @@ def passing_build(*units: str, warning: str = "") -> str:
 
 
 def sim_build(editor, text: str, exit_code: int, target: str, coverage: str = "subjects") -> int:
-    reply = run(editor, f"LogSimulateBuild -Text {b64(text)} -Exit {exit_code} -Target {target} -Coverage {coverage}")
+    reply = run(editor, f"LogSimulateBuild -Text {quote(text)} -Exit {exit_code} -Target {target} -Coverage {coverage}")
     return int(re.search(r"operation (\d+)", reply)[1])
 
 
@@ -531,7 +526,7 @@ def test_the_context_pack_is_deterministic_bounded_and_says_what_is_missing(edit
 def test_the_context_pack_of_a_problem_seen_many_times_says_it_summarized_the_rest(editor):
     token = secrets.token_hex(3)
     for _ in range(12):
-        run(editor, f"LogEmit -Text {b64('many ' + token)} -Kind diagnostic -Severity error -Channel test.ctx -Code CTX.{token.upper()}")
+        run(editor, f"LogEmit -Text {quote('many ' + token)} -Kind diagnostic -Severity error -Channel test.ctx -Code CTX.{token.upper()}")
     pid = tail(run(editor, f"LogProblems -Query code:CTX.{token.upper()}"))[1][0]["Id"]
     pack = run(editor, f"LogContext -Id {pid}")
     assert "observed 12" in pack and "summarized" in pack and "occurrences counted, not kept" in pack
@@ -549,7 +544,7 @@ def excluded_trace(editor) -> int:
 
 
 def emit_trace(editor, channel: str, n: int = 1):
-    run(editor, f"LogEmit -Text {b64('trace line')} -Severity trace -Channel {channel} -Count {n}")
+    run(editor, f"LogEmit -Text {quote('trace line')} -Severity trace -Channel {channel} -Count {n}")
 
 
 def test_trace_is_not_collected_by_default_and_the_status_counts_the_exclusion(editor):
@@ -656,9 +651,9 @@ def logs_dir(ed):
 
 def test_the_launch_is_written_to_disk_while_it_runs(editor):
     status = run(editor, "LogStatus")
-    assert re.search(r"Persistence: Directory=\S*Cache\\Logs Written=\d+", status), status
+    assert re.search(r"Persistence: Directory=\S*\\\.logs\\sessions Written=\d+", status), status        # the harness points the launches at its own folder (XLOG_LOGS_DIR)
     before = int(re.search(r"Written=(\d+)", status)[1])
-    run(editor, f"LogEmit -Text {b64('kept on disk')} -Channel test.disk -Count 5")
+    run(editor, f"LogEmit -Text {quote('kept on disk')} -Channel test.disk -Count 5")
     written(editor)
     assert int(re.search(r"Written=(\d+)", run(editor, "LogStatus"))[1]) >= before + 5
     assert (logs_dir(editor) / session_id(editor) / "stream.xlog").is_file()
@@ -669,7 +664,7 @@ def test_a_launch_that_ends_cleanly_is_read_back_as_clean_and_is_not_reported(ed
         token = secrets.token_hex(3)
         a = launch("clean_a")
         a_id = session_id(a)
-        run(a, f"LogEmit -Text {b64('clean ' + token)} -Channel test.clean -Count 4")
+        run(a, f"LogEmit -Text {quote('clean ' + token)} -Channel test.clean -Count 4")
         written(a)
         a.stop()                                            # asked to exit: the end marker is written
         b = launch("clean_b")
@@ -686,7 +681,7 @@ def test_a_launch_that_was_killed_is_classified_interrupted_and_its_tail_is_impo
         token = secrets.token_hex(3)
         a = launch("kill_a")
         a_id = session_id(a)
-        run(a, f"LogEmit -Text {b64('last words ' + token)} -Channel test.kill -Count 2")
+        run(a, f"LogEmit -Text {quote('last words ' + token)} -Channel test.kill -Count 2")
         sim_build(a, failing_build(token), 1, f"Game.dll|{token}")          # leaves an operation that ended; the writer has it all
         written(a)
         a.stop(graceful=False)                              # no end marker, no crash record
@@ -719,7 +714,7 @@ def test_a_stream_cut_in_the_middle_of_a_record_loses_only_that_record_and_says_
     with only_headless(editor):
         a = launch("torn_a")
         a_id = session_id(a)
-        run(a, f"LogEmit -Text {b64('before the cut')} -Channel test.torn -Count 6")
+        run(a, f"LogEmit -Text {quote('before the cut')} -Channel test.torn -Count 6")
         written(a)
         directory = logs_dir(a) / a_id / "stream.xlog"
         a.stop(graceful=False)
@@ -920,7 +915,7 @@ def test_f8_and_shift_f8_walk_the_problems_of_the_window_and_wrap(editor):
     channel = f"test.f8{secrets.token_hex(2)}"
     ids = []
     for i in range(3):
-        run(editor, f"LogEmit -Text {b64(f'f8 problem {i} {channel}')} -Kind diagnostic -Severity error -Channel {channel} -Code F8.{i}")
+        run(editor, f"LogEmit -Text {quote(f'f8 problem {i} {channel}')} -Kind diagnostic -Severity error -Channel {channel} -Code F8.{i}")
     _, rows = tail(run(editor, f"LogProblems -Query channel:{channel}"))
     mine = {r["Id"] for r in rows}
     assert len(mine) == 3
@@ -952,7 +947,7 @@ def test_f8_on_a_problem_with_a_source_that_is_not_there_does_not_upset_the_edit
 # ---- the xGPU adapter ----------------------------------------------------------------------------------------------------------------
 
 def gpu(level, line: str, severity: str = "error"):
-    assert "given" in level.cmd(f"SimulateGpuMessage -Text {b64(line)} -Severity {severity}")
+    assert "given" in level.cmd(f"SimulateGpuMessage -Text {quote(line)} -Severity {severity}")
 
 
 def test_a_validation_message_is_a_diagnostic_with_its_vuid_and_where_xgpu_said_it(level):
@@ -1029,7 +1024,7 @@ def test_a_real_game_build_is_an_operation_with_an_outcome(editor, level):
 
 def emit_problem(editor, token: str, severity: str = "error") -> str:
     """One diagnostic of its own (a problem from warning up); returns its id."""
-    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity {severity} -Channel test.p1 -Code P1.{token.upper()}")
+    run(editor, f"LogEmit -Text {quote('P1 problem ' + token)} -Kind diagnostic -Severity {severity} -Channel test.p1 -Code P1.{token.upper()}")
     _, rows = tail(run(editor, f"LogProblems -Query code:P1.{token.upper()}"))
     assert len(rows) == 1, rows
     return rows[0]["Id"]
@@ -1060,14 +1055,14 @@ def test_acknowledging_a_problem_moves_it_out_of_active_and_back_with_undo(edito
 def test_a_muted_problem_is_hidden_but_still_collected_and_countable(editor):
     token = secrets.token_hex(3)
     pid = emit_problem(editor, token, "warning")
-    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
+    run(editor, f"LogEmit -Text {quote('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
     editor.cmd(f"LogMute -Id {pid}")
     assert listed(editor, token, "All") == [], "muted: not listed"
     assert listed(editor, token, "Active") == []
     shown = listed(editor, token, "All", "-IncludeMuted true")
     assert [r["Id"] for r in shown] == [pid] and shown[0]["Suppression"] == "Muted"
     assert shown[0]["Occurrences"] == "2", "collection continues while it is muted"
-    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
+    run(editor, f"LogEmit -Text {quote('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
     assert listed(editor, token, "All", "-IncludeMuted true")[0]["Occurrences"] == "3"
     editor.cmd("Undo")                                     # the last thing the person decided was the mute
     assert [r["Id"] for r in listed(editor, token, "All")] == [pid]
@@ -1122,7 +1117,7 @@ def compile_output(token: str, error: str = "Unsupported texture format 'exr'") 
 
 
 def simulate_compile(editor, text: str, asset: int, exit_code: int, name: str = "Face") -> int:
-    reply = run(editor, f"LogSimulateCompile -Text {b64(text)} -Asset {asset} -Exit {exit_code} -Name {name}")
+    reply = run(editor, f"LogSimulateCompile -Text {quote(text)} -Asset {asset} -Exit {exit_code} -Name {name}")
     m = re.search(r"operation (\d+)", reply)
     assert m, reply
     return int(m[1])
@@ -1201,7 +1196,7 @@ def test_compiling_a_texture_in_its_editor_records_the_compile_and_feedback_open
         mine = []
         # a different value each time so the descriptor really changes and the compiler really runs (the project guard puts the file back afterwards)
         for quality in ("0.51", "0.52"):
-            editor.cmd(f"{name}\\SetProperty -Path {b64('Texture/Quality')} -Value {b64(quality)}")
+            editor.cmd(f"{name}\\SetProperty -Path {quote('Texture/Quality')} -Value {quote(quality)}")
             editor.cmd(f"{name}\\Compile")
             for _ in range(120):
                 time.sleep(0.5)
@@ -1333,7 +1328,7 @@ def test_clicking_back_and_forward_in_the_window_walks_the_views_and_never_crash
 def emit_events(editor, channel: str, count: int) -> list[int]:
     """Count events of their own, each with a body of two lines; returns their sequences."""
     for i in range(count):
-        run(editor, f"LogEmit -Text {b64(f'event {i} of {channel}' + chr(10) + f'  detail {i} a' + chr(10) + f'  detail {i} b')} -Channel {channel} -Code EV.{i}")
+        run(editor, f"LogEmit -Text {quote(f'event {i} of {channel}' + chr(10) + f'  detail {i} a' + chr(10) + f'  detail {i} b')} -Channel {channel} -Code EV.{i}")
     _, rows = tail(run(editor, f"LogEvents -Query channel:{channel} -Limit {count + 5}"))
     assert len(rows) == count, rows
     return [int(r["Seq"]) for r in rows]
@@ -1429,7 +1424,7 @@ def test_the_headless_host_answers_the_log_commands_too(editor):
         assert sorted(p["Code"] for p in problems) == ["C2039", "C2065", "LNK1120", "LNK2019"]
         values, _ = tail(run(headless, "LogStatus"))
         assert values["Backlog"] == "0"
-        run(headless, f"LogEmit -Text {b64('headless note')} -Channel test.headless -Count 3")
+        run(headless, f"LogEmit -Text {quote('headless note')} -Channel test.headless -Count 3")
         values, events = tail(run(headless, 'LogEvents -Query "channel:test.headless"'))
         assert values["Matched"] == "3"
     finally:
@@ -1460,7 +1455,7 @@ def test_a_time_range_selects_events_and_problems_seen_inside_it(editor):
     emit_events(editor, channel, 2)
     time.sleep(1.5)
     emit_events_again = secrets.token_hex(2)
-    run(editor, f"LogEmit -Text {b64('late ' + emit_events_again)} -Channel {channel} -Code LATE")
+    run(editor, f"LogEmit -Text {quote('late ' + emit_events_again)} -Channel {channel} -Code LATE")
     _, rows = tail(run(editor, f"LogEvents -Query channel:{channel} -Limit 20"))
     times = sorted(float(r["TimeMs"]) for r in rows)
     assert len(times) == 3 and times[2] - times[1] >= 1000, times
@@ -1513,7 +1508,7 @@ def test_a_saved_view_is_kept_listed_loaded_and_forgotten_and_each_edit_can_be_u
     query = f"channel:test.views{secrets.token_hex(2)} sev>=warning"
     assert "invalid query" in editor.cmd(f'LogViewSave -Name "{name}" -Query "sev>=nonsense"')
     assert "-Name is 1 to 48" in editor.cmd(f'LogViewSave -Name "{"n" * 49}" -Query x')
-    run(editor, f'LogViewSave -Name "{name}" -Query64 {b64(query)} -Page Events -State All -ShowMuted true')
+    run(editor, f'LogViewSave -Name "{name}" -Query {quote(query)} -Page Events -State All -ShowMuted true')
     values, rows = tail(run(editor, "LogViews"))
     mine = [r for r in rows if r["Name"] == name]
     assert len(mine) == 1 and mine[0]["Scope"] == "mine" and mine[0]["Page"] == "Events" and mine[0]["State"] == "All" and mine[0]["ShowMuted"] in ("1", "true") and mine[0]["Query"] == query, rows
@@ -1563,7 +1558,7 @@ def test_what_you_acknowledged_and_your_views_survive_a_new_launch_and_the_teams
             names = {r["Name"]: r["Scope"] for r in tail(run(second, "LogViews"))[1]}
             assert names.get(view) == "mine" and names.get(team) == "team", names
             # the problem has not appeared in this launch: its acknowledgement waits for it
-            run(second, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity error -Channel test.p1 -Code P1.{token.upper()}")
+            run(second, f"LogEmit -Text {quote('P1 problem ' + token)} -Kind diagnostic -Severity error -Channel test.p1 -Code P1.{token.upper()}")
             _, rows = tail(run(second, f"LogProblems -Query code:P1.{token.upper()} -State All"))
             assert len(rows) == 1 and rows[0]["Triage"] == "Acknowledged", rows
             _, active = tail(run(second, f"LogProblems -Query code:P1.{token.upper()} -State Active"))
@@ -1610,10 +1605,10 @@ def test_the_stdout_tap_turns_what_legacy_code_prints_into_events_and_still_prin
     assert "off" in run(editor, "LogStdout")
     assert "on" in run(editor, "LogStdout -On true")
     try:
-        run(editor, f"LogSimulateStdout -Text {b64('plain line ' + token)}")
-        run(editor, f"LogSimulateStdout -Text {b64('careful now ' + token)} -Stderr true")
-        run(editor, f"LogSimulateStdout -Text {b64('something failed with an error ' + token)}")
-        run(editor, f"LogSimulateStdout -Text {b64('warning: low ' + token)}")
+        run(editor, f"LogSimulateStdout -Text {quote('plain line ' + token)}")
+        run(editor, f"LogSimulateStdout -Text {quote('careful now ' + token)} -Stderr true")
+        run(editor, f"LogSimulateStdout -Text {quote('something failed with an error ' + token)}")
+        run(editor, f"LogSimulateStdout -Text {quote('warning: low ' + token)}")
         rows = []
         for _ in range(40):
             rows = tail(run(editor, f'LogEvents -Query "channel:process {token}"'))[1]
@@ -1629,7 +1624,7 @@ def test_the_stdout_tap_turns_what_legacy_code_prints_into_events_and_still_prin
         assert f"plain line {token}" in editor.log_text(), "what was read is still written where it was going"
     finally:
         assert "off" in run(editor, "LogStdout -On false")
-    run(editor, f"LogSimulateStdout -Text {b64('after ' + token)}")
+    run(editor, f"LogSimulateStdout -Text {quote('after ' + token)}")
     time.sleep(0.5)
     assert tail(run(editor, f'LogEvents -Query "channel:process after"'))[1] == [] or all(token not in r["Title"] for r in tail(run(editor, 'LogEvents -Query "channel:process after"'))[1]), "off means off"
     assert f"after {token}" in editor.log_text(), "and the console is back to what it was"
@@ -1637,11 +1632,11 @@ def test_the_stdout_tap_turns_what_legacy_code_prints_into_events_and_still_prin
 
 def test_a_file_can_be_attached_to_an_event_and_the_limits_hold(editor, tmp_path):
     token = secrets.token_hex(3)
-    run(editor, f"LogEmit -Text {b64('attach me ' + token)} -Channel test.attach")
+    run(editor, f"LogEmit -Text {quote('attach me ' + token)} -Channel test.attach")
     seq = int(tail(run(editor, f"LogEvents -Query channel:test.attach -Limit 1"))[1][0]["Seq"])
     sample = tmp_path / f"capture_{token}.txt"
     sample.write_text("response file " + token)
-    reply = run(editor, f'LogAttach -Path64 {b64(str(sample))} -Event {seq}')
+    reply = run(editor, f'LogAttach -Path {quote(str(sample))} -Event {seq}')
     assert "attached" in reply and "capture_" in reply
     values, rows = tail(run(editor, f"LogAttachments -Event {seq}"))
     assert values["Attachments"] == "1" and rows[0]["Name"] == sample.name and int(rows[0]["Bytes"]) == sample.stat().st_size
@@ -1649,14 +1644,14 @@ def test_a_file_can_be_attached_to_an_event_and_the_limits_hold(editor, tmp_path
     stored = Path(rows[0]["Path"])
     assert stored.read_text() == "response file " + token and stored.parent.name == "attachments", "kept inside the launch's folder"
     assert f"Attachment={sample.name}" in run(editor, f"LogEvent -Id {seq}"), "the event says it has one"
-    assert "no such event" in editor.cmd(f'LogAttach -Path64 {b64(str(sample))} -Event 999999999')
-    assert "does not exist" in editor.cmd(f'LogAttach -Path64 {b64(str(tmp_path / "missing.bin"))} -Event {seq}')
+    assert "no such event" in editor.cmd(f'LogAttach -Path {quote(str(sample))} -Event 999999999')
+    assert "does not exist" in editor.cmd(f'LogAttach -Path {quote(str(tmp_path / "missing.bin"))} -Event {seq}')
     big = tmp_path / "big.bin"
     big.write_bytes(b"x" * ((8 << 20) + 1))
-    assert "larger than 8 MB" in editor.cmd(f'LogAttach -Path64 {b64(str(big))} -Event {seq}')
-    assert "belongs to an event" in editor.cmd(f'LogAttach -Path64 {b64(str(sample))}')
+    assert "larger than 8 MB" in editor.cmd(f'LogAttach -Path {quote(str(big))} -Event {seq}')
+    assert "belongs to an event" in editor.cmd(f'LogAttach -Path {quote(str(sample))}')
     op = sim_build(editor, passing_build("a.cpp"), 0, f"Game.dll|{token}")
-    assert "attached" in run(editor, f'LogAttach -Path64 {b64(str(sample))} -Operation {op} -Name "op log.txt"')
+    assert "attached" in run(editor, f'LogAttach -Path {quote(str(sample))} -Operation {op} -Name "op log.txt"')
     assert tail(run(editor, f"LogAttachments -Operation {op}"))[0]["Attachments"] == "1"
 
 
@@ -1751,7 +1746,7 @@ def test_a_runtime_started_with_the_editors_pipe_sends_everything_it_says(editor
     try:
         runtime = Editor(DEFAULT_EXE.with_name("xLION_Headless.exe"), log_dir=SMOKE_DIR / ".logs" / f"headless_runtime_{token}", extra_env={"XLOG_REMOTE_PIPE": name})
         runtime.start()
-        run(runtime, f"LogEmit -Text {b64('said by the runtime ' + token)} -Channel game.remote -Code RT.{token.upper()}")
+        run(runtime, f"LogEmit -Text {quote('said by the runtime ' + token)} -Channel game.remote -Code RT.{token.upper()}")
         for _ in range(100):
             if token.encode() in bytes(received):
                 break

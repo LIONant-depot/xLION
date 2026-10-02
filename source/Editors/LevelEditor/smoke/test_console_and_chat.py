@@ -1,7 +1,6 @@
 """Console and chat: Say/GetLog round trip with various text."""
-import base64
 import pytest
-from harness import b64
+from harness import quote
 
 # Note: Say/GetLog are workspace commands, not session commands
 
@@ -10,7 +9,7 @@ def test_say_get_log_round_trip(level):
     """Say/GetLog round trip with simple text."""
     editor = level.ed
     
-    editor.cmd("Say -From Test -Text " + b64("Hello World"))
+    editor.cmd("Say -From Test -Text " + quote("Hello World"))
     log = editor.cmd("GetLog")
     assert "Hello World" in log
 
@@ -20,7 +19,7 @@ def test_say_unicode(level):
     editor = level.ed
     
     unicode_text = "Hello 世界 🌍"
-    editor.cmd("Say -From Test -Text " + b64(unicode_text))
+    editor.cmd("Say -From Test -Text " + quote(unicode_text))
     log = editor.cmd("GetLog")
     assert "Hello" in log
     assert "世界" in log
@@ -31,7 +30,7 @@ def test_say_emoji(level):
     """Say with emoji."""
     editor = level.ed
     
-    editor.cmd("Say -From Test -Text " + b64("Test 🎉 ✅ 🚀"))
+    editor.cmd("Say -From Test -Text " + quote("Test 🎉 ✅ 🚀"))
     log = editor.cmd("GetLog")
     assert "🎉" in log
     assert "✅" in log
@@ -43,7 +42,7 @@ def test_say_long_line(level):
     editor = level.ed
     
     long_text = "X" * 1000
-    editor.cmd("Say -From Test -Text " + b64(long_text))
+    editor.cmd("Say -From Test -Text " + quote(long_text))
     log = editor.cmd("GetLog")
     assert "XXXX" in log  # At least some of it
 
@@ -53,7 +52,7 @@ def test_say_with_newlines(level):
     editor = level.ed
     
     text_with_newlines = "Line 1\\nLine 2\\nLine 3"
-    editor.cmd("Say -From Test -Text " + b64(text_with_newlines))
+    editor.cmd("Say -From Test -Text " + quote(text_with_newlines))
     log = editor.cmd("GetLog")
     assert "Line 1" in log
     assert "Line 2" in log
@@ -65,7 +64,7 @@ def test_say_with_count(level):
     editor = level.ed
     
     for i in range(5):
-        editor.cmd("Say -From Test -Text " + b64(f"Message {i}"))
+        editor.cmd("Say -From Test -Text " + quote(f"Message {i}"))
     
     # Get only last 2
     log = editor.cmd("GetLog -Count 2")
@@ -83,9 +82,9 @@ def test_get_log_empty(level):
     # Should be empty or just system messages
 
 
-@pytest.mark.xfail(reason="Editor does not properly validate base64 input", strict=False)
-def test_bad_base64_refused(level):
-    """Bad base64 is refused."""
+def test_text_that_looks_like_an_encoding_is_just_text(level):
+    """Text is text: what once was refused as bad base64 is stored as it was written."""
     editor = level.ed
     
-    assert "base64" in editor.cmd("Say -From Test -Text ZZZ!!!invalid!!!")
+    editor.cmd("Say -From Test -Text " + quote("ZZZ!!!invalid!!!"))
+    assert "ZZZ!!!invalid!!!" in editor.cmd("GetLog")

@@ -94,8 +94,9 @@ identically regardless of mouse or CLI origin. New global `level_editor::g_pGame
 This is what made gap #1's own Play-state-gate verification possible without any synthetic mouse
 input at all.
 
-**Standing rule, confirmed 2026-09-09 (phase 5) - unrelated to the gaps above, kept from the prior
-version of this memory**: `xcmdline::parser::Parse(std::string_view)` is a naive space/tab tokenizer
-with zero quote-handling - any free-form string argument (a path, a name with spaces, arbitrary
-content) MUST be Base64-encoded, never passed raw. Every hex/numeric id field (`Scene`, `Id`,
+**Standing rule, confirmed 2026-09-09 (phase 5), SUPERSEDED 2026-10-03**: `xcmdline::parser::Parse(std::string_view)` used to be a naive space/tab tokenizer
+with zero quote-handling, so free-form text had to travel as base64. It now reads quotes like the Windows command line (see documentation/Editors/command_line.md): text is written
+in quotes, and only binary blobs are still base64. What follows is the history of the rule:
+any free-form string argument (a path, a name with spaces, arbitrary
+content) used to have to be Base64-encoded, never passed raw. Every hex/numeric id field (`Scene`, `Id`,
 `Component`, `TypeGuid`, `Folder`, `Parent`, `Prefab`) never needs this.

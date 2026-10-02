@@ -1,5 +1,5 @@
 """Undo/redo: multiple edits, branch discard, and dirty flag."""
-from harness import b64
+from harness import quote
 
 
 def test_multiple_undo_redo(level):

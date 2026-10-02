@@ -438,7 +438,6 @@ set(XLION_COMMON_SOURCES
   "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Panel_CommandConsole.h"
 
   "source/Tools/Editor/xeditor_camera.h"
-  "source/Tools/Editor/xeditor_console.h"
   "source/Tools/Editor/xeditor_descriptor_editor.h"
   "source/Tools/Editor/xeditor_dock_isolation.h"
   "source/Tools/Editor/xeditor_document_editor.h"

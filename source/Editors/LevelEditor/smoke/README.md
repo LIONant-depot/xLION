@@ -33,7 +33,7 @@ regression - it fails the same way before and after any source change. `test_res
 
 Command grammar: `<Command> ...` (workspace) or `<Session name>\<Command> ...` (`Main Level\CreateEntity ...`).
 **Edit** commands reply with an empty string on success; **query** commands reply with text; refusals are text.
-Property paths and values are **base64 of their text** (`b64("5.000000")`), not raw bytes.
+Property paths and values are **text in quotes** (`quote("5.000000")`; rules in documentation/Editors/command_line.md).
 
 ## Rules that keep the suite safe
 

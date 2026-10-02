@@ -10,6 +10,7 @@ test that caused it (the exit code is in the failure) instead of every test afte
 from __future__ import annotations
 
 import itertools
+import shutil
 import time
 import re
 from dataclasses import dataclass
@@ -139,6 +140,7 @@ def _problems_path(config) -> Path:
 
 
 def pytest_sessionstart(session):
+    shutil.rmtree(Path(__file__).parent / ".logs" / "sessions", ignore_errors=True)       # the launches of the tests start from nothing: retention keeps crashes over clean ones, so history from earlier runs would decide what a test finds
     session.config._logs_vulkan = {}                  # what the editor's Logs held of the validation layers' complaints, collected after each test (the editor may be restarted)
     p = _problems_path(session.config)
     session.config._problems_offset = p.stat().st_size if p.exists() else 0

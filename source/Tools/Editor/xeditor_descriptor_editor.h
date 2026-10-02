@@ -65,20 +65,18 @@ namespace xeditor
         {
             descriptor_document& m_Doc;
             set_property_cmd(xundo::system& System, descriptor_document& Doc) noexcept : command_base(System, "SetProperty", nullptr), m_Doc(Doc) { RegisterArguments(); }
-            const char* getCommandHelp() const noexcept override { return "Sets one descriptor property (undoable). Usage: SetProperty -Path base64 -Value base64 [-Before base64]. Lists resize with a path ending in []."; }
+            const char* getCommandHelp() const noexcept override { return "Sets one descriptor property (undoable). Usage: SetProperty -Path text -Value text [-Before text]. Lists resize with a path ending in []."; }
             void RegisterArguments() noexcept override
             {
-                m_hPath   = m_Parser.addOption("Path",   "Property path, base64",         true,  1);
-                m_hValue  = m_Parser.addOption("Value",  "New value, base64",             true,  1);
-                m_hBefore = m_Parser.addOption("Before", "Previous value, base64",        false, 1);
+                m_hPath   = m_Parser.addOption("Path",   "Property path",         true,  1);
+                m_hValue  = m_Parser.addOption("Value",  "New value",             true,  1);
+                m_hBefore = m_Parser.addOption("Before", "Previous value",        false, 1);
             }
             std::string Redo() noexcept override
             {
                 std::string Path, Value;
                 if (!GetArg(m_Parser, m_hPath, Path) || !GetArg(m_Parser, m_hValue, Value)) return "SetProperty: bad arguments";
                 if (!m_Doc.isLoaded()) return "SetProperty: nothing loaded";
-                Path  = Base64Decode(Path);
-                Value = Base64Decode(Value);
 
                 xproperty::any Current;
                 if (!FindProperty(m_Doc.target(), Path, Current)) return std::format("SetProperty: no property '{}'", Path);
@@ -92,7 +90,6 @@ namespace xeditor
                 std::uint32_t TypeGuid = 0;
                 if (GetArg(m_Parser, m_hPath, Path) && m_Doc.isLoaded())
                 {
-                    Path = Base64Decode(Path);
                     xproperty::any Current;
                     if (FindProperty(m_Doc.target(), Path, Current))
                     {
@@ -100,7 +97,7 @@ namespace xeditor
                         Before   = FormatValue(Current);
                     }
                 }
-                if (std::string Given; GetArg(m_Parser, m_hBefore, Given)) Before = Base64Decode(Given);
+                if (std::string Given; GetArg(m_Parser, m_hBefore, Given)) Before = Given;
                 File.Write(TypeGuid);
                 WriteString(File, Path);
                 WriteString(File, Before);
@@ -121,12 +118,12 @@ namespace xeditor
         {
             descriptor_document& m_Doc;
             snapshot_edit_cmd(xundo::system& System, descriptor_document& Doc) noexcept : command_base(System, "SnapshotEdit", nullptr), m_Doc(Doc) { RegisterArguments(); }
-            const char* getCommandHelp() const noexcept override { return "Applies an inspector snapshot edit (undoable). Usage: SnapshotEdit -Label base64 -Before base64 -After base64"; }
+            const char* getCommandHelp() const noexcept override { return "Applies an inspector snapshot edit (undoable). Usage: SnapshotEdit -Label text -Before text -After text"; }
             void RegisterArguments() noexcept override
             {
-                m_hLabel  = m_Parser.addOption("Label",  "What the edit did, base64",   true, 1);
-                m_hBefore = m_Parser.addOption("Before", "State before, base64",        true, 1);
-                m_hAfter  = m_Parser.addOption("After",  "State after, base64",         true, 1);
+                m_hLabel  = m_Parser.addOption("Label",  "What the edit did",   true, 1);
+                m_hBefore = m_Parser.addOption("Before", "State before",        true, 1);
+                m_hAfter  = m_Parser.addOption("After",  "State after",         true, 1);
             }
             void Apply(const std::string& Snapshot) noexcept
             {
@@ -139,14 +136,14 @@ namespace xeditor
                 std::string After;
                 if (!GetArg(m_Parser, m_hAfter, After)) return "SnapshotEdit: bad arguments";
                 if (!m_Doc.isLoaded()) return "SnapshotEdit: nothing loaded";
-                Apply(Base64Decode(After));
+                Apply(After);
                 return {};
             }
             void BackupCurrenState(xundo::undo_file& File) noexcept override
             {
                 std::string Before;
                 GetArg(m_Parser, m_hBefore, Before);
-                WriteString(File, Base64Decode(Before));
+                WriteString(File, Before);
             }
             void Undo(xundo::undo_file& File) noexcept override
             {
@@ -168,7 +165,7 @@ namespace xeditor
         {
             descriptor_document& m_Doc;
             list_op_cmd(xundo::system& System, descriptor_document& Doc) noexcept : command_base(System, "ListOp", nullptr), m_Doc(Doc) { RegisterArguments(); }
-            const char* getCommandHelp() const noexcept override { return "Inserts, deletes or moves an element of a 1D array property (undoable; ordinal keys only). Usage: ListOp -Path base64 -Op Insert|Delete|Move -Index n [-ToIndex n]"; }
+            const char* getCommandHelp() const noexcept override { return "Inserts, deletes or moves an element of a 1D array property (undoable; ordinal keys only). Usage: ListOp -Path text -Op Insert|Delete|Move -Index n [-ToIndex n]"; }
             void RegisterArguments() noexcept override
             {
                 m_hPath  = m_Parser.addOption("Path",    "Array property path, base64 (no trailing [])",             true,  1);
@@ -245,7 +242,6 @@ namespace xeditor
                 std::string Path, Op, IndexText, ToIndexText;
                 if (!GetArg(m_Parser, m_hPath, Path) || !GetArg(m_Parser, m_hOp, Op) || !GetArg(m_Parser, m_hIndex, IndexText)) return "ListOp: bad arguments";
                 if (!m_Doc.isLoaded()) return "ListOp: nothing loaded";
-                Path = Base64Decode(Path);
 
                 std::size_t Index = 0, ToIndex = 0;
                 if (std::from_chars(IndexText.data(), IndexText.data() + IndexText.size(), Index).ec != std::errc()) return "ListOp: Index takes a number";
@@ -313,16 +309,16 @@ namespace xeditor
         if (Cmd.m_NewValue.is<std::string>() && Cmd.m_Original.is<std::string>() && !Cmd.m_Name.empty() && Cmd.m_Name.find('/') == std::string::npos)
         {
             // An edit bracket (array insert / delete / reorder): both values are whole-object snapshots.
-            const std::string Line = std::format("SnapshotEdit -Label {} -Before {} -After {}", Base64Encode(Cmd.m_Name)
-                , Base64Encode(Cmd.m_Original.get<std::string>()), Base64Encode(Cmd.m_NewValue.get<std::string>()));
+            const std::string Line = std::format("SnapshotEdit -Label {} -Before {} -After {}", Quote(Cmd.m_Name)
+                , Quote(Cmd.m_Original.get<std::string>()), Quote(Cmd.m_NewValue.get<std::string>()));
             LogConsole(std::format("SnapshotEdit \"{}\"", Cmd.m_Name), log_source::User);
             if (auto Err = Undo.Execute(Line); !Err.empty()) NotifyToast(std::format("edit failed: {}", Err));
             return;
         }
 
         if (!Cmd.m_NewValue.m_pType || !Cmd.m_Original.m_pType || !(IsAtomicType(Cmd.m_NewValue.getTypeGuid()) || Cmd.m_NewValue.isEnum())) return;   // not something a command can carry
-        Run(Undo, std::format("SetProperty -Path {} -Value {} -Before {}", Base64Encode(Cmd.m_Name)
-            , Base64Encode(FormatValue(Cmd.m_NewValue)), Base64Encode(FormatValue(Cmd.m_Original))));
+        Run(Undo, std::format("SetProperty -Path {} -Value {} -Before {}", Quote(Cmd.m_Name)
+            , Quote(FormatValue(Cmd.m_NewValue)), Quote(FormatValue(Cmd.m_Original))));
     }
 
     //--------------------------------------------------------------------------------------------

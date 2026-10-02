@@ -1,5 +1,5 @@
 """Level sessions, entity create/delete, and their undo/redo. Everything here stays in memory: nothing is saved."""
-from harness import b64
+from harness import quote
 
 
 def test_open_level_creates_a_clean_session_and_close_removes_it(editor, level):
@@ -44,8 +44,8 @@ def test_property_edit_undo_redo(level):
 
     path = "Transform/Position/X"
     type_guid = level.property_type(entity, path)
-    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {b64(path)}"
-             f" -TypeGuid {type_guid} -Before {b64('0.000000')} -After {b64('5.000000')}")
+    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {quote(path)}"
+             f" -TypeGuid {type_guid} -Before {quote('0.000000')} -After {quote('5.000000')}")
     assert level.ed.property_value(level.name, level.scene, entity, path) == "5.000000"
 
     level.cmd("Undo")

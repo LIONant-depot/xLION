@@ -1,5 +1,5 @@
 """Entity create/delete, parent/child hierarchy, and undo/redo."""
-from harness import b64
+from harness import quote
 
 
 def test_create_entity_existing_id_refused(level):
@@ -11,7 +11,7 @@ def test_create_entity_existing_id_refused(level):
 def test_create_entity_into_folder(level):
     """Create entity into a folder."""
     folder_id = "F0000001"
-    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {b64('TestFolder')}")
+    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {quote('TestFolder')}")
     
     entity = f"7E57{next(iter([1])):04X}"
     level.ok(f"CreateEntity -Scene {level.scene} -Id {entity} -Folder {folder_id}")
@@ -73,7 +73,7 @@ def test_rename_entity_undo_redo_and_clear(level):
     """RenameEntity sets the display name, Undo/Redo follow it, -Clear 1 goes back to the id label."""
     entity = level.new_entity()
     before = level.entities()[entity]
-    level.ok(f"RenameEntity -Scene {level.scene} -Id {entity} -Name {b64('Big Floor')}")
+    level.ok(f"RenameEntity -Scene {level.scene} -Id {entity} -Name {quote('Big Floor')}")
     assert level.entities()[entity] == "Big Floor"
     assert "Undone" in level.cmd("Undo")
     assert level.entities()[entity] == before
@@ -81,4 +81,4 @@ def test_rename_entity_undo_redo_and_clear(level):
     assert level.entities()[entity] == "Big Floor"
     level.ok(f"RenameEntity -Scene {level.scene} -Id {entity} -Clear 1")
     assert level.entities()[entity] == before
-    assert "not found" in level.cmd(f"RenameEntity -Scene {level.scene} -Id DEADBEEF -Name {b64('x')}")
+    assert "not found" in level.cmd(f"RenameEntity -Scene {level.scene} -Id DEADBEEF -Name {quote('x')}")

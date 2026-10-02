@@ -1,6 +1,6 @@
 """Robustness: commands with missing/malformed arguments."""
 import pytest
-from harness import b64
+from harness import quote
 
 
 # Workspace commands from golden/commands.txt
@@ -64,13 +64,13 @@ def test_command_with_huge_value(level):
     assert reply.strip(), "Command with huge value should answer with a message"
 
 
-def test_command_with_bad_base64(level):
-    """Commands with bad base64 value."""
+def test_command_with_an_unknown_option(level):
+    """A command given an option it does not have answers with a message."""
     editor = level.ed
     
-    reply = editor.cmd(f"Say -Message ZZZ!!!invalid_base64!!!")
+    reply = editor.cmd(f"Say -Message ZZZ!!!invalid!!!")
     # Should answer with a message
-    assert reply.strip(), "Command with bad base64 should answer with a message"
+    assert reply.strip(), "Command with an unknown option should answer with a message"
 
 
 @pytest.mark.xfail(reason="known crash: SetProperty with unparseable -Before/-After", strict=False)
@@ -81,6 +81,6 @@ def test_set_property_with_unparseable_before_after(level):
     
     # This is known to crash - we mark it xfail
     editor.cmd(f"{level.name}\\SetProperty -Scene {level.scene} -Id {entity} -Component 0000000000000000"
-               f" -Path {b64('Transform/Position/X')} -TypeGuid 0000000000000000"
-               f" -Before {b64('not_a_number')} -After {b64('also_not_a_number')}")
+               f" -Path {quote('Transform/Position/X')} -TypeGuid 0000000000000000"
+               f" -Before {quote('not_a_number')} -After {quote('also_not_a_number')}")
     # If we get here, the crash didn't happen - the bug is fixed!

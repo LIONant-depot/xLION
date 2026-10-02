@@ -152,11 +152,11 @@ namespace level_editor::commands
     struct resource_editor_command_cmd : xlevel::commands::level_query_command
     {
         resource_editor_command_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ResourceEditorCommand", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Runs a command of an open resource editor, addressed by resource guid. Usage: ResourceEditorCommand -Asset assetguid -Cmd base64(\"SetProperty ...\")"; }
+        const char* getCommandHelp() const noexcept override { return "Runs a command of an open resource editor, addressed by resource guid. Usage: ResourceEditorCommand -Asset assetguid -Cmd \"SetProperty ...\""; }
         void RegisterArguments() noexcept override
         {
             m_hAsset = m_Parser.addOption("Asset", "Resource guid, 32 hex digits", true, 1);
-            m_hCmd   = m_Parser.addOption("Cmd",   "Inner command string, Base64",  true, 1);
+            m_hCmd   = m_Parser.addOption("Cmd",   "Inner command string",  true, 1);
         }
         std::string Query() noexcept override
         {
@@ -168,7 +168,7 @@ namespace level_editor::commands
             auto* pEditors = FindResourceEditors();
             auto* pEditor  = pEditors ? pEditors->Find(xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
             if (!pEditor) return "ResourceEditorCommand: no open editor for that resource";
-            return xeditor::host::current()->run_on(pEditor->getUndo(), xeditor::Base64Decode(std::get<std::string>(CmdArg)));
+            return xeditor::host::current()->run_on(pEditor->getUndo(), std::get<std::string>(CmdArg));
         }
         xcmdline::parser::handle m_hAsset, m_hCmd;
     };

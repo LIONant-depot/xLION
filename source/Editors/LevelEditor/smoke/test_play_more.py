@@ -1,7 +1,7 @@
 """More play tests: pause/resume, step refusal, keep/discards tweaks."""
 import time
 import pytest
-from harness import b64
+from harness import quote
 
 
 def test_pause_resume(level):
@@ -106,8 +106,8 @@ def test_stop_keep_true(level):
     editor.cmd("Play")
     editor.wait_play_state("Playing")
     
-    level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {b64(path)}"
-             f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('5.000000')}")
+    level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {quote(path)}"
+             f" -TypeGuid {type_guid} -Before {quote(original)} -After {quote('5.000000')}")
     assert editor.property_value(level.name, scene, entity, path) == "5.000000"
     
     editor.cmd("Stop -Keep true")
@@ -131,8 +131,8 @@ def test_stop_keep_false(level):
     editor.cmd("Play")
     editor.wait_play_state("Playing")
     
-    level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {b64(path)}"
-             f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('5.000000')}")
+    level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {quote(path)}"
+             f" -TypeGuid {type_guid} -Before {quote(original)} -After {quote('5.000000')}")
     assert editor.property_value(level.name, scene, entity, path) == "5.000000"
     
     editor.cmd("Stop -Keep false")
@@ -155,8 +155,8 @@ def test_transform_edit_during_play_survives_every_kind_of_frame(level, scale):
     try:
         editor.cmd("Play")
         editor.wait_play_state("Playing")
-        level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {b64(path)}"
-                 f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('5.000000')}")
+        level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {quote(path)}"
+                 f" -TypeGuid {type_guid} -Before {quote(original)} -After {quote('5.000000')}")
         for _ in range(20):                                    # a second of frames, most of them with no step
             assert editor.property_value(level.name, scene, entity, path) == "5.000000"
             time.sleep(0.05)

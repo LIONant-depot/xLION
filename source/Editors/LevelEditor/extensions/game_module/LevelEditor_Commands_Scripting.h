@@ -50,12 +50,12 @@ namespace level_editor::commands
     struct add_script_source_file_cmd : xlevel::commands::level_command
     {
         add_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "AddScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Creates a new, empty source file under a Scripting resource's own source_db folder (undoable). Usage: AddScriptSourceFile -Library hexguid -Asset assetguid -FileName base64"; }
+        const char* getCommandHelp() const noexcept override { return "Creates a new, empty source file under a Scripting resource's own source_db folder (undoable). Usage: AddScriptSourceFile -Library hexguid -Asset assetguid -FileName text"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\"), Base64",  true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
         }
 
         std::string Redo() noexcept override
@@ -126,12 +126,12 @@ namespace level_editor::commands
     struct remove_script_source_file_cmd : xlevel::commands::level_command
     {
         remove_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RemoveScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Deletes a file from a Scripting resource's own source_db folder (undoable - restores its exact content). Usage: RemoveScriptSourceFile -Library hexguid -Asset assetguid -FileName base64"; }
+        const char* getCommandHelp() const noexcept override { return "Deletes a file from a Scripting resource's own source_db folder (undoable - restores its exact content). Usage: RemoveScriptSourceFile -Library hexguid -Asset assetguid -FileName text"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\"), Base64",  true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
         }
 
         std::string Redo() noexcept override
@@ -262,13 +262,13 @@ namespace level_editor::commands
     struct set_script_source_file_content_cmd : xlevel::commands::level_command
     {
         set_script_source_file_content_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "SetScriptSourceFileContent", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Overwrites an existing source_db file's content (undoable - restores prior content). Usage: SetScriptSourceFileContent -Library hexguid -Asset assetguid -FileName base64 -Content base64"; }
+        const char* getCommandHelp() const noexcept override { return "Overwrites an existing source_db file's content (undoable - restores prior content). Usage: SetScriptSourceFileContent -Library hexguid -Asset assetguid -FileName text -Content text"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\"), Base64",  true, 1);
-            m_hContent  = m_Parser.addOption("Content",  "New file content, Base64",              true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
+            m_hContent  = m_Parser.addOption("Content",  "New file content",              true, 1);
         }
 
         std::string Redo() noexcept override
@@ -283,7 +283,7 @@ namespace level_editor::commands
             const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
             const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
             const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-            const auto Content     = xeditor::Base64Decode(std::get<std::string>(ContentArg));
+            const auto Content     = std::get<std::string>(ContentArg);
 
             const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
             if (SourceDb.empty()) return "SetScriptSourceFileContent: asset not found";
@@ -354,13 +354,13 @@ namespace level_editor::commands
     struct rename_script_source_file_cmd : xlevel::commands::level_command
     {
         rename_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RenameScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Renames a file under a Scripting resource's own source_db folder (undoable). Usage: RenameScriptSourceFile -Library hexguid -Asset assetguid -OldFileName base64 -NewFileName base64"; }
+        const char* getCommandHelp() const noexcept override { return "Renames a file under a Scripting resource's own source_db folder (undoable). Usage: RenameScriptSourceFile -Library hexguid -Asset assetguid -OldFileName text -NewFileName text"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary     = m_Parser.addOption("Library",     "Library instance guid, 16 hex digits",    true, 1);
             m_hAsset       = m_Parser.addOption("Asset",       "Scripting asset guid, 32 hex digits",     true, 1);
-            m_hOldFileName = m_Parser.addOption("OldFileName", "Current file name, Base64",                true, 1);
-            m_hNewFileName = m_Parser.addOption("NewFileName", "New file name, Base64",                    true, 1);
+            m_hOldFileName = m_Parser.addOption("OldFileName", "Current file name",                true, 1);
+            m_hNewFileName = m_Parser.addOption("NewFileName", "New file name",                    true, 1);
         }
 
         std::string Redo() noexcept override

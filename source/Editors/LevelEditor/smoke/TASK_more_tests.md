@@ -47,7 +47,7 @@ arguments. Each plugin has `documentation/editor.md` listing its commands. Facts
 
 - Edit commands answer `""` on success and a message on failure. Query commands answer text.
 - A command on an open level is `Main Level\<Command>` (`level.cmd(...)` does the prefix).
-- Guids and entity ids are hex; property paths and values are base64 of their text (`b64("5.000000")`).
+- Guids and entity ids are hex; property paths and values are text in quotes (`quote("5.000000")`).
 - `help` only lists workspace commands (`golden/commands.txt`). Session commands (CreateEntity, SetProperty, ...) are not in it.
 
 ## Tests to write

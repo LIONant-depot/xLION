@@ -1,6 +1,6 @@
 """AddComponent/RemoveComponent, undo/redo, and component list."""
 import pytest
-from harness import b64
+from harness import quote
 
 
 def test_add_component_undo_redo(level):
@@ -29,8 +29,8 @@ def test_remove_component_undo_redo(level):
     path = "Transform/Position/X"
     type_guid = level.property_type(entity, path)
     original = level.ed.property_value(level.name, level.scene, entity, path)
-    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {b64(path)}"
-             f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('5.000000')}")
+    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {quote(path)}"
+             f" -TypeGuid {type_guid} -Before {quote(original)} -After {quote('5.000000')}")
     assert level.ed.property_value(level.name, level.scene, entity, path) == "5.000000"
     
     # Remove the component
@@ -110,8 +110,8 @@ def test_share_component_property_edit_undo_redo(level):
     path = "PhysicsBodyProperties/AngularDamping"
     type_guid = level.property_type(entity, path)
     original = level.ed.property_value(level.name, level.scene, entity, path)
-    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {share} -Path {b64(path)}"
-             f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('0.250000')}")
+    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {share} -Path {quote(path)}"
+             f" -TypeGuid {type_guid} -Before {quote(original)} -After {quote('0.250000')}")
     assert level.ed.property_value(level.name, level.scene, entity, path) == "0.250000"
 
     level.cmd("Undo")

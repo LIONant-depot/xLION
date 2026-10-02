@@ -112,6 +112,12 @@ namespace level_editor
                 {
                     xlog::store::import_options Options;
                     Options.m_Logs = RepoRoot / L"example.lionprj" / L"Cache" / L"Logs";
+                    {
+                        char* pLogs = nullptr; std::size_t LogsLen = 0;
+                        if (_dupenv_s(&pLogs, &LogsLen, "XLOG_LOGS_DIR") == 0 && pLogs && *pLogs) Options.m_Logs = pLogs;       // the smoke tests keep their launches apart from the project's own history
+                        std::free(pLogs);
+                    }
+                    const std::filesystem::path LogsDir = Options.m_Logs;                // (Options is moved into the persistence below)
                     std::error_code Ec;
                     const std::filesystem::path ProblemsLog = std::filesystem::current_path(Ec) / "LevelEditor.problems.log";
                     Options.m_CrashRecord = [ProblemsLog](std::uint32_t Pid, std::uint64_t StartWallMs) { return xlog::store::FindCrashRecord(ProblemsLog, Pid, StartWallMs); };
@@ -137,8 +143,8 @@ namespace level_editor
                         if (EditorHost.m_RemoteLogs.Start(EditorHost.m_Logs, Pipe, Why))
                         {
                             std::error_code RemoteEc;
-                            std::filesystem::create_directories(RepoRoot / L"example.lionprj" / L"Cache" / L"Logs", RemoteEc);
-                            std::ofstream(RepoRoot / L"example.lionprj" / L"Cache" / L"Logs" / L"remote.txt", std::ios::trunc) << "\\\\.\\pipe\\" << Pipe << "\n";
+                            std::filesystem::create_directories(LogsDir, RemoteEc);
+                            std::ofstream(LogsDir / L"remote.txt", std::ios::trunc) << "\\\\.\\pipe\\" << Pipe << "\n";
                             EditorHost.m_Logs.SetRemoteStatus([pRemote = &EditorHost.m_RemoteLogs] { return std::format("Listening=true Pipe={} Connected={} Connections={} Records={} Rejected={}", pRemote->Pipe(), pRemote->Connected(), pRemote->Connections(), pRemote->Records(), pRemote->Rejected()); });
                         }
                         else xeditor::diagnostics::Log("startup: the Logs' remote pipe is not available: %s", Why.c_str());
@@ -273,6 +279,8 @@ namespace level_editor
     inline void app::Shutdown()
     {
         xeditor::diagnostics::Log("shutdown: frame loop ended");
+
+        xresource_editor::source_control::StopSourceControlScans();       // a scan worker must not outlive the statics it reads
 
         // Plugin systems live in the Level session's world but their DestroyFunction code is in the DLL -
         // dropping every open resource editor (Level's own session included) BEFORE FreeLibrary is what used to

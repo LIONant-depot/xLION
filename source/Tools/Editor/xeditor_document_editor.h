@@ -420,18 +420,16 @@ namespace xeditor
         T_SETTINGS& m_Settings;
 
         set_preview_cmd(xundo::system& System, T_SETTINGS& Settings) noexcept : query_command_base(System, "SetPreview", nullptr), m_Settings(Settings) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Sets one preview setting. Usage: SetPreview -Path base64 -Value base64 (paths as ListPreview shows them)"; }
+        const char* getCommandHelp() const noexcept override { return "Sets one preview setting. Usage: SetPreview -Path text -Value text (paths as ListPreview shows them)"; }
         void RegisterArguments() noexcept override
         {
-            m_hPath  = m_Parser.addOption("Path",  "Setting path, base64", true, 1);
-            m_hValue = m_Parser.addOption("Value", "New value, base64",    true, 1);
+            m_hPath  = m_Parser.addOption("Path",  "Setting path", true, 1);
+            m_hValue = m_Parser.addOption("Value", "New value",    true, 1);
         }
         std::string Query() noexcept override
         {
             std::string Path, Value;
             if (!cmd_util::GetArg(m_Parser, m_hPath, Path) || !cmd_util::GetArg(m_Parser, m_hValue, Value)) return "SetPreview: bad arguments";
-            Path  = Base64Decode(Path);
-            Value = Base64Decode(Value);
 
             const cmd_util::property_target Target{ xproperty::getObjectByType<T_SETTINGS>(), &m_Settings };
             xproperty::any Current;
@@ -466,18 +464,16 @@ namespace xeditor
     {
         preview_targets m_Targets;
         set_preview_multi_cmd(xundo::system& System, preview_targets Targets) noexcept : query_command_base(System, "SetPreview", nullptr), m_Targets(std::move(Targets)) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Sets one preview setting. Usage: SetPreview -Path base64 -Value base64 (paths as ListPreview shows them)"; }
+        const char* getCommandHelp() const noexcept override { return "Sets one preview setting. Usage: SetPreview -Path text -Value text (paths as ListPreview shows them)"; }
         void RegisterArguments() noexcept override
         {
-            m_hPath  = m_Parser.addOption("Path",  "Setting path, base64", true, 1);
-            m_hValue = m_Parser.addOption("Value", "New value, base64",    true, 1);
+            m_hPath  = m_Parser.addOption("Path",  "Setting path", true, 1);
+            m_hValue = m_Parser.addOption("Value", "New value",    true, 1);
         }
         std::string Query() noexcept override
         {
             std::string Path, Value;
             if (!cmd_util::GetArg(m_Parser, m_hPath, Path) || !cmd_util::GetArg(m_Parser, m_hValue, Value)) return "SetPreview: bad arguments";
-            Path  = Base64Decode(Path);
-            Value = Base64Decode(Value);
             for (auto& Target : m_Targets())
             {
                 xproperty::any Current;

@@ -269,7 +269,7 @@ text through the pipe.
 5's own pipe: "add the ability [to] personalize commands... so if there are multiple AIs you guys can
 have a conversation." New file `extensions/command_console/LevelEditor_Commands_Chat.h` - two `xundo::query_command_base`
 commands (not `command_base` - a chat message isn't an undo-able scene mutation, matches
-`query_command_base`'s own documented purpose): `Say -From name -Text base64` (appends to a NEW
+`query_command_base`'s own documented purpose): `Say -From name -Text "text"` (appends to a NEW
 `level_editor_command_context::m_ChatLog`, deliberately separate from the phase-5 `ConsoleLog` - a pure
 conversation transcript, not command-dispatch echo/result noise) and `GetLog [-Count n]` (default 10,
 returns the last N as `[From] Text` lines, oldest-of-the-shown-N first). In-memory only, current

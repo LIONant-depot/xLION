@@ -7,7 +7,7 @@ import re
 import secrets
 
 import pytest
-from harness import b64
+from harness import quote
 
 PREFAB_TYPE = "16F179B86A628F9D"
 FOLDER_TYPE = "C4D90C5F0CC43021"
@@ -53,8 +53,8 @@ def _set_position_x(level, entity: str, value: str) -> None:
     """The edit the Inspector makes: Transform/Position/X of the entity, from whatever it is now to value."""
     _, _, transform = level.find_with_component("Transform")
     m = re.search(r"Transform/Position/X = (\S+)\s+\(TypeGuid (\w+)\)", level.describe(entity))
-    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {b64('Transform/Position/X')}"
-             f" -TypeGuid {m[2]} -Before {b64(m[1])} -After {b64(value)}")
+    level.ok(f"SetProperty -Scene {level.scene} -Id {entity} -Component {transform} -Path {quote('Transform/Position/X')}"
+             f" -TypeGuid {m[2]} -Before {quote(m[1])} -After {quote(value)}")
 
 
 def _addable_component(level, entity: str, avoid=()):
@@ -93,8 +93,8 @@ def test_revert_override(level):
     assert _position_x(level, entity) == 999.0
 
     m = re.search(r"Transform/Position/X = (\S+)\s+\(TypeGuid (\w+)\)", level.describe(entity))
-    level.ok(f"RevertOverride -Scene {level.scene} -Id {entity} -Component {transform} -Path {b64('Transform/Position/X')}"
-             f" -TypeGuid {m[2]} -Before {b64(m[1])} -After {b64('%f' % base)}")
+    level.ok(f"RevertOverride -Scene {level.scene} -Id {entity} -Component {transform} -Path {quote('Transform/Position/X')}"
+             f" -TypeGuid {m[2]} -Before {quote(m[1])} -After {quote('%f' % base)}")
     assert _position_x(level, entity) == base
 
 

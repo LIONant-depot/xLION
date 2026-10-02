@@ -1,7 +1,7 @@
 """Scenes and levels: open/close, dependencies, and list formats."""
 import re
 import pytest
-from harness import b64
+from harness import quote
 
 
 def test_list_levels_format(level):
@@ -32,7 +32,7 @@ def test_list_entities_format(level):
 def test_list_folders_format(level):
     """ListFolders reply format: folder tree with entities."""
     folder_id = "F0000001"
-    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {b64('TestFolder')}")
+    level.ok(f"CreateFolder -Scene {level.scene} -Id {folder_id} -Parent 0 -Name {quote('TestFolder')}")
     
     folders = level.cmd(f"ListFolders -Scene {level.scene}")
     assert "TestFolder" in folders

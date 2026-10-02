@@ -10,11 +10,8 @@
 // matching query_command_base's own documented purpose ("debugging/introspection/AI-facing
 // questions... as opposed to command_base's mutations").
 //
-// -From is left as a PLAIN argument (not Base64-encoded) on purpose, unlike -Text: an agent name is
-// an identifier (like Scene/Id/Component elsewhere in this codebase), not free-form content, and is
-// never expected to contain a space - see documentation/Editors/LevelEditor/command_undo_known_gaps.md's own "standing rule" entry
-// for the full reasoning on why xcmdline::parser's naive space/tab tokenizer forces free text through
-// Base64 (-Text, here) but never single-token identifiers.
+// -From is a plain word (an agent name is an identifier, like Scene/Id/Component elsewhere in this codebase); -Text is free text, so it is written in quotes like any text
+// on the command line (Say -From Bot -Text "two words, and a \"quote\""): xcmdline::parser::Tokenize reads it back exactly as it was written.
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 
 namespace level_editor::commands
@@ -35,20 +32,19 @@ namespace level_editor::commands
     // Say - appends one message to the in-memory chat log (chat_log). Returns
     // an echo of exactly what got recorded ("[From] Text") rather than an empty success - unlike a
     // mutating Edit command's own silent-success convention, an AI sending a message benefits from
-    // seeing its own message land intact (the Base64 round trip is otherwise invisible from the
-    // caller's side).
+    // seeing its own message land intact.
     //================================================================================================
     struct say_query_cmd : xlevel::commands::level_query_command
     {
         say_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "Say", pDataBase) { RegisterArguments(); }
         const char* getCommandHelp() const noexcept override
         {
-            return "Leaves a message in the shared chat log for other AI/CLI clients to read via GetLog. Usage: Say -From name -Text base64";
+            return "Leaves a message in the shared chat log for other AI/CLI clients to read via GetLog. Usage: Say -From name -Text text";
         }
         void RegisterArguments() noexcept override
         {
             m_hFrom = m_Parser.addOption("From", "Who's speaking (a short name, e.g. Claude)", true, 1);
-            m_hText = m_Parser.addOption("Text", "The message, base64-encoded",                true, 1);
+            m_hText = m_Parser.addOption("Text", "The message",                true, 1);
         }
 
         std::string Query() noexcept override
@@ -59,7 +55,7 @@ namespace level_editor::commands
                 return "Say: bad arguments";
 
             const auto From = std::get<std::string>(FromArg);
-            const auto Text = xeditor::Base64Decode(std::get<std::string>(TextArg));
+            const auto Text = std::get<std::string>(TextArg);
 
             xeditor::host::current()->get<chat_log>().m_Messages.push_back({ From, Text });
             return std::format("[{}] {}", From, Text);

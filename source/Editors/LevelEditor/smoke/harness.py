@@ -12,7 +12,6 @@ Edit commands return an EMPTY string on success and an error text on failure; qu
 from __future__ import annotations
 
 import os
-import base64
 import ctypes
 import re
 import shutil
@@ -101,11 +100,6 @@ def quote(text: str) -> str:
     return "".join(out)
 
 
-def b64(text: str) -> str:
-    """Property paths and values travel as base64 of their TEXT form (not raw bytes)."""
-    return base64.b64encode(text.encode()).decode()
-
-
 @dataclass
 class Session:
     name: str
@@ -157,7 +151,7 @@ class Editor:
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
         self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
-                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
+                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
             while time.monotonic() < deadline:

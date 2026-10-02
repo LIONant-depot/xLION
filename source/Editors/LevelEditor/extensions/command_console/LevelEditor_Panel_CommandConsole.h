@@ -273,7 +273,7 @@ namespace level_editor
 
     {
 
-        static char                     CmdBuffer[2048] = ""; // bumped from 256 - a base64-encoded SetProperty value alone can run well past that, and the box now wraps/grows instead of horizontal-scrolling anyway
+        static char                     CmdBuffer[2048] = ""; // bumped from 256 - a SetProperty value alone can run well past that, and the box now wraps/grows instead of horizontal-scrolling anyway
 
         // LogEntries is owned by the caller (LevelEditor_Main.cpp), not a local static here - the
 
