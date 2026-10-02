@@ -316,7 +316,7 @@ namespace xeditor
             const std::string Line = std::format("SnapshotEdit -Label {} -Before {} -After {}", Base64Encode(Cmd.m_Name)
                 , Base64Encode(Cmd.m_Original.get<std::string>()), Base64Encode(Cmd.m_NewValue.get<std::string>()));
             LogConsole(std::format("SnapshotEdit \"{}\"", Cmd.m_Name), log_source::User);
-            if (auto Err = Undo.Execute(Line); !Err.empty()) NotifyError(std::format("edit failed: {}", Err));
+            if (auto Err = Undo.Execute(Line); !Err.empty()) NotifyToast(std::format("edit failed: {}", Err));
             return;
         }
 

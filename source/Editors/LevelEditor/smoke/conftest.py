@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from harness import DEFAULT_EXE, GOLDEN_DIR, Editor
+from harness import DEFAULT_EXE, GOLDEN_DIR, Editor, vulkan_messages_from_text
 
 
 def pytest_addoption(parser):
@@ -139,6 +139,7 @@ def _problems_path(config) -> Path:
 
 
 def pytest_sessionstart(session):
+    session.config._logs_vulkan = {}                  # what the editor's Logs held of the validation layers' complaints, collected after each test (the editor may be restarted)
     p = _problems_path(session.config)
     session.config._problems_offset = p.stat().st_size if p.exists() else 0
     for old in [*(Path(__file__).parent / ".logs").glob("editor_*.log"), *(Path(__file__).parent / ".logs").glob("trace_*.log")]:
@@ -146,6 +147,32 @@ def pytest_sessionstart(session):
             old.unlink()                  # only this run's output is reported
         except OSError:
             pass
+
+
+@pytest.fixture(autouse=True)
+def _vulkan_from_the_logs(request, editor):
+    """After every test: the Vulkan validation problems the editor's Logs hold (the harness as a client of the Logs, next to its reading of the text)."""
+    yield
+    if editor.alive():
+        try:
+            for row in editor.vulkan_problems():
+                request.config._logs_vulkan[(editor.proc.pid, row["Id"])] = row
+        except Exception:                             # a pipe that is gone with the editor: the text matching still has it
+            pass
+
+
+def _logs_vulkan(config):
+    errors, warnings = {}, {}
+    for row in getattr(config, "_logs_vulkan", {}).values():
+        target = errors if row["Severity"] in ("error", "fatal") else warnings
+        target[row["Title"].strip()] = target.get(row["Title"].strip(), 0) + int(row["Occurrences"])
+    return errors, warnings
+
+
+def _parity(text_side: dict, logs_side: dict) -> list[str]:
+    """Messages one source has and the other does not (compared on their first 80 characters)."""
+    def known(m, others): return any(m[:80] == o[:80] for o in others)
+    return [f"only in the text: {m[:100]}" for m in text_side if not known(m, logs_side)] + [f"only in the Logs: {m[:100]}" for m in logs_side if not known(m, text_side)]
 
 
 def _collect_problems(config):
@@ -157,22 +184,29 @@ def _collect_problems(config):
             new = [l for l in f.read().decode("utf-8", "replace").splitlines() if l.strip()]
     vk, vk_warnings = {}, {}
     for log in sorted((Path(__file__).parent / ".logs").glob("editor_*.log")):
-        text = log.read_text(errors="replace")
-        for m in re.finditer(r"ERROR VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})", text):
-            vk[m[1].strip()] = vk.get(m[1].strip(), 0) + 1
-        for m in re.finditer(r"WARNING VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})", text):
-            vk_warnings[m[1].strip()] = vk_warnings.get(m[1].strip(), 0) + 1
+        errors, warnings = vulkan_messages_from_text(log.read_text(errors="replace"))
+        for m, n in errors.items(): vk[m] = vk.get(m, 0) + n
+        for m, n in warnings.items(): vk_warnings[m] = vk_warnings.get(m, 0) + n
     asserts = [l for l in new if "CRT report" in l]
     return new, asserts, vk, vk_warnings
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     new, asserts, vk, vk_warnings = _collect_problems(config)
+    logs_err, logs_warn = _logs_vulkan(config)
+    differences = _parity(vk, logs_err) + _parity(vk_warnings, logs_warn)
     tr = terminalreporter
     tr.section("editor problem report")
-    if not new and not vk and not vk_warnings:
+    if differences:
+        for d in differences:
+            tr.write_line("Logs vs text parity: " + d, yellow=True)
+    if not new and not vk and not vk_warnings and not logs_err and not logs_warn:
         tr.write_line("no asserts, crashes or Vulkan errors were logged")
         return
+    for msg, n in sorted(logs_err.items(), key=lambda kv: -kv[1]):
+        if msg not in vk: tr.write_line(f"Vulkan validation error (from the Logs) x{n}: {msg[:160]}", red=True)
+    for msg, n in sorted(logs_warn.items(), key=lambda kv: -kv[1]):
+        if msg not in vk_warnings: tr.write_line(f"Vulkan validation warning (from the Logs) x{n}: {msg[:160]}", yellow=True)
     if asserts:
         tr.write_line(f"{len(asserts)} ASSERT/CRT report(s) - see {_problems_path(config)}", red=True)
     for l in new[:40]:
@@ -187,5 +221,6 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 def pytest_sessionfinish(session, exitstatus):
     _, asserts, vk, _ = _collect_problems(session.config)
-    if (asserts or vk) and session.exitstatus == 0:      # a Vulkan validation error is a bug too: the draw is wrong, whatever the tests said
+    logs_err, _ = _logs_vulkan(session.config)
+    if (asserts or vk or logs_err) and session.exitstatus == 0:      # a Vulkan validation error is a bug too: the draw is wrong, whatever the tests said
         session.exitstatus = 1

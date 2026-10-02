@@ -37,6 +37,7 @@ LogEvent
 LogEvents
 LogEventsAction
 LogForward
+LogLens
 LogMark
 LogMute
 LogOperations

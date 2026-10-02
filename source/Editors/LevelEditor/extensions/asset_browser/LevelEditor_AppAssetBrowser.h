@@ -42,7 +42,7 @@ namespace level_editor
                 if (xlevel::g_ScriptConfig.m_ModuleRefs != BeforeThisRender)
                 {
                     if (auto Err = xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
-                        xeditor::NotifyError(std::format("Failed to save Script.config.txt: {}", Err.getMessage()));
+                        xeditor::NotifyToast(std::format("Failed to save Script.config.txt: {}", Err.getMessage()));
                     if (xlevel::g_pGamePlugin) xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
                 }
                 s_BuiltWith = xlevel::g_ScriptConfig.m_ModuleRefs;

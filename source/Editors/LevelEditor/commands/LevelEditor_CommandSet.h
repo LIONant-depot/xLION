@@ -58,6 +58,7 @@ namespace level_editor
         xlevel::commands::game_module_status_cmd            CmdGameModuleStatus;
         xlevel::commands::input_state_cmd                   CmdInputState;
         xlevel::commands::raise_error_cmd                   CmdRaiseError;
+        xlevel::commands::simulate_gpu_message_cmd          CmdSimulateGpuMessage;
         xlevel::commands::modal_state_cmd                   CmdModalState;
         xlevel::commands::simulate_module_crash_cmd         CmdSimulateModuleCrash;
         xlevel::commands::simulate_snapshot_failure_cmd     CmdSimulateSnapshotFailure;
@@ -120,6 +121,7 @@ namespace level_editor
         , CmdGameModuleStatus(Level, pEditor)
         , CmdInputState(Level, pEditor)
         , CmdRaiseError(Level, pEditor)
+        , CmdSimulateGpuMessage(Level, pEditor)
         , CmdModalState(Level, pEditor)
         , CmdSimulateModuleCrash(Level, pEditor)
         , CmdSimulateSnapshotFailure(Level, pEditor)

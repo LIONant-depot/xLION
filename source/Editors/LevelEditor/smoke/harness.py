@@ -63,6 +63,22 @@ DISK_WRITERS = frozenset({
 SAVES_ON_START = frozenset({"Play", "Step"})
 
 
+# What the Vulkan validation layers' complaints look like in the editor's stdout, and the one function that reads them from text: the way the harness has always found them. The editor
+# also records each as a problem of the Logs (Editor.vulkan_problems); the report compares the two until the Logs are trusted alone.
+VK_ERROR_RE   = re.compile(r"ERROR VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})")
+VK_WARNING_RE = re.compile(r"WARNING VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})")
+
+
+def vulkan_messages_from_text(text: str) -> tuple[dict, dict]:
+    """({error message: count}, {warning message: count}) found in an editor's stdout."""
+    errors, warnings = {}, {}
+    for m in VK_ERROR_RE.finditer(text):
+        errors[m[1].strip()] = errors.get(m[1].strip(), 0) + 1
+    for m in VK_WARNING_RE.finditer(text):
+        warnings[m[1].strip()] = warnings.get(m[1].strip(), 0) + 1
+    return errors, warnings
+
+
 class EditorCrashed(RuntimeError):
     pass
 
@@ -229,6 +245,17 @@ class Editor:
         reply = self.cmd(line, **kw)
         assert reply, f"{line!r} was accepted but should have been refused"
         return reply
+
+    def vulkan_problems(self) -> list[dict]:
+        """What the editor's Logs hold of the Vulkan validation layers' complaints: [{Severity, Code, Occurrences, Title}], one per problem. The editor records them
+        (xeditor::LogGpuError / LogGpuWarning) as problems of producer vulkan.validation; the tests that make up a line use another producer, so they are not in this."""
+        reply = self.cmd('LogProblems -Query "producer:vulkan.validation" -Limit 500')
+        head, _, body = reply.partition("\n\n")
+        lines = [l for l in body.splitlines() if l]
+        if len(lines) < 2:
+            return []
+        names = lines[0].split("\t")
+        return [dict(zip(names, l.split("\t"))) for l in lines[1:]]
 
     def post_key(self, vk: int, hold: float = 0.15, sys: bool = False, while_down=None):
         """A real key press for the editor's window: WM_KEYDOWN / WM_KEYUP posted to it, so it goes through the Win32 key table, xGPU's

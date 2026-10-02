@@ -81,9 +81,9 @@ def test_action_problems_are_reported(editor):
 def test_rebinding_a_key_takes_effect_and_resets(editor):
     """BindKey writes YOUR keymap file (project_guard puts Project.config back); the new key reaches the action, the old one no longer does."""
     try:
-        assert editor.cmd("BindKey -Path Level/Redo -Keys F8", allow_disk=True) == "Level/Redo is bound to F8"
-        assert actions(editor)["Level/Redo"][0] == "F8"
-        assert "Level/Redo" in editor.cmd("PressKeys -Keys F8")
+        assert editor.cmd("BindKey -Path Level/Redo -Keys F9", allow_disk=True) == "Level/Redo is bound to F9"
+        assert actions(editor)["Level/Redo"][0] == "F9"
+        assert "Level/Redo" in editor.cmd("PressKeys -Keys F9")
         assert "Level/Redo" not in editor.cmd("PressKeys -Keys Ctrl+Y")
     finally:
         editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
@@ -165,14 +165,14 @@ def test_binding_a_key_another_action_has_is_reported(editor):
 def test_a_keymap_can_be_saved_and_used_as_a_base(editor):
     """My keys saved as a keymap in the project, which anyone's own file can then sit on (the keymap page's 'Based on' and 'Save my keys as it')."""
     try:
-        editor.cmd("BindKey -Path Level/Redo -Keys F8", allow_disk=True)
+        editor.cmd("BindKey -Path Level/Redo -Keys F9", allow_disk=True)
         assert editor.cmd("SaveKeymapAs -Name SmokeShared", allow_disk=True) == "Saved as SmokeShared"
         assert "no letters" in editor.cmd("SaveKeymapAs -Name bad/name", allow_disk=True) or "letters, digits" in editor.cmd("SaveKeymapAs -Name bad/name", allow_disk=True)
         editor.cmd("ResetKey -Path Level/Redo", allow_disk=True)
         assert actions(editor)["Level/Redo"][0] == "Ctrl+Y"
         assert "SmokeShared" in editor.cmd("ListKeymaps")
         assert editor.cmd("UseKeymap -Name SmokeShared", allow_disk=True) == "Your keys sit on SmokeShared"
-        assert actions(editor)["Level/Redo"][0] == "F8"                       # the preset's key reaches the action
+        assert actions(editor)["Level/Redo"][0] == "F9"                       # the preset's key reaches the action
         assert "based on: SmokeShared" in editor.cmd("ListKeymaps")
         assert "no keymap named" in editor.cmd("UseKeymap -Name Nope", allow_disk=True)
     finally:

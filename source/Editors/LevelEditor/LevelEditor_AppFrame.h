@@ -118,7 +118,7 @@ namespace level_editor
 
         // Keys pressed this frame go to the actions that were live in the last one; this frame's panels register theirs as they draw.
         Actions.NewFrame();
-        Actions.Global(HostActions, "Drawer", "Palette", "Keyboard", "Explain");
+        Actions.Global(HostActions, "Drawer", "Palette", "Keyboard", "Explain", "Logs");
 
         // Asset open drain (drawer works even with the Level peer tab closed): a newly created or just-selected
         // Level/Scene asset routes into the Level session the same way a double-click does through
@@ -156,7 +156,7 @@ namespace level_editor
 
         // The error popup belongs to the application, not to one editor: it is drawn here, once a frame, whichever editor is in front (drawn from
         // the Level editor it never showed while another editor had the screen), and it opens in the middle of the editor that had the focus.
-        EditorHost.m_Notifier.render();
+        EditorHost.render_notifications();
 
         // With no Level open there is still a (empty) Level tab, like at startup: its File menu reaches the Asset Browser to open one.
         {

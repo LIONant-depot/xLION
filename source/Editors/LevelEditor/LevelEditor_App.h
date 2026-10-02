@@ -52,6 +52,7 @@
 #include "source/Tools/Editor/xeditor_compile_logs.h"
 
 #include "dependencies/xeditor/include/xeditor/diagnostics.h"
+#include "dependencies/xeditor/include/xeditor/gpu_log.h"
 
 #include "ximgui_toolbar.h"
 
@@ -91,6 +92,8 @@ namespace level_editor
         void OpenPalette()  noexcept { m_pActions->OpenPalette(); }
         void ShowKeyboard() noexcept { m_pActions->OpenOverlay(); }
         void Explain()      noexcept { m_pActions->Explain(); }
+        void NextProblem()     noexcept { m_pHost->logs_step_problem(+1); }
+        void PreviousProblem() noexcept { m_pHost->logs_step_problem(-1); }
 
         XPROPERTY_DEF
         ( "Host", host_actions
@@ -98,6 +101,14 @@ namespace level_editor
             , obj_action<"Toggle", &host_actions::ToggleDrawer
                 , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Logs, Commands...) of the window you are in">
                 , ximgui::actions::member_keys<"Space"> >
+            >
+        , obj_scope<"Logs"
+            , obj_action<"NextProblem", &host_actions::NextProblem
+                , member_help<"Goes to the next problem of the Logs (worst first) and opens its source, with the drawer closed too">
+                , ximgui::actions::member_keys<"F8"> >
+            , obj_action<"PreviousProblem", &host_actions::PreviousProblem
+                , member_help<"Goes to the previous problem of the Logs and opens its source">
+                , ximgui::actions::member_keys<"Shift+F8"> >
             >
         , obj_scope<"Explain"
             , obj_action<"Pin", &host_actions::Explain

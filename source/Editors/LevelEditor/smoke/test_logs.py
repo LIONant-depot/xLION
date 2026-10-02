@@ -263,11 +263,282 @@ def test_commands_are_events_but_the_logs_own_commands_are_not(editor):
 
 def test_notify_error_is_an_event_and_a_problem(level):
     token = secrets.token_hex(3)
-    assert "raised" in level.cmd(f"RaiseError -Message failed_{token}_with_value_42")      # RaiseError takes one word: underscores for spaces
+    assert "raised" in level.cmd(f"RaiseError -Message failed_{token}_with_value_42 -Style badge")      # RaiseError takes one word: underscores for spaces
     _, events = tail(level.ed.cmd(f'LogEvents -Query "channel:editor.ui failed_{token}"'))
     assert len(events) == 1 and events[0]["Severity"] == "error"
     _, problems = tail(level.ed.cmd('LogProblems -Query "channel:editor.ui"'))
     assert problems and all(p["Heuristic"] == "true" for p in problems), "text without a code groups by its template: labelled heuristic"
+
+
+# ---- the badge and how loudly an error is told ---------------------------------------------------------------------------------------
+
+def badge(editor) -> dict:
+    m = re.search(r"Badge: errors=(\d+) warnings=(\d+) new=(\d+) critical=(\d+)", run(editor, "LogStatus"))
+    return dict(zip(("errors", "warnings", "new", "critical"), map(int, m.groups())))
+
+
+def modal_state(level) -> dict:
+    text = level.cmd("ModalState")
+    return {"open": "Open=true" in text, "toasts": int(re.search(r"Toasts=(\d+)", text)[1]), "raised": int(re.search(r"ToastsRaised=(\d+)", text)[1]),
+            "drawer": re.search(r"Drawer=(\S+)", text)[1]}
+
+
+def test_the_badge_counts_distinct_problems_that_still_need_attention(editor):
+    before = badge(editor)
+    token = secrets.token_hex(3)
+    pid = emit_problem(editor, token)
+    for _ in range(3):                                     # the same problem again: still one
+        run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity error -Channel test.p1 -Code P1.{token.upper()}")
+    now = badge(editor)
+    assert now["errors"] == before["errors"] + 1 and now["new"] == before["new"] + 1, "problems are counted, not occurrences"
+    run(editor, f"LogAcknowledge -Id {pid}")
+    assert badge(editor)["errors"] == before["errors"], "an acknowledged problem no longer needs attention"
+    editor.cmd("Undo")
+    assert badge(editor)["errors"] == before["errors"] + 1
+    editor.cmd("LogMark -Kind baseline")
+    assert badge(editor)["new"] == 0, "marked seen: nothing is new"
+
+    warn = emit_problem(editor, secrets.token_hex(3), "warning")
+    assert badge(editor)["warnings"] == before["warnings"] + 1
+    editor.cmd(f"LogMute -Id {warn}")
+    assert badge(editor)["warnings"] == before["warnings"], "a muted problem is not counted"
+
+
+def test_a_fatal_problem_is_counted_critical_whatever_was_done_to_it(editor):
+    before = badge(editor)
+    pid = emit_problem(editor, secrets.token_hex(3), "fatal")
+    assert badge(editor)["critical"] == before["critical"] + 1
+    run(editor, f"LogAcknowledge -Id {pid}")
+    now = badge(editor)
+    assert now["critical"] == before["critical"] + 1 and now["errors"] == before["errors"], "acknowledging stops it asking for attention, never hides that it is critical"
+
+
+def test_every_error_is_recorded_and_the_style_says_how_loudly_it_is_told(level):
+    editor = level.ed
+    token = secrets.token_hex(3)
+    first = modal_state(level)
+
+    assert "raised" in level.cmd(f"RaiseError -Message quiet_{token} -Style badge")
+    now = modal_state(level)
+    assert now["raised"] == first["raised"] and not now["open"], "Badge: recorded and counted, nothing on screen"
+
+    assert "raised" in level.cmd(f"RaiseError -Message loud_{token} -Style toast")
+    now = modal_state(level)
+    assert now["raised"] == first["raised"] + 1 and now["toasts"] >= 1 and not now["open"], "Toast: a line, not a modal: nothing blocks"
+
+    assert "raised" in level.cmd(f"RaiseError -Message modal_{token} -Style modal")
+    import time
+    for _ in range(20):
+        if modal_state(level)["open"]:
+            break
+        time.sleep(0.1)
+    assert modal_state(level)["open"], "Modal: the person must acknowledge"
+    editor.post_key(0x0D, hold=0.2)                        # Enter acknowledges
+    time.sleep(0.3)
+    assert not modal_state(level)["open"]
+
+    _, events = tail(run(editor, f'LogEvents -Query "channel:editor.ui _{token}"'))
+    assert len(events) == 3, "all three are in the Logs, whatever the style"
+    assert "-Style is modal, toast or badge" in level.cmd(f"RaiseError -Message x_{token} -Style shout")
+
+
+def test_a_toast_goes_away_by_itself_and_does_not_stack_a_repeat(level):
+    import time
+    token = secrets.token_hex(3)
+    level.cmd(f"RaiseError -Message same_{token} -Style toast")
+    level.cmd(f"RaiseError -Message same_{token} -Style toast")
+    start = modal_state(level)
+    assert start["toasts"] >= 1
+    for _ in range(140):                                   # eight seconds without anyone pointing at it
+        if modal_state(level)["toasts"] == 0:
+            break
+        time.sleep(0.1)
+    assert modal_state(level)["toasts"] == 0, "a toast expires"
+
+
+def test_the_badge_of_the_closed_drawer_opens_the_logs(level):
+    import time
+    editor = level.ed
+    if "open" in modal_state(level)["drawer"]:
+        editor.cmd("PressKeys -Keys Space")                # the drawer closed: that is where the badge is
+        time.sleep(0.5)
+    assert modal_state(level)["drawer"] == "closed"
+    emit_problem(editor, secrets.token_hex(3))
+
+    def badge_at():
+        for _ in range(40):
+            m = re.search(r"BadgeAt=(-?\d+),(-?\d+)", run(editor, "LogWindow"))
+            if float(m[1]) >= 0:
+                return float(m[1]), float(m[2])
+            time.sleep(0.1)
+        raise AssertionError("the badge was never drawn")
+
+    editor.click(*badge_at())
+    for _ in range(20):
+        if modal_state(level)["drawer"].startswith("open"):
+            break
+        time.sleep(0.1)
+    assert modal_state(level)["drawer"] == "open:4", "clicking the badge opens the drawer on the Logs tab"
+    time.sleep(0.5)
+    assert re.search(r"BadgeAt=-1,-1", run(editor, "LogWindow")), "while the Logs are in front the badge is not drawn"
+    editor.cmd("PressKeys -Keys Space")                    # leave the drawer as it was
+    forget_the_way_back(editor)
+
+
+# ---- the lenses: Source (who produced it) and About (what it concerns) -------------------------------------------------------------------
+
+def test_the_source_lens_is_origin_names_in_the_query_and_lists_who_has_spoken(editor):
+    token = secrets.token_hex(3)
+    build = simulate(editor, build_output(token), 1)                       # origin tool:msbuild
+    compile_op = simulate_compile(editor, f"[Error] lens compile error {token}", int(token, 16) + 11, 1, f"Lens{token}")      # origin tool:xresource.compiler
+    assert "tool:msbuild" in run(editor, "LogStatus") and "tool:xresource.compiler" in run(editor, "LogStatus"), "the lens lists the origins that have spoken"
+
+    def ops(query):
+        return {p["Code"] or p["Title"][:20] for p in tail(run(editor, f'LogProblems -Query "{query}"'))[1]}
+
+    only_build = ops(f"origin:msbuild op:{build}")
+    assert {"C2065", "LNK2019"} <= only_build
+    assert ops(f"origin:xresource.compiler op:{build}") == set(), "the build's problems are not the compiler's"
+    both = tail(run(editor, f'LogProblems -Query "origin:msbuild,xresource.compiler {token}"'))[1]
+    assert len(both) >= 1 and any("lens compile error" in p["Title"] for p in both), "several origins: any of them"
+    assert tail(run(editor, f'LogEvents -Query "origin:nobody {token}"'))[1] == []
+    assert "needs a value" in editor.cmd('LogProblems -Query "origin:"')
+
+
+def test_the_about_lens_is_the_asset_or_the_operation_a_row_concerns(editor):
+    token = secrets.token_hex(3)
+    asset = int(token, 16) + 20
+    other = int(token, 16) + 21
+    op = simulate_compile(editor, f"[Error] about error {token}", asset, 1, f"About{token}")
+    simulate_compile(editor, f"[Error] about error {token}", other, 1, f"Other{token}")
+
+    def titles(query, command="LogProblems"):
+        return [r["Title"] for r in tail(run(editor, f'{command} -Query "{query}"'))[1]]
+
+    by_id = titles(f"asset:{asset:016X} about")
+    assert len(by_id) == 1 and f"about error {token}" in by_id[0], "an asset by its id"
+    assert len(titles(f"asset:About{token}")) >= 1 and all(f"About{token}" not in t for t in titles(f"asset:Other{token} about")), "or by a part of its name"
+    assert len(titles(f"asset:{asset:016X}", "LogEvents")) == 1 and len(titles(f"asset:{other:016X}", "LogEvents")) == 1, "the events of a compile are about their own asset only"
+    assert titles(f"op:{op} about error") != [] and len(titles(f"op:{op}")) == 1
+
+
+def test_the_lens_command_edits_the_tokens_of_the_window_query(editor):
+    run(editor, "LogShow -Query sev>=error")
+    assert run(editor, "LogLens -Origin msbuild,pipe").strip() == "LogLens: Query=sev>=error origin:msbuild,pipe"
+    assert "Query=sev>=error origin:msbuild,pipe" in run(editor, "LogWindow")
+    assert run(editor, "LogLens -About op:7").strip().endswith("origin:msbuild,pipe op:7")
+    assert run(editor, "LogLens -About asset:Face").strip().endswith("origin:msbuild,pipe asset:Face"), "an asset replaces the operation: one About at a time"
+    assert run(editor, "LogLens -Origin all").strip() == "LogLens: Query=sev>=error asset:Face"
+    assert run(editor, "LogLens -About anything").strip() == "LogLens: Query=sev>=error"
+    assert "-About is anything" in editor.cmd("LogLens -About whatever")
+    forget_the_way_back(editor)
+
+
+def test_the_two_lens_chips_open_their_menus_without_upsetting_the_editor(editor):
+    import time
+    run(editor, "LogShow -Query sev>=info")
+    for chip in ("SourceChipAt", "AboutChipAt"):
+        for _ in range(40):
+            m = re.search(rf"{chip}=(-?\d+),(-?\d+)", run(editor, "LogWindow"))
+            if float(m[1]) >= 0:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError(f"{chip} was never drawn")
+        editor.click(float(m[1]), float(m[2]))
+        time.sleep(0.3)
+        editor.post_key(0x1B, hold=0.2)                    # Esc closes the menu
+        assert editor.alive()
+    forget_the_way_back(editor)
+
+
+# ---- F8: the next problem ---------------------------------------------------------------------------------------------------------------
+
+def selected_problem(editor) -> str:
+    return re.search(r"Selected=(\S+)", run(editor, "LogWindow"))[1]
+
+
+def test_f8_and_shift_f8_walk_the_problems_of_the_window_and_wrap(editor):
+    channel = f"test.f8{secrets.token_hex(2)}"
+    ids = []
+    for i in range(3):
+        run(editor, f"LogEmit -Text {b64(f'f8 problem {i} {channel}')} -Kind diagnostic -Severity error -Channel {channel} -Code F8.{i}")
+    _, rows = tail(run(editor, f"LogProblems -Query channel:{channel}"))
+    mine = {r["Id"] for r in rows}
+    assert len(mine) == 3
+    run(editor, f"LogShow -Query channel:{channel}")       # the window's list is these three (newest first inside the same severity)
+    seen = []
+    for _ in range(3):
+        assert "-> Host/Logs/NextProblem" in editor.cmd("PressKeys -Keys F8")
+        seen.append(selected_problem(editor))
+    assert set(seen) == mine and len(set(seen)) == 3, "F8 visits each problem once"
+    editor.cmd("PressKeys -Keys F8")
+    assert selected_problem(editor) == seen[0], "and wraps around"
+    editor.cmd("PressKeys -Keys Shift+F8")
+    assert selected_problem(editor) == seen[2], "Shift+F8 goes the other way, wrapping too"
+    editor.cmd("PressKeys -Keys Shift+F8")
+    assert selected_problem(editor) == seen[1]
+    forget_the_way_back(editor)
+
+
+def test_f8_on_a_problem_with_a_source_that_is_not_there_does_not_upset_the_editor(editor):
+    token = secrets.token_hex(3)
+    op = simulate(editor, build_output(token), 1)          # its sites are files of another machine
+    run(editor, f"LogShow -Query op:{op}")
+    for _ in range(5):
+        editor.cmd("PressKeys -Keys F8")
+    assert editor.alive() and selected_problem(editor) != "none"
+    forget_the_way_back(editor)
+
+
+# ---- the xGPU adapter ----------------------------------------------------------------------------------------------------------------
+
+def gpu(level, line: str, severity: str = "error"):
+    assert "given" in level.cmd(f"SimulateGpuMessage -Text {b64(line)} -Severity {severity}")
+
+
+def test_a_validation_message_is_a_diagnostic_with_its_vuid_and_where_xgpu_said_it(level):
+    token = secrets.token_hex(3)
+    gpu(level, f"D:\\xGPU\\vk.cpp(120/9) [vkCmdDraw] ERROR: Validation Error: [ VUID-vkCmdDraw-None-0{token[:4].upper()} ] Object 0: handle = 0x1, name = Mat | the descriptor is not bound")
+    _, problems = tail(level.ed.cmd(f"LogProblems -Query code:VUID-vkCmdDraw-None-0{token[:4].upper()}"))
+    assert len(problems) == 1
+    assert problems[0]["Severity"] == "error" and problems[0]["Heuristic"] == "false", "the layer gave a code: it is not a guess"
+    _, events = tail(level.ed.cmd(f"LogEvents -Query code:VUID-vkCmdDraw-None-0{token[:4].upper()}"))
+    assert events[0]["Channel"] == "gpu.vulkan" and events[0]["Origin"] == "gpu" and events[0]["Lines"] == "1"
+    reply = level.ed.cmd(f"LogEvent -Id {events[0]['Seq']}")
+    assert "| D:\\xGPU\\vk.cpp(120/9) [vkCmdDraw]" in reply, "where xGPU said it is the body of the event"
+    assert "Title=Validation Error:" in reply
+
+
+def test_a_message_xgpu_makes_itself_carries_the_vk_result_as_its_code(level):
+    gpu(level, "D:\\xGPU\\dev.cpp(10/5) [Create] ERROR VK-4 (VK_ERROR_DEVICE_LOST_X): the device was lost")
+    _, problems = tail(level.ed.cmd("LogProblems -Query code:VK_ERROR_DEVICE_LOST_X"))
+    assert len(problems) == 1 and problems[0]["Title"] == "the device was lost"
+
+
+def test_a_validation_warning_is_a_warning_problem_and_one_without_a_code_is_a_guess(level):
+    token = secrets.token_hex(3)
+    gpu(level, f"D:\\xGPU\\vk.cpp(7/1) [vkQueueSubmit] WARNING: performance warning {token} buffer is slow", "warning")
+    _, problems = tail(level.ed.cmd(f'LogProblems -Query "channel:gpu.vulkan {token}"'))
+    assert len(problems) == 1 and problems[0]["Severity"] == "warning" and problems[0]["Heuristic"] == "true"
+    assert not level.ed.cmd("ModalState").count("Open=true"), "a validation message is a bug of the program, never a modal"
+
+
+def test_the_harness_reads_a_vulkan_complaint_the_same_from_the_text_and_from_the_logs(level):
+    """The harness finds Vulkan validation errors in the editor's text and, as a client of the Logs, in the problems the xGPU adapter records. The two must read a line the
+    same way before one of them can replace the other: this gives both the same made-up line (the editor tags it so it is never mistaken for a real one)."""
+    from harness import vulkan_messages_from_text
+    token = secrets.token_hex(3)
+    letters = "".join(chr(ord("A") + int(c, 16)) for c in token)      # a VK result name is capital letters and underscores
+    line = f"D:\\xGPU\\vk.cpp(1/2) [Fn] ERROR VK3 (VK_ERROR_PARITY_{letters}): the message about {token}"
+    from_text, _ = vulkan_messages_from_text(line + "\n")
+    gpu(level, line)
+    _, problems = tail(level.ed.cmd(f'LogProblems -Query "producer:xlion.simulated code:VK_ERROR_PARITY_{letters}"'))
+    assert [p["Title"] for p in problems] == list(from_text), "the Logs' title is the text's message"
+    assert problems[0]["Severity"] == "error"
+    assert all(p["Code"] != "" for p in problems)
+    assert level.ed.vulkan_problems() is not None
+    assert not any(token in p["Title"] for p in level.ed.vulkan_problems()), "a made-up line is not among the real validation problems"
 
 
 # ---- the real build ----------------------------------------------------------------------------------------------------------

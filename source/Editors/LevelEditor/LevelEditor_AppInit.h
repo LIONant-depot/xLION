@@ -15,7 +15,7 @@ namespace level_editor
         if (!bHeadless)
         {
             xeditor::diagnostics::Log("startup: creating xgpu instance");
-            if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = true, .m_pLogErrorFunc = xeditor::NotifyError, .m_pLogWarning = xeditor::NotifyError }); Err)
+            if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = true, .m_pLogErrorFunc = xeditor::LogGpuError, .m_pLogWarning = xeditor::LogGpuWarning }); Err)
             {
                 xeditor::diagnostics::Log("startup: xgpu instance creation failed");
                 xeditor::diagnostics::RemoveCrtReportHook();
@@ -98,7 +98,7 @@ namespace level_editor
 
                 if (auto Err = xresource_editor::g_LibMgr.OpenProject(szFileName); Err)
                 {
-                    xeditor::NotifyError(Err.getMessage());
+                    xeditor::NotifyToast(Err.getMessage());
                     xeditor::diagnostics::Log("startup: opening project failed");
                     xeditor::diagnostics::RemoveCrtReportHook();
                     xeditor::diagnostics::RemoveTerminateHandler();
@@ -174,7 +174,7 @@ namespace level_editor
         EditorHost.m_IdleWork.m_OnRun.Register<&xresource_editor::source_control::ScanAllLibrariesWhenIdle>();
 
         if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
-            xeditor::NotifyError(std::format("LevelEditor: xundo Init failed: {}", Err));
+            xeditor::NotifyModal(std::format("LevelEditor: xundo Init failed: {}", Err));
 
         // A Level opens exactly like Texture does: ResourceEditors.Open(LevelGuid) creates its editor when it is asked for
         // (see OpenLevelEditor). Each new editor gets the commands addressed to it by name (Name\Command is resolved by
