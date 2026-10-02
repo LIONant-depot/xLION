@@ -25,6 +25,7 @@
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_workspace.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_play_session.h"
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_time.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_viewport_tools.h"
 

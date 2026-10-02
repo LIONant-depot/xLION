@@ -61,10 +61,14 @@ namespace level_editor
         xscene::commands::make_prefab_variant_cmd           CmdMakePrefabVariant;
         xeditor::camera_cmds::set_cmd                       CmdSetCamera;          // Name\SetCamera / GetCamera: the viewport's camera, placed the way the mouse would
         xeditor::camera_cmds::get_cmd                       CmdGetCamera;
+        xlevel::commands::set_time_scale_cmd                CmdSetTimeScale;       // Name\SetTimeScale / GetTimeScale: the speed slider next to Play
+        xlevel::commands::get_time_scale_cmd                CmdGetTimeScale;
 
         level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor, xeditor::camera_access Camera) noexcept
         : CmdSetCamera(Level, Camera)
         , CmdGetCamera(Level, Camera)
+        , CmdSetTimeScale(Level, pEditor)
+        , CmdGetTimeScale(Level, pEditor)
         , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)
