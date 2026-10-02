@@ -221,9 +221,11 @@ class Editor:
         assert reply, f"{line!r} was accepted but should have been refused"
         return reply
 
-    def post_key(self, vk: int, hold: float = 0.15) -> None:
+    def post_key(self, vk: int, hold: float = 0.15, sys: bool = False, while_down=None):
         """A real key press for the editor's window: WM_KEYDOWN / WM_KEYUP posted to it, so it goes through the Win32 key table, xGPU's
-        keyboard and ImGui like a keystroke would (PressKeys skips all of that). Needs no focus. vk is a Win32 virtual-key code (VK_F1 = 0x70)."""
+        keyboard and ImGui like a keystroke would (PressKeys skips all of that). Needs no focus. vk is a Win32 virtual-key code (VK_F1 = 0x70).
+        sys=True posts the SYS variants, which is how Windows delivers Alt (VK_MENU = 0x12) and every key pressed while Alt is held.
+        while_down, if given, is called once the key has been down for the hold time (before it is released); its result is returned."""
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
@@ -243,11 +245,13 @@ class Editor:
             raise AssertionError("post_key: the editor has no visible window")
         scan = user32.MapVirtualKeyW(vk, 0)
         for hwnd in found:
-            user32.PostMessageW(hwnd, 0x0100, vk, 1 | (scan << 16))                      # WM_KEYDOWN
+            user32.PostMessageW(hwnd, 0x0104 if sys else 0x0100, vk, 1 | (scan << 16))      # WM_KEYDOWN / WM_SYSKEYDOWN
         time.sleep(hold)                                                                    # a few frames, so ImGui sees it down
+        result = while_down() if while_down else None
         for hwnd in found:
-            user32.PostMessageW(hwnd, 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31)) # WM_KEYUP
+            user32.PostMessageW(hwnd, 0x0105 if sys else 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31)) # WM_KEYUP / WM_SYSKEYUP
         time.sleep(0.1)
+        return result
 
     def wait_for(self, line: str, pattern: str, *, timeout: float = 60.0, poll: float = 0.25) -> str:
         """Poll a query until its reply matches the regex."""

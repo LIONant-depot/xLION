@@ -54,6 +54,7 @@ namespace level_editor
         xlevel::commands::set_system_parent_cmd             CmdSetSystemParent;
         xlevel::commands::save_system_order_cmd             CmdSaveSystemOrder;
         xlevel::commands::game_module_status_cmd            CmdGameModuleStatus;
+        xlevel::commands::input_state_cmd                   CmdInputState;
         xlevel::commands::simulate_module_crash_cmd         CmdSimulateModuleCrash;
         xscene::commands::set_entity_reference_cmd          CmdSetEntityReference;
         xlevel::commands::edit_tool_query_cmd               CmdEditTool;
@@ -112,6 +113,7 @@ namespace level_editor
         , CmdSetSystemParent(Level, pEditor)
         , CmdSaveSystemOrder(Level, pEditor)
         , CmdGameModuleStatus(Level, pEditor)
+        , CmdInputState(Level, pEditor)
         , CmdSimulateModuleCrash(Level, pEditor)
         , CmdSetEntityReference(Level, pScene)
         , CmdEditTool(Level, pEditor)
