@@ -117,3 +117,19 @@ def test_remove_scene_dependency_with_refs_refused(level):
                 # This may or may not refuse depending on actual refs
                 # For now, just document the expected behavior
                 break
+
+
+def test_the_first_scene_of_a_level_is_expanded_in_the_level_tree_when_the_level_opens(level):
+    import time
+    line = ""
+    for _ in range(40):                                    # the tree is drawn by the frames that follow the open
+        reply = level.cmd("ListScenes -Tree true")
+        rows = [l for l in reply.splitlines() if "tree=" in l]
+        if rows and "tree=expanded" in rows[0]:
+            line = rows[0]
+            break
+        time.sleep(0.25)
+    assert "tree=expanded" in line, f"the first Scene starts expanded: {reply}"
+    assert all("tree=" in l for l in rows) and len(rows) >= 1
+    plain = level.cmd("ListScenes")
+    assert "tree=" not in plain, "without -Tree the list is what it always was"
