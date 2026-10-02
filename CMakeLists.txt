@@ -227,6 +227,7 @@ endif()
 
 FetchAndPopulate("https://github.com/LIONant-depot/toolbar.imgui.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/Actions.imgui.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xlog.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xeditor.git" "main")
 
 #

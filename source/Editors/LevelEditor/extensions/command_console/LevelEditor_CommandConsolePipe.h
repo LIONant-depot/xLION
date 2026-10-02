@@ -674,6 +674,7 @@ namespace level_editor
 
 
 
+        xeditor::RecordCommand(Cmd, xeditor::log_source::Pipe);
         LogEntries.push_back({ Cmd, xeditor::log_source::Pipe });
 
 

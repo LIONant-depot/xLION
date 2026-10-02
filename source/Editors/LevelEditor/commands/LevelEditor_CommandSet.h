@@ -2,6 +2,8 @@
 #define LevelEditor_COMMAND_SET_H
 #pragma once
 
+#include "dependencies/xlog/source/xlog_commands.h"
+
 // The editor's commands, in two sets. Constructing a command registers it with the xundo system it is given.
 //
 //  command_set        the workspace commands (assets, source control, compile, Play/Save/Close, ...), built once at
@@ -164,6 +166,7 @@ namespace level_editor
         xlevel::commands::step_query_cmd                    CmdStep;
         xlevel::commands::stop_query_cmd                    CmdStop;
         xlevel::commands::get_play_state_query_cmd          CmdGetPlayState;
+        xlog::commands::command_set                        CmdLogs;     // LogStatus, LogOperations, LogProblems, LogProblem, LogEvents, LogEvent, ...
         xresource_editor::commands::list_assets_query_cmd             CmdListAssets;
         xresource_editor::commands::describe_asset_query_cmd          CmdDescribeAsset;
         xresource_editor::commands::rename_asset_cmd                  CmdRenameAsset;
@@ -239,6 +242,7 @@ namespace level_editor
         , CmdStep(Workspace, pEditor)
         , CmdStop(Workspace, pEditor)
         , CmdGetPlayState(Workspace, pEditor)
+        , CmdLogs(Workspace)
         , CmdListAssets(Workspace, pEditor)
         , CmdDescribeAsset(Workspace, pEditor)
         , CmdRenameAsset(Workspace, pEditor)

@@ -29,6 +29,14 @@ ListLevels
 ListLibraries
 ListProjectModuleReferences
 ListScriptSourceFiles
+LogEmit
+LogEvent
+LogEvents
+LogOperations
+LogProblem
+LogProblems
+LogSimulateBuild
+LogStatus
 MoveAsset
 MoveAssetFile
 OpenLevel

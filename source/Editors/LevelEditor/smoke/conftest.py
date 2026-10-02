@@ -141,7 +141,7 @@ def _problems_path(config) -> Path:
 def pytest_sessionstart(session):
     p = _problems_path(session.config)
     session.config._problems_offset = p.stat().st_size if p.exists() else 0
-    for old in (Path(__file__).parent / ".logs").glob("editor_*.log"):
+    for old in [*(Path(__file__).parent / ".logs").glob("editor_*.log"), *(Path(__file__).parent / ".logs").glob("trace_*.log")]:
         try:
             old.unlink()                  # only this run's output is reported
         except OSError:

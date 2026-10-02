@@ -1133,6 +1133,7 @@ namespace level_editor
 
 
 
+                xeditor::RecordCommand(Cmd, xeditor::log_source::User);
                 LogEntries.push_back({ std::string(Cmd), xeditor::log_source::User });
 
                 if (std::string Result = ProcessConsoleCommand(Cmd, History, Routable, xeditor::host::current()); !Result.empty())

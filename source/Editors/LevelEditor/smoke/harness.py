@@ -15,6 +15,7 @@ import os
 import base64
 import ctypes
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -114,6 +115,14 @@ class Editor:
         else:
             raise RuntimeError("an editor is already running and owns the command pipe; close it before running the smoke tests (refusing to drive it)")
         self.log_dir.mkdir(exist_ok=True)
+        # The editor's own trace (LevelEditor.trace.log, with the crash handler's stack when it ran) is truncated by every launch: keep the one of
+        # the launch that is ending, so an editor that died (and is being restarted) leaves its evidence behind.
+        trace = self.exe.parent / "LevelEditor.trace.log"
+        if self.launches and trace.is_file():
+            try:
+                shutil.copy2(trace, self.log_dir / f"trace_{self.launches}.log")
+            except OSError:
+                pass
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
         self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
