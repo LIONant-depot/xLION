@@ -14,6 +14,7 @@
 // same kind of reversible content operation, not a real external round-trip).
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_assets.h"
 #include <fstream>
+#include "plugins/xscript_module.plugin/source/Module/xscript_module_ops.h"
 
 namespace level_editor::commands
 {
@@ -42,390 +43,305 @@ namespace level_editor::commands
     }
 
     //================================================================================================
-    // AddScriptSourceFile - creates an empty .cpp/.h file under a Scripting resource's own
-    // "source_db" folder (created on first use). Undo removes exactly that file - safe because
-    // Redo only ever creates an EMPTY file; a real edit to its content is a separate save/write
-    // path this command never touches.
+    // The files of a script module (documentation: plugins/xscript_module.plugin/documentation/editor.md). A module's descriptor
+    // (Descriptor.txt) lists its files and the disk holds them, and these commands change both together through
+    // xscript::module::ops - the layer the module editor's own commands use too. Paths are relative to the module's source_db and may
+    // have folders ("Systems/ball_system.h"). Every one is undoable; a change of the file LIST regenerates the game project.
     //================================================================================================
+    namespace script_module_cmd
+    {
+        struct target { std::uint64_t m_Library = 0; std::string m_Asset; };
+
+        inline bool ReadTarget(const xcmdline::parser& Parser, xcmdline::parser::handle hLibrary, xcmdline::parser::handle hAsset, target& Out) noexcept
+        {
+            auto LibraryArg = Parser.getOptionArgAs<std::string>(hLibrary, 0);
+            auto AssetArg   = Parser.getOptionArgAs<std::string>(hAsset, 0);
+            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg)) return false;
+            Out.m_Library = std::strtoull(std::get<std::string>(LibraryArg).c_str(), nullptr, 16);
+            Out.m_Asset   = std::get<std::string>(AssetArg);
+            return true;
+        }
+        inline std::string TextArg(const xcmdline::parser& Parser, xcmdline::parser::handle H) noexcept
+        {
+            auto A = Parser.getOptionArgAs<std::string>(H, 0);
+            return std::holds_alternative<xerr>(A) ? std::string() : std::get<std::string>(A);
+        }
+        inline void WriteTarget(xundo::undo_file& File, const target& T) noexcept { File.Write(T.m_Library); xeditor::WriteString(File, T.m_Asset); }
+        inline target ReadTarget(xundo::undo_file& File) noexcept { target T; File.Read(T.m_Library); T.m_Asset = xeditor::ReadString(File); return T; }
+
+        // The module's folder (the .desc folder), "" when the asset does not resolve.
+        inline std::filesystem::path FolderOf(const target& T) noexcept
+        {
+            const auto Library = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", T.m_Library));
+            return ResolveAssetDescFolder(Library, xresource_editor::commands::ParseAssetGuid(T.m_Asset));
+        }
+        inline void Regenerate() noexcept { if (xlevel::g_pGamePlugin) xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths); }
+
+        // Load, change, save: the shape of every command below. Fn gets the descriptor and the folder and returns an error text.
+        template<class T_FN>
+        inline std::string Edit(const target& T, bool bRegenerate, T_FN&& Fn) noexcept
+        {
+            const auto Folder = FolderOf(T);
+            if (Folder.empty()) return "asset not found";
+            auto Loaded = xscript::module::LoadOrMigrate(Folder, /*bWriteMigration*/ true);
+            if (!Loaded.m_Error.empty()) return "Descriptor.txt cannot be read: " + Loaded.m_Error;
+            if (auto Err = Fn(Loaded.m_Descriptor, Folder); !Err.empty()) return Err;
+            std::string WriteError;
+            if (!xscript::module::Write(Folder, Loaded.m_Descriptor, &WriteError)) return "Descriptor.txt could not be written: " + WriteError;
+            if (bRegenerate) Regenerate();
+            return {};
+        }
+    }
+
+    // AddScriptSourceFile: a new file (from a template) or a file that is already in source_db and not yet listed.
     struct add_script_source_file_cmd : xlevel::commands::level_command
     {
         add_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "AddScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Creates a new, empty source file under a Scripting resource's own source_db folder (undoable). Usage: AddScriptSourceFile -Library hexguid -Asset assetguid -FileName text"; }
+        const char* getCommandHelp() const noexcept override { return "Adds a file to a script module (undoable): created from a template, or an existing file of its source_db that was not listed. Usage: AddScriptSourceFile -Library hexguid -Asset assetguid -FileName \"Systems/Foo.h\" [-Template header|source|empty]"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "Path inside the module's source_db, e.g. \"Systems/Foo.h\"", true, 1);
+            m_hTemplate = m_Parser.addOption("Template", "header (#pragma once), source (includes its own header) or empty; default by the extension", false, 1);
         }
-
+        static xscript::module::file_template TemplateOf(const std::string& Name, const std::string& Path) noexcept
+        {
+            if (Name == "empty")  return xscript::module::file_template::Empty;
+            if (Name == "header") return xscript::module::file_template::Header;
+            if (Name == "source") return xscript::module::file_template::Source;
+            return xscript::module::IsPchHeader(Path) ? xscript::module::file_template::Header : xscript::module::KindOf(Path) == xscript::module::file_kind::Compiled ? xscript::module::file_template::Source : xscript::module::file_template::Empty;
+        }
         std::string Redo() noexcept override
         {
-            auto LibraryArg = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg))
-                return "AddScriptSourceFile: bad arguments";
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return "AddScriptSourceFile: asset not found";
-
-            std::error_code Ec;
-            std::filesystem::create_directories(SourceDb, Ec);
-            const auto FilePath = SourceDb + L"\\" + FileName;
-            if (std::filesystem::exists(FilePath, Ec)) return "AddScriptSourceFile: a file with that name already exists";
-
-            std::ofstream Out(FilePath, std::ios::binary);
-            if (!Out.is_open()) return "AddScriptSourceFile: failed to create the file";
-            Out.close();
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
-            return {};
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "AddScriptSourceFile: bad arguments";
+            const auto Path = script_module_cmd::TextArg(m_Parser, m_hFileName);
+            const auto Template = TemplateOf(script_module_cmd::TextArg(m_Parser, m_hTemplate), xscript::module::NormalizeRelative(Path));
+            auto Err = script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept
+            {
+                xscript::module::ops::added Added;
+                return xscript::module::ops::AddFile(D, Folder, Path, Template, Added);
+            });
+            return Err.empty() ? Err : "AddScriptSourceFile: " + Err;
         }
-
         void BackupCurrenState(xundo::undo_file& File) noexcept override
         {
-            auto LibraryArg  = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-
-            const std::uint64_t Library = std::holds_alternative<xerr>(LibraryArg) ? 0 : std::strtoull(std::get<std::string>(LibraryArg).c_str(), nullptr, 16);
-            File.Write(Library);
-            xeditor::WriteString(File, std::holds_alternative<xerr>(AssetArg) ? std::string(32, '0') : std::get<std::string>(AssetArg));
-            xeditor::WriteString(File, std::holds_alternative<xerr>(FileNameArg) ? std::string() : std::get<std::string>(FileNameArg));
+            script_module_cmd::target T; script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T);
+            script_module_cmd::WriteTarget(File, T);
+            const auto Path = xscript::module::NormalizeRelative(script_module_cmd::TextArg(m_Parser, m_hFileName));
+            std::error_code Ec;
+            const auto Folder = script_module_cmd::FolderOf(T);
+            const std::uint8_t bExisted = !Folder.empty() && !Path.empty() && std::filesystem::exists(xscript::module::Absolute(Folder, Path), Ec);   // a file that was already there is not deleted by the undo
+            File.Write(bExisted);
+            xeditor::WriteString(File, Path);
         }
-
         void Undo(xundo::undo_file& File) noexcept override
         {
-            std::uint64_t Library = 0; File.Read(Library);
-            const std::string Asset       = xeditor::ReadString(File);
-            const std::string FileNameB64 = xeditor::ReadString(File);
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return;
-            std::error_code Ec;
-            std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            const auto T = script_module_cmd::ReadTarget(File);
+            std::uint8_t bExisted = 0; File.Read(bExisted);
+            const auto Path = xeditor::ReadString(File);
+            script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept
+            {
+                return xscript::module::ops::UndoAdd(D, Folder, { Path, bExisted == 0 });
+            });
         }
-
-        xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
+        xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName, m_hTemplate;
     };
 
-    //================================================================================================
-    // RemoveScriptSourceFile - deletes a file from a Scripting resource's own source_db folder.
-    // Undo restores it with its EXACT prior content (snapshotted in BackupCurrenState) - unlike
-    // AddScriptSourceFile's own Undo, Redo here can be destroying real, non-empty edits, so the
-    // backup must carry the file's own bytes, not just its name.
-    //================================================================================================
+    // RemoveScriptSourceFile: the file leaves the module and the disk; Undo puts it back as it was (content and place in the list).
     struct remove_script_source_file_cmd : xlevel::commands::level_command
     {
         remove_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RemoveScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Deletes a file from a Scripting resource's own source_db folder (undoable - restores its exact content). Usage: RemoveScriptSourceFile -Library hexguid -Asset assetguid -FileName text"; }
+        const char* getCommandHelp() const noexcept override { return "Removes a file from a script module and deletes it (undoable - restores its exact content and place). Usage: RemoveScriptSourceFile -Library hexguid -Asset assetguid -FileName \"Systems/Foo.h\""; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "Path inside the module's source_db",   true, 1);
         }
-
         std::string Redo() noexcept override
         {
-            auto LibraryArg  = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg))
-                return "RemoveScriptSourceFile: bad arguments";
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return "RemoveScriptSourceFile: asset not found";
-
-            std::error_code Ec;
-            std::filesystem::remove(SourceDb + L"\\" + FileName, Ec);
-            if (Ec) return "RemoveScriptSourceFile: failed to delete the file";
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
-            return {};
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "RemoveScriptSourceFile: bad arguments";
+            const auto Path = script_module_cmd::TextArg(m_Parser, m_hFileName);
+            auto Err = script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept
+            {
+                xscript::module::ops::removed Removed;
+                return xscript::module::ops::RemoveFile(D, Folder, Path, Removed);
+            });
+            return Err.empty() ? Err : "RemoveScriptSourceFile: " + Err;
         }
-
         void BackupCurrenState(xundo::undo_file& File) noexcept override
         {
-            auto LibraryArg  = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-
-            const std::uint64_t Library = std::holds_alternative<xerr>(LibraryArg) ? 0 : std::strtoull(std::get<std::string>(LibraryArg).c_str(), nullptr, 16);
-            File.Write(Library);
-            xeditor::WriteString(File, std::holds_alternative<xerr>(AssetArg) ? std::string(32, '0') : std::get<std::string>(AssetArg));
-            xeditor::WriteString(File, std::holds_alternative<xerr>(FileNameArg) ? std::string() : std::get<std::string>(FileNameArg));
-
-            // The file's own exact content, so Undo can restore it byte-for-byte, not just re-create
-            // an empty placeholder the way AddScriptSourceFile's own Undo is allowed to.
-            std::string Content;
-            if (!std::holds_alternative<xerr>(LibraryArg) && !std::holds_alternative<xerr>(AssetArg) && !std::holds_alternative<xerr>(FileNameArg))
-            {
-                const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-                const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-                const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-                const auto SourceDb    = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-                if (!SourceDb.empty())
-                {
-                    std::ifstream In(SourceDb + L"\\" + FileName, std::ios::binary);
-                    if (In.is_open())
-                        Content.assign((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
-                }
-            }
-            xeditor::WriteString(File, Content);
+            script_module_cmd::target T; script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T);
+            script_module_cmd::WriteTarget(File, T);
+            xscript::module::ops::removed R;
+            if (const auto Folder = script_module_cmd::FolderOf(T); !Folder.empty())
+                xscript::module::ops::CaptureFile(xscript::module::LoadOrMigrate(Folder, false).m_Descriptor, Folder, script_module_cmd::TextArg(m_Parser, m_hFileName), R);
+            xeditor::WriteString(File, R.m_Path); xeditor::WriteString(File, R.m_Content);
+            const std::uint64_t Index = R.m_Index; File.Write(Index);
+            const std::uint8_t Flags = static_cast<std::uint8_t>((R.m_bExclude ? 1 : 0) | (R.m_bWasListed ? 2 : 0) | (R.m_bHadFile ? 4 : 0)); File.Write(Flags);
         }
-
         void Undo(xundo::undo_file& File) noexcept override
         {
-            std::uint64_t Library = 0; File.Read(Library);
-            const std::string Asset       = xeditor::ReadString(File);
-            const std::string FileNameB64 = xeditor::ReadString(File);
-            const std::string Content     = xeditor::ReadString(File);
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return;
-            std::error_code Ec;
-            std::filesystem::create_directories(SourceDb, Ec);
-            std::ofstream Out(SourceDb + L"\\" + FileName, std::ios::binary);
-            if (Out.is_open()) Out.write(Content.data(), static_cast<std::streamsize>(Content.size()));
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            const auto T = script_module_cmd::ReadTarget(File);
+            xscript::module::ops::removed R;
+            R.m_Path = xeditor::ReadString(File); R.m_Content = xeditor::ReadString(File);
+            std::uint64_t Index = 0; File.Read(Index); R.m_Index = static_cast<std::size_t>(Index);
+            std::uint8_t Flags = 0; File.Read(Flags); R.m_bExclude = Flags & 1; R.m_bWasListed = Flags & 2; R.m_bHadFile = Flags & 4;
+            script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept { return xscript::module::ops::RestoreFile(D, Folder, R); });
         }
-
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName;
     };
 
-    //================================================================================================
-    // ListScriptSourceFiles - every file name currently under a Scripting resource's own source_db
-    // folder, one per line. Instant, read-only - matches ListAssets' own "discovery command" shape.
-    //================================================================================================
+    // ListScriptSourceFiles: what the descriptor lists and what the folder holds, with how they agree.
     struct list_script_source_files_query_cmd : xlevel::commands::level_query_command
     {
         list_script_source_files_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ListScriptSourceFiles", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Lists every file under a Scripting resource's own source_db folder. Usage: ListScriptSourceFiles -Library hexguid -Asset assetguid"; }
+        const char* getCommandHelp() const noexcept override { return "Lists the files of a script module: path, kind, excluded and state (ok, missing: listed but not on disk, unlisted: on disk but not in the descriptor, so not built). Usage: ListScriptSourceFiles -Library hexguid -Asset assetguid"; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary = m_Parser.addOption("Library", "Library instance guid, 16 hex digits", true, 1);
             m_hAsset   = m_Parser.addOption("Asset",   "Scripting asset guid, 32 hex digits",  true, 1);
         }
-
         std::string Query() noexcept override
         {
-            auto LibraryArg = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg   = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg))
-                return "ListScriptSourceFiles: bad arguments";
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return "ListScriptSourceFiles: asset not found";
-
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "ListScriptSourceFiles: bad arguments";
+            const auto Folder = script_module_cmd::FolderOf(T);
+            if (Folder.empty()) return "ListScriptSourceFiles: asset not found";
+            const auto Module = xscript::module::Resolve(Folder, /*bWriteMigration*/ false);
+            if (!Module.m_Error.empty()) return "ListScriptSourceFiles: Descriptor.txt cannot be read: " + Module.m_Error;
+            std::string Out = std::format("ListScriptSourceFiles: ok\nFiles={}  Unlisted={}  Descriptor={}\n\nPath\tKind\tExcluded\tState\n", Module.m_Descriptor.m_Files.size(), Module.m_Unlisted.size(), Module.m_bMigrated ? "none (the folder is listed)" : "Descriptor.txt");
             std::error_code Ec;
-            if (!std::filesystem::exists(SourceDb, Ec)) return "(no source_db folder yet - nothing added)";
-
-            std::string Out;
-            for (auto& Entry : std::filesystem::directory_iterator(SourceDb, Ec))
-                if (Entry.is_regular_file())
-                    Out += xstrtool::To(Entry.path().filename().wstring()) + "\n";
-            return Out.empty() ? "(empty)" : Out;
+            for (const auto& F : Module.m_Descriptor.m_Files)
+            {
+                const auto Kind = xscript::module::KindOf(F.m_Path);
+                Out += std::format("{}\t{}\t{}\t{}\n", F.m_Path, Kind == xscript::module::file_kind::Compiled ? "source" : Kind == xscript::module::file_kind::Header ? "header" : "other"
+                    , F.m_bExclude, std::filesystem::is_regular_file(xscript::module::Absolute(Folder, F.m_Path), Ec) ? "ok" : "missing");
+            }
+            for (const auto& Path : Module.m_Unlisted) Out += std::format("{}\t{}\tfalse\tunlisted\n", Path, xscript::module::KindOf(Path) == xscript::module::file_kind::Compiled ? "source" : "header");
+            return Out;
         }
-
         xcmdline::parser::handle m_hLibrary, m_hAsset;
     };
 
-    //================================================================================================
-    // SetScriptSourceFileContent - overwrites an EXISTING source_db file's content wholesale
-    // (undoable - previous content snapshotted, same shape as RemoveScriptSourceFile's own backup).
-    // The file itself must already exist (AddScriptSourceFile first) - this only ever changes bytes,
-    // never the file LIST, so it deliberately does NOT call xlevel::RegenerateGameModuleSources(): a content-
-    // only edit needs no cmake reconfigure, MSBuild picks up the changed timestamp on its own next
-    // build (same "reconfigure only when the file list changes" rule the whole build integration
-    // already follows). This is the ONLY command-bus path to actually write real code into a module -
-    // without it an AI would have to bypass the undo system entirely to author anything.
-    //================================================================================================
+    // SetScriptSourceFileContent: the whole content of a file that is in the module. The only command-line way to write code into a module.
     struct set_script_source_file_content_cmd : xlevel::commands::level_command
     {
         set_script_source_file_content_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "SetScriptSourceFileContent", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Overwrites an existing source_db file's content (undoable - restores prior content). Usage: SetScriptSourceFileContent -Library hexguid -Asset assetguid -FileName text -Content text"; }
+        const char* getCommandHelp() const noexcept override { return "Overwrites the content of a file of a script module (undoable - restores the previous content). Usage: SetScriptSourceFileContent -Library hexguid -Asset assetguid -FileName \"Foo.cpp\" -Content \"text\""; }
         void RegisterArguments() noexcept override
         {
             m_hLibrary  = m_Parser.addOption("Library",  "Library instance guid, 16 hex digits", true, 1);
             m_hAsset    = m_Parser.addOption("Asset",    "Scripting asset guid, 32 hex digits",  true, 1);
-            m_hFileName = m_Parser.addOption("FileName", "File name (e.g. \"Foo.cpp\")",  true, 1);
-            m_hContent  = m_Parser.addOption("Content",  "New file content",              true, 1);
+            m_hFileName = m_Parser.addOption("FileName", "Path inside the module's source_db",   true, 1);
+            m_hContent  = m_Parser.addOption("Content",  "New file content",                     true, 1);
         }
-
         std::string Redo() noexcept override
         {
-            auto LibraryArg  = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-            auto ContentArg  = m_Parser.getOptionArgAs<std::string>(m_hContent, 0);
-            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(FileNameArg) || std::holds_alternative<xerr>(ContentArg))
-                return "SetScriptSourceFileContent: bad arguments";
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-            const auto Content     = std::get<std::string>(ContentArg);
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return "SetScriptSourceFileContent: asset not found";
-
-            const auto FilePath = SourceDb + L"\\" + FileName;
-            std::error_code Ec;
-            if (!std::filesystem::exists(FilePath, Ec)) return "SetScriptSourceFileContent: no such file - AddScriptSourceFile first";
-
-            std::ofstream Out(FilePath, std::ios::binary | std::ios::trunc);
-            if (!Out.is_open()) return "SetScriptSourceFileContent: failed to open the file for writing";
-            Out.write(Content.data(), static_cast<std::streamsize>(Content.size()));
-            return {};
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "SetScriptSourceFileContent: bad arguments";
+            const auto Folder = script_module_cmd::FolderOf(T);
+            if (Folder.empty()) return "SetScriptSourceFileContent: asset not found";
+            std::string Previous;
+            auto Err = xscript::module::ops::SetContent(Folder, script_module_cmd::TextArg(m_Parser, m_hFileName), script_module_cmd::TextArg(m_Parser, m_hContent), Previous);
+            return Err.empty() ? Err : "SetScriptSourceFileContent: " + Err;           // the file list did not change: no reconfigure; MSBuild sees the new time by itself
         }
-
         void BackupCurrenState(xundo::undo_file& File) noexcept override
         {
-            auto LibraryArg  = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg    = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto FileNameArg = m_Parser.getOptionArgAs<std::string>(m_hFileName, 0);
-
-            const std::uint64_t Library = std::holds_alternative<xerr>(LibraryArg) ? 0 : std::strtoull(std::get<std::string>(LibraryArg).c_str(), nullptr, 16);
-            File.Write(Library);
-            xeditor::WriteString(File, std::holds_alternative<xerr>(AssetArg) ? std::string(32, '0') : std::get<std::string>(AssetArg));
-            xeditor::WriteString(File, std::holds_alternative<xerr>(FileNameArg) ? std::string() : std::get<std::string>(FileNameArg));
-
-            std::string PrevContent;
-            if (!std::holds_alternative<xerr>(LibraryArg) && !std::holds_alternative<xerr>(AssetArg) && !std::holds_alternative<xerr>(FileNameArg))
-            {
-                const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-                const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-                const auto FileName    = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(FileNameArg));
-                const auto SourceDb    = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-                if (!SourceDb.empty())
-                {
-                    std::ifstream In(SourceDb + L"\\" + FileName, std::ios::binary);
-                    if (In.is_open())
-                        PrevContent.assign((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
-                }
-            }
-            xeditor::WriteString(File, PrevContent);
+            script_module_cmd::target T; script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T);
+            script_module_cmd::WriteTarget(File, T);
+            const auto Path = xscript::module::NormalizeRelative(script_module_cmd::TextArg(m_Parser, m_hFileName));
+            std::string Previous;
+            if (const auto Folder = script_module_cmd::FolderOf(T); !Folder.empty() && !Path.empty()) xscript::module::ReadAll(xscript::module::Absolute(Folder, Path), Previous);
+            xeditor::WriteString(File, Path); xeditor::WriteString(File, Previous);
         }
-
         void Undo(xundo::undo_file& File) noexcept override
         {
-            std::uint64_t Library = 0; File.Read(Library);
-            const std::string Asset        = xeditor::ReadString(File);
-            const std::string FileNameB64  = xeditor::ReadString(File);
-            const std::string PrevContent  = xeditor::ReadString(File);
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
-            const auto FileName    = xresource_editor::commands::DecodeAssetPath(FileNameB64);
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return;
-            std::ofstream Out(SourceDb + L"\\" + FileName, std::ios::binary | std::ios::trunc);
-            if (Out.is_open()) Out.write(PrevContent.data(), static_cast<std::streamsize>(PrevContent.size()));
+            const auto T = script_module_cmd::ReadTarget(File);
+            const auto Path = xeditor::ReadString(File); const auto Previous = xeditor::ReadString(File);
+            if (const auto Folder = script_module_cmd::FolderOf(T); !Folder.empty() && !Path.empty()) xscript::module::WriteAll(xscript::module::Absolute(Folder, Path), Previous);
         }
-
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hFileName, m_hContent;
     };
 
-    //================================================================================================
-    // RenameScriptSourceFile - renames a file within a Scripting resource's own source_db folder
-    // (undoable). Changes the file LIST (not just content), so - unlike SetScriptSourceFileContent -
-    // this DOES call xlevel::RegenerateGameModuleSources() on both Redo and Undo.
-    //================================================================================================
+    // RenameScriptSourceFile: a new path for a file, which may be in another folder (a move). The descriptor follows.
     struct rename_script_source_file_cmd : xlevel::commands::level_command
     {
         rename_script_source_file_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RenameScriptSourceFile", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Renames a file under a Scripting resource's own source_db folder (undoable). Usage: RenameScriptSourceFile -Library hexguid -Asset assetguid -OldFileName text -NewFileName text"; }
+        const char* getCommandHelp() const noexcept override { return "Renames or moves a file of a script module (undoable); the descriptor follows. Usage: RenameScriptSourceFile -Library hexguid -Asset assetguid -OldFileName \"Foo.h\" -NewFileName \"Systems/Foo.h\""; }
         void RegisterArguments() noexcept override
         {
-            m_hLibrary     = m_Parser.addOption("Library",     "Library instance guid, 16 hex digits",    true, 1);
-            m_hAsset       = m_Parser.addOption("Asset",       "Scripting asset guid, 32 hex digits",     true, 1);
-            m_hOldFileName = m_Parser.addOption("OldFileName", "Current file name",                true, 1);
-            m_hNewFileName = m_Parser.addOption("NewFileName", "New file name",                    true, 1);
+            m_hLibrary     = m_Parser.addOption("Library",     "Library instance guid, 16 hex digits", true, 1);
+            m_hAsset       = m_Parser.addOption("Asset",       "Scripting asset guid, 32 hex digits",  true, 1);
+            m_hOldFileName = m_Parser.addOption("OldFileName", "Current path inside source_db",        true, 1);
+            m_hNewFileName = m_Parser.addOption("NewFileName", "New path inside source_db",            true, 1);
         }
-
         std::string Redo() noexcept override
         {
-            auto LibraryArg = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg   = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto OldArg     = m_Parser.getOptionArgAs<std::string>(m_hOldFileName, 0);
-            auto NewArg     = m_Parser.getOptionArgAs<std::string>(m_hNewFileName, 0);
-            if (std::holds_alternative<xerr>(LibraryArg) || std::holds_alternative<xerr>(AssetArg) || std::holds_alternative<xerr>(OldArg) || std::holds_alternative<xerr>(NewArg))
-                return "RenameScriptSourceFile: bad arguments";
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::get<std::string>(LibraryArg));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
-            const auto OldName     = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(OldArg));
-            const auto NewName     = xresource_editor::commands::DecodeAssetPath(std::get<std::string>(NewArg));
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return "RenameScriptSourceFile: asset not found";
-
-            std::error_code Ec;
-            if (!std::filesystem::exists(SourceDb + L"\\" + OldName, Ec)) return "RenameScriptSourceFile: no such file";
-            if (std::filesystem::exists(SourceDb + L"\\" + NewName, Ec)) return "RenameScriptSourceFile: a file with that name already exists";
-
-            std::filesystem::rename(SourceDb + L"\\" + OldName, SourceDb + L"\\" + NewName, Ec);
-            if (Ec) return "RenameScriptSourceFile: rename failed";
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
-            return {};
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "RenameScriptSourceFile: bad arguments";
+            const auto Old = script_module_cmd::TextArg(m_Parser, m_hOldFileName), New = script_module_cmd::TextArg(m_Parser, m_hNewFileName);
+            auto Err = script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept { return xscript::module::ops::RenameFile(D, Folder, Old, New); });
+            return Err.empty() ? Err : "RenameScriptSourceFile: " + Err;
         }
-
         void BackupCurrenState(xundo::undo_file& File) noexcept override
         {
-            auto LibraryArg = m_Parser.getOptionArgAs<std::string>(m_hLibrary, 0);
-            auto AssetArg   = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
-            auto OldArg     = m_Parser.getOptionArgAs<std::string>(m_hOldFileName, 0);
-            auto NewArg     = m_Parser.getOptionArgAs<std::string>(m_hNewFileName, 0);
-
-            const std::uint64_t Library = std::holds_alternative<xerr>(LibraryArg) ? 0 : std::strtoull(std::get<std::string>(LibraryArg).c_str(), nullptr, 16);
-            File.Write(Library);
-            xeditor::WriteString(File, std::holds_alternative<xerr>(AssetArg) ? std::string(32, '0') : std::get<std::string>(AssetArg));
-            xeditor::WriteString(File, std::holds_alternative<xerr>(OldArg) ? std::string() : std::get<std::string>(OldArg));
-            xeditor::WriteString(File, std::holds_alternative<xerr>(NewArg) ? std::string() : std::get<std::string>(NewArg));
+            script_module_cmd::target T; script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T);
+            script_module_cmd::WriteTarget(File, T);
+            xeditor::WriteString(File, script_module_cmd::TextArg(m_Parser, m_hOldFileName)); xeditor::WriteString(File, script_module_cmd::TextArg(m_Parser, m_hNewFileName));
         }
-
         void Undo(xundo::undo_file& File) noexcept override
         {
-            std::uint64_t Library = 0; File.Read(Library);
-            const std::string Asset  = xeditor::ReadString(File);
-            const std::string OldB64 = xeditor::ReadString(File);
-            const std::string NewB64 = xeditor::ReadString(File);
-
-            const auto LibraryGuid = xresource_editor::commands::ParseLibraryGuid(std::format("{:016X}", Library));
-            const auto AssetGuid   = xresource_editor::commands::ParseAssetGuid(Asset);
-            const auto OldName     = xresource_editor::commands::DecodeAssetPath(OldB64);
-            const auto NewName     = xresource_editor::commands::DecodeAssetPath(NewB64);
-
-            const auto SourceDb = ScriptSourceDbFolder(LibraryGuid, AssetGuid);
-            if (SourceDb.empty()) return;
-            std::error_code Ec;
-            std::filesystem::rename(SourceDb + L"\\" + NewName, SourceDb + L"\\" + OldName, Ec);
-            xlevel::RegenerateGameModuleSources(xlevel::g_pGamePlugin->m_Paths);
+            const auto T = script_module_cmd::ReadTarget(File);
+            const auto Old = xeditor::ReadString(File), New = xeditor::ReadString(File);
+            script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept { return xscript::module::ops::RenameFile(D, Folder, New, Old); });
         }
-
         xcmdline::parser::handle m_hLibrary, m_hAsset, m_hOldFileName, m_hNewFileName;
     };
 
+    // RescanScriptModule: lists the files that are in the folder and not in the descriptor (and, with -RemoveMissing, drops the listed ones that are gone).
+    struct rescan_script_module_cmd : xlevel::commands::level_command
+    {
+        rescan_script_module_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RescanScriptModule", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Adds the files that are in a script module's source_db and not in its descriptor, and with -RemoveMissing drops the listed files that are gone (undoable). Usage: RescanScriptModule -Library hexguid -Asset assetguid [-RemoveMissing true]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hLibrary = m_Parser.addOption("Library", "Library instance guid, 16 hex digits", true, 1);
+            m_hAsset   = m_Parser.addOption("Asset",   "Scripting asset guid, 32 hex digits",  true, 1);
+            m_hRemove  = m_Parser.addOption("RemoveMissing", "true: also drop the listed files that are not on disk", false, 1);
+        }
+        std::string Redo() noexcept override
+        {
+            script_module_cmd::target T;
+            if (!script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T)) return "RescanScriptModule: bad arguments";
+            const bool bRemove = script_module_cmd::TextArg(m_Parser, m_hRemove) == "true";
+            auto Err = script_module_cmd::Edit(T, true, [&](xscript::module::descriptor& D, const std::filesystem::path& Folder) noexcept { xscript::module::Sync(D, Folder, bRemove); return std::string(); });
+            return Err.empty() ? Err : "RescanScriptModule: " + Err;
+        }
+        void BackupCurrenState(xundo::undo_file& File) noexcept override
+        {
+            script_module_cmd::target T; script_module_cmd::ReadTarget(m_Parser, m_hLibrary, m_hAsset, T);
+            script_module_cmd::WriteTarget(File, T);
+            std::string Before;                                                   // the descriptor as it was, whole: "" when there was none
+            if (const auto Folder = script_module_cmd::FolderOf(T); !Folder.empty()) xscript::module::ReadAll(xscript::module::DescriptorFile(Folder), Before);
+            xeditor::WriteString(File, Before);
+        }
+        void Undo(xundo::undo_file& File) noexcept override
+        {
+            const auto T = script_module_cmd::ReadTarget(File);
+            const auto Before = xeditor::ReadString(File);
+            if (const auto Folder = script_module_cmd::FolderOf(T); !Folder.empty())
+            {
+                if (Before.empty()) { std::error_code Ec; std::filesystem::remove(xscript::module::DescriptorFile(Folder), Ec); }
+                else xscript::module::WriteAll(xscript::module::DescriptorFile(Folder), Before);
+                script_module_cmd::Regenerate();
+            }
+        }
+        xcmdline::parser::handle m_hLibrary, m_hAsset, m_hRemove;
+    };
     //================================================================================================
     // AddProjectModuleReference / RemoveProjectModuleReference - the project's own build-membership
     // list (Project.config\Script.config.txt's ModuleRefs, see LevelEditor_ProjectScriptConfig.h). Persisted

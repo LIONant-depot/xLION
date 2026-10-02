@@ -412,7 +412,7 @@ namespace xeditor
 
     //--------------------------------------------------------------------------------------------
     // Commands for the settings an editor's preview is drawn with (an inspector over a reflected settings struct). Those are view state, not part
-    // of the resource, so they are queries: not undoable, and they never dirty the document. Path and value are base64 like SetProperty's.
+    // of the resource, so they are queries: not undoable, and they never dirty the document. Path and value are text like SetProperty's.
     //--------------------------------------------------------------------------------------------
     template<class T_SETTINGS>
     struct set_preview_cmd : xundo::query_command_base

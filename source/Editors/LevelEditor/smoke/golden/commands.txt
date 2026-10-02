@@ -80,6 +80,7 @@ RemoveScriptSourceFile
 RenameAsset
 RenameAssetFile
 RenameScriptSourceFile
+RescanScriptModule
 ResetKey
 ResourceEditorCommand
 RestoreAsset

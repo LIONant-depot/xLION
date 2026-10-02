@@ -189,6 +189,7 @@ namespace level_editor
         level_editor::commands::list_project_module_references_query_cmd CmdListProjectModuleReferences;
         level_editor::commands::set_script_source_file_content_cmd CmdSetScriptSourceFileContent;
         level_editor::commands::rename_script_source_file_cmd     CmdRenameScriptSourceFile;
+        level_editor::commands::rescan_script_module_cmd          CmdRescanScriptModule;
         level_editor::commands::regenerate_project_module_sources_query_cmd CmdRegenerateProjectModuleSources;
         xresource_editor::commands::rename_asset_file_cmd             CmdRenameAssetFile;
         xresource_editor::commands::move_asset_file_cmd               CmdMoveAssetFile;
@@ -268,6 +269,7 @@ namespace level_editor
         , CmdListProjectModuleReferences(Workspace, pEditor)
         , CmdSetScriptSourceFileContent(Workspace, pEditor)
         , CmdRenameScriptSourceFile(Workspace, pEditor)
+        , CmdRescanScriptModule(Workspace, pEditor)
         , CmdRegenerateProjectModuleSources(Workspace, pEditor)
         , CmdRenameAssetFile(Workspace, pEditor)
         , CmdMoveAssetFile(Workspace, pEditor)
@@ -346,6 +348,7 @@ namespace level_editor
             CmdListProjectModuleReferences.m_pDataBase = pEditor;
             CmdSetScriptSourceFileContent.m_pDataBase = pEditor;
             CmdRenameScriptSourceFile.m_pDataBase = pEditor;
+            CmdRescanScriptModule.m_pDataBase = pEditor;
             CmdRegenerateProjectModuleSources.m_pDataBase = pEditor;
             CmdRenameAssetFile.m_pDataBase = pEditor;
             CmdMoveAssetFile.m_pDataBase = pEditor;

@@ -168,7 +168,7 @@ namespace xeditor
             const char* getCommandHelp() const noexcept override { return "Inserts, deletes or moves an element of a 1D array property (undoable; ordinal keys only). Usage: ListOp -Path text -Op Insert|Delete|Move -Index n [-ToIndex n]"; }
             void RegisterArguments() noexcept override
             {
-                m_hPath  = m_Parser.addOption("Path",    "Array property path, base64 (no trailing [])",             true,  1);
+                m_hPath  = m_Parser.addOption("Path",    "Array property path (no trailing [])",             true,  1);
                 m_hOp    = m_Parser.addOption("Op",      "Insert, Delete or Move",                                   true,  1);
                 m_hIndex = m_Parser.addOption("Index",   "Element index (Insert/Delete); the source index for Move", true,  1);
                 m_hTo    = m_Parser.addOption("ToIndex", "Destination index (Move only)",                            false, 1);

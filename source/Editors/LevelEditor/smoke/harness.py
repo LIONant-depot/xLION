@@ -50,7 +50,7 @@ DISK_WRITERS = frozenset({
     "Save", "SaveAssets", "CreateAsset", "CreateLibrary", "RenameAsset", "MoveAsset", "DeleteAsset", "RestoreAsset",
     "RenameAssetFile", "MoveAssetFile", "DeleteAssetFileToTrash", "RestoreAssetFileFromTrash", "CopyAssetFile",
     "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources",
-    "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile",
+    "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",
     "SourceControlCommit", "SourceControlPull", "SourceControlPush", "SourceControlRevert", "SourceControlStage",
     "SourceControlLock", "SourceControlUnlock",
     "MakePrefab", "MakePrefabVariant", "ApplyOverrides",
