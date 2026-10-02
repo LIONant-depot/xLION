@@ -51,6 +51,8 @@ namespace level_editor
         xlevel::commands::describe_entity_query_cmd         CmdDescribeEntity;
         xlevel::commands::list_component_types_query_cmd    CmdListComponentTypes;
         xlevel::commands::list_systems_query_cmd            CmdListSystems;
+        xlevel::commands::set_system_parent_cmd             CmdSetSystemParent;
+        xlevel::commands::save_system_order_cmd             CmdSaveSystemOrder;
         xscene::commands::set_entity_reference_cmd          CmdSetEntityReference;
         xlevel::commands::edit_tool_query_cmd               CmdEditTool;
         xscene::commands::instantiate_prefab_cmd            CmdInstantiatePrefab;
@@ -105,6 +107,8 @@ namespace level_editor
         , CmdDescribeEntity(Level, pEditor)
         , CmdListComponentTypes(Level, pEditor)
         , CmdListSystems(Level, pEditor)
+        , CmdSetSystemParent(Level, pEditor)
+        , CmdSaveSystemOrder(Level, pEditor)
         , CmdSetEntityReference(Level, pScene)
         , CmdEditTool(Level, pEditor)
         , CmdInstantiatePrefab(Level, pScene)
