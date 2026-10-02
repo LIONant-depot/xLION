@@ -118,8 +118,8 @@ def level(editor):
 # --------------------------------------------------------------------------------------------------------------------
 # Problem report. Everything that went wrong inside the editor while the suite ran is collected and printed at the end:
 #   * asserts, terminate and crash lines  - the editor appends them to LevelEditor.problems.log next to the exe (never truncated)
-#   * Vulkan validation errors            - they only go to the editor's stdout, which the harness keeps in smoke/.logs/editor_N.log
-# An assert fails the run: it is a bug, whatever the tests said.
+#   * Vulkan validation errors/warnings   - they only go to the editor's stdout, which the harness keeps in smoke/.logs/editor_N.log
+# An assert or a Vulkan validation error fails the run: it is a bug, whatever the tests said. Warnings are listed.
 # --------------------------------------------------------------------------------------------------------------------
 def _problems_path(config) -> Path:
     return Path(config.getoption("--exe")).parent / "LevelEditor.problems.log"
@@ -142,20 +142,22 @@ def _collect_problems(config):
         with open(p, "rb") as f:
             f.seek(getattr(config, "_problems_offset", 0))
             new = [l for l in f.read().decode("utf-8", "replace").splitlines() if l.strip()]
-    vk = {}
+    vk, vk_warnings = {}, {}
     for log in sorted((Path(__file__).parent / ".logs").glob("editor_*.log")):
         text = log.read_text(errors="replace")
         for m in re.finditer(r"ERROR VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})", text):
             vk[m[1].strip()] = vk.get(m[1].strip(), 0) + 1
+        for m in re.finditer(r"WARNING VK\d \([A-Z_]+\):\s*\n?([^\n]{0,200})", text):
+            vk_warnings[m[1].strip()] = vk_warnings.get(m[1].strip(), 0) + 1
     asserts = [l for l in new if "CRT report" in l]
-    return new, asserts, vk
+    return new, asserts, vk, vk_warnings
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    new, asserts, vk = _collect_problems(config)
+    new, asserts, vk, vk_warnings = _collect_problems(config)
     tr = terminalreporter
     tr.section("editor problem report")
-    if not new and not vk:
+    if not new and not vk and not vk_warnings:
         tr.write_line("no asserts, crashes or Vulkan errors were logged")
         return
     if asserts:
@@ -165,10 +167,12 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     if len(new) > 40:
         tr.write_line(f"  ... {len(new) - 40} more lines in the file")
     for msg, n in sorted(vk.items(), key=lambda kv: -kv[1]):
-        tr.write_line(f"Vulkan validation error x{n}: {msg[:160]}", yellow=True)
+        tr.write_line(f"Vulkan validation error x{n}: {msg[:160]}", red=True)
+    for msg, n in sorted(vk_warnings.items(), key=lambda kv: -kv[1]):
+        tr.write_line(f"Vulkan validation warning x{n}: {msg[:160]}", yellow=True)
 
 
 def pytest_sessionfinish(session, exitstatus):
-    _, asserts, _ = _collect_problems(session.config)
-    if asserts and session.exitstatus == 0:
+    _, asserts, vk, _ = _collect_problems(session.config)
+    if (asserts or vk) and session.exitstatus == 0:      # a Vulkan validation error is a bug too: the draw is wrong, whatever the tests said
         session.exitstatus = 1

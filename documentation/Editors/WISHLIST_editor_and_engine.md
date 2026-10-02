@@ -27,6 +27,7 @@ Within a group the first is the most urgent. The italic line after each number s
 
 34. *(next step of the time work)* **The game owns more than the game manager and the time**: the physics instance (today `game.m_pPhysics` only points at the physics system, which still owns the Box3D world), the resource manager, ... and the Level is loaded by the game (today the editor session still does the loading). `game_mgr::getUserData<xlioncore::game>()` is the way systems reach all of it.
 
+99. Popups should default at the middle of the editor (which ever editor it belongs) 
 ## 2. Soon: a polished game and a trustworthy editor
 
 12. *(a game needs its own camera)* **A camera for games**: a `Camera` component and system, or at least a pipe command to place the Level viewport's camera. The viewport starts 15 units
@@ -35,7 +36,7 @@ Within a group the first is the most urgent. The italic line after each number s
     28 x 18 pitch; the person has to orbit out by hand each time.
 31. *(the Inspector cannot be tested without a real mouse)* **A way to click from a script** (`Click -X -Y`, `Drag`, `Type` on the pipe, or in the test harness). The share-component bug could only be found by driving the real mouse: posting `WM_LBUTTON*` to the window was ignored, `SetCursorPos` + `mouse_event` worked. Every Inspector bug of this kind needs it, and it would let the smoke suite cover the Inspector. - `smoke/harness.py` has `post_key` for keys only.
 28. *(a selection should not count as an edit (it blocks Play in scripts))* **`Play` refuses to run while a session has unsaved edits, and `Select` marks the Level dirty.** Selection is not an edit.
-30. *(rendering validation errors)* **Vulkan validation errors in the smoke run grew a lot**: `VUID-vkCmdDrawIndexed-None-08600` (a pipeline that does not match the render pass) was reported once per run before the soccer level became the project's first Level, and 100-200 times per message now. Not a test failure, but a rendering mismatch somebody should look at. - the primitive renderer's pipelines (xLIONRender).
+30. [done] *(fixed 2026-10-02: the pipeline caches of xGPU were keyed by address, see TODO_stability_and_actions.md #1; the unused-varying performance hint of the material shaders is no longer reported; the smoke harness fails the run on a Vulkan validation error and lists warnings)* *(rendering validation errors)* **Vulkan validation errors in the smoke run grew a lot**: `VUID-vkCmdDrawIndexed-None-08600` (a pipeline that does not match the render pass) was reported once per run before the soccer level became the project's first Level, and 100-200 times per message now. Not a test failure, but a rendering mismatch somebody should look at. - the primitive renderer's pipelines (xLIONRender).
 22. *(a script cannot clean up the assets it made)* **No pipe command deletes or replaces an asset** (`DeleteAsset`, `RenameFolder` ...). Mistakes in a script that builds assets leave orphans behind that only a person can remove.
 6. *(build the game without pressing Play)* **Start the game build without pressing Play** (`BuildGame`). Today only Play, or the window regaining focus, runs the stale check, so a build with
    nothing to play (or no Level open) cannot be asked for. - `StartGameReload` (`LevelEditor_GameReloadSession.h`).
@@ -55,6 +56,8 @@ Within a group the first is the most urgent. The italic line after each number s
    could only be reached through the debugger. - `xeditor/notify.h` and the modals in the Level plugin.
 
 35. *(seen once, not reproduced)* **An access violation right after a game module swap**. In a smoke run on 2026-10-02, the first launch after a host rebuild loaded the old Game.dll, rebuilt it in the background and swapped it while the tests were sending commands; the editor died with 0xc0000005 right after `[Vn restore]`. Six later runs of the same shape (module made stale, longer traffic, the reload and prefab/play suites) did not repeat it, and the harness deletes the editor log after a passing run. Next time it shows: keep the log (.logs) and the crash dump, and look at what runs on the first frame after a reload.
+
+36. *(test isolation)* **`test_actions.py::test_press_keys_reaches_the_action_and_explains_a_refusal` and `test_rebinding_a_key_takes_effect_and_resets` fail when `test_resource_editors.py` runs before them** ("Ctrl+Z / F8: no live action is bound to it"): a resource editor window keeps the focus, so the Level editor's actions are not live. They pass in the suite's own order (alphabetical) and alone. The two tests should focus the Level editor first (or the resource editor tests should close what they open).
 
 ## 3. Later: friction and polish
 
