@@ -15,6 +15,7 @@
 #include "dependencies/xeditor/include/xeditor/commands.h"
 #include "dependencies/xeditor/include/xeditor/serialize.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
+#include "source/Tools/Editor/xeditor_compile_logs.h"
 #include "source/tools/xgpu_imgui_breach.h"
 
 #include <atomic>
@@ -631,6 +632,7 @@ namespace xeditor
             Bar.m_OnSave            = &document_editor::ToolbarSave;
             Bar.m_OnHint            = &document_editor::ToolbarHint;
             Bar.m_pOpenFeedback     = &m_Actions.m_bOpenFeedback;
+            Bar.m_Subject           = AssetRef(m_Document.m_Guid);
             Bar.m_OnCompile         = &document_editor::ToolbarCompile;
             Bar.m_pUser             = this;
             RenderEditorToolbar(Bar);

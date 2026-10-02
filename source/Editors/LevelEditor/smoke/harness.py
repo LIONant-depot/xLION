@@ -262,6 +262,50 @@ class Editor:
         time.sleep(0.1)
         return result
 
+    def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False) -> None:
+        """A real left click at the SCREEN point (x, y) - the coordinates ImGui and the editor's queries (LogWindow's BackAt...) report. It uses the real pointer: xGPU only
+        hands ImGui a pointer position while Windows says the pointer is over the window, which messages posted to it cannot keep true. So the editor's window is brought
+        forward (a click focuses a window, and ImGui ignores the pointer of one that is not focused), the pointer goes there, presses and releases, and returns to where the
+        person had it."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        try:
+            user32.SetProcessDPIAware()                           # the coordinates are physical pixels, as ImGui's are
+        except Exception:
+            pass
+        pid = self.proc.pid
+        found: list[int] = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(hwnd, _):
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
+                found.append(hwnd)
+            return True
+
+        user32.EnumWindows(each, 0)
+        if not found:
+            raise AssertionError("click: the editor has no visible window")
+        if user32.GetForegroundWindow() != found[0]:
+            user32.SetForegroundWindow(found[0])
+            time.sleep(0.6)
+        old = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(old))
+        try:
+            user32.SetCursorPos(int(x), int(y))
+            time.sleep(0.4)                                       # frames pass with the pointer over the item
+            if shift: user32.keybd_event(0x10, 0, 0, 0)           # VK_SHIFT down
+            time.sleep(0.1)
+            user32.mouse_event(0x0008 if right else 0x0002, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTDOWN / RIGHTDOWN
+            time.sleep(hold)
+            user32.mouse_event(0x0010 if right else 0x0004, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTUP / RIGHTUP
+            if shift: user32.keybd_event(0x10, 0, 2, 0)           # VK_SHIFT up (KEYEVENTF_KEYUP)
+            time.sleep(0.3)
+        finally:
+            user32.SetCursorPos(old.x, old.y)
+
     def wait_for(self, line: str, pattern: str, *, timeout: float = 60.0, poll: float = 0.25) -> str:
         """Poll a query until its reply matches the regex."""
         deadline = time.monotonic() + timeout

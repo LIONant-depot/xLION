@@ -245,7 +245,8 @@ xlog                       knows nothing of any editor
   source/xlog_hub.h        record types, the hub (ring, store, problems, operations), the query grammar          standard library only
   source/xlog_build.h      the MSBuild / cl / link / CMake output adapter                                        <regex>
   source/xlog_commands.h   the pipe commands, registered into ANY xundo::system                                  xundo, xcmdline
-  source/xlog_tab.h        the Log tab and (P1) the diagnostics view, to embed in any editor                     ImGui
+  editor/xlog_tab.h        the Logs window, to embed in any editor                                               ImGui, xeditor widgets (EDITOR PART)
+  editor/xlog_diagnostics.h the diagnostics view (the editors' Feedback)                                        ImGui, xeditor widgets (EDITOR PART)
 xeditor                     depends on xlog: xeditor::host OWNS the hub, makes it current, drains it in pump_services()
 plugins (xlevel, ...)       depend on xlog: reach the hub with xlog::hub::current(); the Game.dll tab is xlog::RenderTab with channel "game."
 ```
@@ -520,6 +521,15 @@ sit as a persistent strip under the toolbar. It reads only the store, on the hos
 - **Fits the panel**, not a fixed box: it uses the width it is given, wraps long lines, keeps the muted theme, and works in the narrow side panels the resource editors have.
 - **Same keys and same data as the Logs window**: `F6` still opens it; `F8`/`Shift+F8` walk the problems; *Open in Logs* opens the drawer with the lens already set to this asset and operation; the pipe's `LogProblems -Operation n` returns exactly the rows the view shows.
 - **Phase**: P1, right after the Problems window, because both use the same row renderer. P0 already carries what it needs (operations with subjects and outcomes, title + body events, typed references); the pipeline-message adapter arrives with it.
+
+**As built in P1 (2026-10-02), and where it differs from the sketch above**
+
+- **One bridge, not one hook per editor.** `xeditor::compile_log_bridge` (`source/Tools/Editor/xeditor_compile_logs.h`) listens to the library manager's compile notifications and records every asset compile as an `asset.compile` operation, whether or not an editor is open (the project's startup compiles are in the Logs too). Start and end of a compile share its log object, which is how the cascade notifications to dependents are told from new compiles. The compiler's text goes through `xlog::pipeline_output_adapter` (`[Info]/[Warning]/[Error]` lines, untagged continuation lines as the body, progress bars as debug-level progress). The pipeline gives no codes, so its problems are heuristic; the asset is part of the identity.
+- **Feedback (F6) goes to the Logs**, it is not a popup of its own: the drawer opens on the Logs tab, Events page, filtered to `op:<the asset's last compile>` (with no compile yet: `channel:asset.compile`). The popup stays only when the descriptor has validation errors (those are the document's live state, not build events; they are not recorded as problems so a fixed one never lingers as an unverified problem). `xlog::RenderDiagnostics` (`editor/xlog_diagnostics.h`) draws that popup and can be embedded elsewhere.
+- **Back.** Anything that moves the person inside the Logs (Feedback, *Show in Events*) pushes a snapshot first: the window's query, page, preset, selection, and, when the host sent them, **what the drawer had in front** (another tab, or closed). The `< Back` button (and `LogBack`) returns to it, drawer included. Bounded to 16.
+- **Annotations are undoable commands** (`LogAcknowledge`, `LogMute`, `LogMark`), run through the host's history when the window has a runner; a Fatal problem cannot be muted. `LogProblems -State New|Active|All [-IncludeMuted true]` returns the window's list; `LogWindow` reports what the window shows.
+- **Window**: Problems|Events with inline details on Problems (virtualized Events with the selected event's body in a strip below), presets with counts, the list not moving under the reader (a `N new problems` chip), `Mark seen`, footer with muted count and capture health.
+- **Not yet built from P1**: the closed-drawer badge and the `NotifyError` policy (toast / modal only to decide), Source/About lenses, `F8`, the xGPU adapter, the harness as a client, jump-to-line in the person's IDE (a file opens with the system handler and `path:line` goes to the clipboard).
 
 ---
 

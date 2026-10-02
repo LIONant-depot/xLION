@@ -27,7 +27,39 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
     assert log.count("[Vn restore]") == reloads_before + 1, "the world should have been rebuilt exactly once"
     assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
     assert level.ed.sessions()[0].name == level.name
+    # the reload's bridge file is this process's own (its name carries the process id, so a second editor on the same Level cannot collide with it) and is gone
+    # once it has been read
+    import tempfile
+    assert not list(Path(tempfile.gettempdir()).glob(f"xGPU_LevelEditor_ReloadBridge_{editor.proc.pid}_*.bin")), "the bridge file is removed after the reload"
+    assert "snapshot restore failed" not in log, log[log.find("snapshot restore failed") - 200:][:600]
 
     assert editor.cmd("Stop") == "Stop requested"
     editor.wait_play_state("Stopped")
     assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
+
+
+def test_a_reload_whose_snapshot_brings_nothing_back_reopens_the_level_instead_of_crashing(editor, level):
+    """The scenes of a reload are moved back into the rebuilt world and trust the snapshot to have brought every entity back. When it did not (a snapshot
+    that cannot be read) they name entities the new world never made: the Level tree and the save behind Play used to assert on the first of them. The
+    editor now notices, says so (GAME.MODULE.RELOAD_STATE_LOST), and rebuilds the world from the saved level."""
+    if "the project has no script modules" in editor.log_text():
+        pytest.skip("the example project has no script modules, so there is no Game.dll to rebuild")
+    before = {scene: level.entities(scene) for scene, _ in level.scenes}
+    assert level.cmd("SimulateSnapshotFailure -State on") == "SimulateSnapshotFailure: on"
+    try:
+        os.utime(GAME_SOURCE)
+        assert editor.cmd("Play").startswith("Play requested")
+        editor.wait_play_state("Playing", timeout=240)
+
+        assert editor.alive()
+        log = editor.log_text()
+        assert "snapshot restore failed: simulated" in log
+        assert "reopening the Level from its last save" in log
+        assert "GAME.MODULE.RELOAD_STATE_LOST" in editor.cmd("LogProblems -Query code:GAME.MODULE.RELOAD_STATE_LOST"), "the Logs say what happened"
+        assert {scene: level.entities(scene) for scene, _ in level.scenes} == before, "the level is back from its last save"
+
+        assert editor.cmd("Stop") == "Stop requested"
+        editor.wait_play_state("Stopped")
+        assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
+    finally:
+        level.cmd("SimulateSnapshotFailure -State off")

@@ -26,7 +26,7 @@ namespace level_editor::editor_tabs
     inline constexpr char kLevelTreeWindow[] = "Level Tree###LevelEditor.LevelTree";
      inline constexpr char kInspectorWindow[] = "Inspector###LevelEditor.Inspector";
     inline constexpr char kSystemRegistryWindow[] = "System Registry###LevelEditor.SystemRegistry";
-    inline constexpr char kGamePluginLogWindow[] = "\xEE\x9F\x83 Log###LevelEditor.GamePluginLog";
+    inline constexpr char kGamePluginLogWindow[] = "\xEE\x9F\x83 Logs###LevelEditor.GamePluginLog";
     inline constexpr char kCommandConsoleWindow[] = "\xEE\xA3\xBD Commands###LevelEditor.CommandConsole";
     inline constexpr char kSourceControlWindow[] = "Source Control###LevelEditor.SourceControl";
 

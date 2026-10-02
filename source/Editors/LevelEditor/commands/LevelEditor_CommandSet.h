@@ -60,6 +60,7 @@ namespace level_editor
         xlevel::commands::raise_error_cmd                   CmdRaiseError;
         xlevel::commands::modal_state_cmd                   CmdModalState;
         xlevel::commands::simulate_module_crash_cmd         CmdSimulateModuleCrash;
+        xlevel::commands::simulate_snapshot_failure_cmd     CmdSimulateSnapshotFailure;
         xscene::commands::set_entity_reference_cmd          CmdSetEntityReference;
         xlevel::commands::edit_tool_query_cmd               CmdEditTool;
         xscene::commands::instantiate_prefab_cmd            CmdInstantiatePrefab;
@@ -121,6 +122,7 @@ namespace level_editor
         , CmdRaiseError(Level, pEditor)
         , CmdModalState(Level, pEditor)
         , CmdSimulateModuleCrash(Level, pEditor)
+        , CmdSimulateSnapshotFailure(Level, pEditor)
         , CmdSetEntityReference(Level, pScene)
         , CmdEditTool(Level, pEditor)
         , CmdInstantiatePrefab(Level, pScene)
@@ -242,7 +244,10 @@ namespace level_editor
         , CmdStep(Workspace, pEditor)
         , CmdStop(Workspace, pEditor)
         , CmdGetPlayState(Workspace, pEditor)
-        , CmdLogs(Workspace)
+        , CmdLogs(Workspace, []() -> xlog::view_state* { auto* pHost = xeditor::host::current(); return pHost ? &pHost->m_LogsUi : nullptr; }
+                                                                  , []() { auto* pHost = xeditor::host::current(); return pHost && pHost->logs_back(); }
+                                                                  , []() { auto* pHost = xeditor::host::current(); return pHost && pHost->logs_forward(); }
+                                                                  , [](const std::string& Query) { if (auto* pHost = xeditor::host::current()) pHost->show_logs(Query); })
         , CmdListAssets(Workspace, pEditor)
         , CmdDescribeAsset(Workspace, pEditor)
         , CmdRenameAsset(Workspace, pEditor)

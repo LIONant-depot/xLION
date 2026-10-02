@@ -11,6 +11,9 @@
 #include "dependencies/xeditor/include/xeditor/hint.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
+#include "source/Tools/Editor/xeditor_compile_logs.h"
+#include "dependencies/xlog/editor/xlog_diagnostics.h"
+#include "dependencies/xeditor/include/xeditor/open_ref.h"
 #include "imgui.h"
 #include <memory>
 #include <vector>
@@ -33,6 +36,10 @@ namespace xeditor
 
         // The Feedback action (F6) raises this; the toolbar opens the Feedback popup and clears it.
         bool* m_pOpenFeedback = nullptr;
+
+        // What the Feedback popup reads from the Logs (the xlog diagnostics view): the asset this editor edits, and "Open in Logs" (given the operation id, 0 = none yet).
+        xlog::ref m_Subject;
+        void (*m_OnOpenLogs)(void* pUser, std::uint64_t Operation) = &OpenLogsForOperation;
 
         // Undo / Redo for an editor whose undo needs more than m_pUndo->Undo() (the Level editor checks the write lock and Play first).
         // When set, the buttons call these; m_bUndoRedoEnabled false greys both out.
@@ -145,6 +152,14 @@ namespace xeditor
             bool bOpenFeedback = ImGui::Button("Feedback:\xee\xa5\xb2");
             if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Feedback"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Compilation / validation feedback");
             if (Model.m_pOpenFeedback && *Model.m_pOpenFeedback) { *Model.m_pOpenFeedback = false; bOpenFeedback = true; }
+            // Feedback goes to the Logs: the drawer opens on the Logs tab, filtered to this asset's last compile (the whole build situation: its state, the
+            // compiler's output, the problems). Only the descriptor's own validation errors, which are not build events, keep a small popup of their own.
+            if (bOpenFeedback && !bValidationFail && Model.m_OnOpenLogs && xlog::hub::current())
+            {
+                const xlog::operation* pLast = xlog::FindLatestOperation(*xlog::hub::current(), "asset.compile", Model.m_Subject);
+                Model.m_OnOpenLogs(Model.m_pUser, pLast ? pLast->m_Id : 0);
+                bOpenFeedback = false;
+            }
             if (bOpenFeedback)
             {
                 const ImVec2 ButtonPos  = ImGui::GetItemRectMin();
@@ -156,28 +171,32 @@ namespace xeditor
 
             if (ImGui::BeginPopup("###EditorToolbarFeedback"))
             {
-                ImGui::BeginChild("###EditorToolbarFeedback-Child", ImVec2(600, 300));
-                ImGui::PushTextWrapPos(600);
-                if (bValidationFail)
+                const float PopupW = std::min(640.0f, ImGui::GetMainViewport()->Size.x - 40.0f);
+                ImGui::BeginChild("###EditorToolbarFeedback-Child", ImVec2(PopupW, 340));
+                // What the compile and the descriptor said, in one generic view (the Logs' diagnostics): state first, errors before warnings, the rest of an event
+                // under its row. The compiler's own text stays below, raw, for anything the view did not parse.
+                if (auto* pLogs = xlog::hub::current())
                 {
-                    ImGui::TextUnformatted("Validation Errors:");
-                    ImGui::TextUnformatted("=====================================================");
-                    for (size_t i = 0; i < Model.m_pValidationErrors->size(); ++i)
-                    {
-                        ImGui::Text("ERROR[%d]: ", static_cast<int>(i));
-                        ImGui::SameLine();
-                        ImGui::TextUnformatted((*Model.m_pValidationErrors)[i].c_str());
-                    }
-                    ImGui::TextUnformatted("=====================================================");
+                    xlog::diagnostics_options Options;
+                    Options.m_Subject = Model.m_Subject;
+                    Options.m_pLiveErrors = Model.m_pValidationErrors;
+                    Options.m_OnOpen = [](const xlog::ref& R) { xeditor::OpenRef(R); };
+                    if (Model.m_OnOpenLogs) Options.m_OnOpenInLogs = [&Model](std::uint64_t Op) { Model.m_OnOpenLogs(Model.m_pUser, Op); };
+                    xlog::RenderDiagnostics(*pLogs, Options);
                 }
+                else if (bValidationFail)
+                    for (const auto& E : *Model.m_pValidationErrors) ImGui::TextWrapped("ERROR: %s", E.c_str());
                 if (Model.m_Log)
                 {
                     xcontainer::lock::scope lk(*Model.m_Log);
                     auto& Log = Model.m_Log->get();
-                    if (!Log.m_Log.empty())
+                    if (!Log.m_Log.empty() && ImGui::CollapsingHeader("Compiler output (raw)"))
+                    {
+                        ImGui::PushTextWrapPos(0.0f);
                         ImGui::TextUnformatted(Log.m_Log.c_str());
+                        ImGui::PopTextWrapPos();
+                    }
                 }
-                ImGui::PopTextWrapPos();
                 ImGui::EndChild();
                 ImGui::EndPopup();
             }

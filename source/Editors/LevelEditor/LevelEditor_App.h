@@ -49,6 +49,7 @@
 #include "source/Editors/LevelEditor/LevelEditor_Theme.h"
 
 #include "source/Tools/Editor/xeditor_resource_tab.h"
+#include "source/Tools/Editor/xeditor_compile_logs.h"
 
 #include "dependencies/xeditor/include/xeditor/diagnostics.h"
 
@@ -95,7 +96,7 @@ namespace level_editor
         ( "Host", host_actions
         , obj_scope<"Drawer"
             , obj_action<"Toggle", &host_actions::ToggleDrawer
-                , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Log, Commands...) of the window you are in">
+                , member_help<"Opens or closes the drawer (Resources, Assets, Source Control, Logs, Commands...) of the window you are in">
                 , ximgui::actions::member_keys<"Space"> >
             >
         , obj_scope<"Explain"
@@ -190,6 +191,7 @@ namespace level_editor
         files_actions                     FilesActions;            // the Assets tab's file keys
         xeditor::shortcut_labels          ShortcutLabels;          // menus ask the host which key an action has (xeditor/shortcuts.h)
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
+        xeditor::compile_log_bridge       CompileLogs;             // every asset compile as an operation of the Logs (what the resource editors' Feedback shows)
 
         std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open
         xlevel::level_context*            LastLevelTarget = nullptr;

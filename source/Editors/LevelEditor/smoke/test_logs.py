@@ -296,6 +296,388 @@ def test_a_real_game_build_is_an_operation_with_an_outcome(editor, level):
     editor.wait_play_state("Stopped")
 
 
+# ---- the person's decisions: acknowledge, mute, "mark seen" ----------------------------------------------------------------------
+
+def emit_problem(editor, token: str, severity: str = "error") -> str:
+    """One diagnostic of its own (a problem from warning up); returns its id."""
+    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity {severity} -Channel test.p1 -Code P1.{token.upper()}")
+    _, rows = tail(run(editor, f"LogProblems -Query code:P1.{token.upper()}"))
+    assert len(rows) == 1, rows
+    return rows[0]["Id"]
+
+
+def listed(editor, token: str, state: str, extra: str = "") -> list[dict]:
+    _, rows = tail(run(editor, f"LogProblems -Query code:P1.{token.upper()} -State {state} {extra}"))
+    return rows
+
+
+def test_acknowledging_a_problem_moves_it_out_of_active_and_back_with_undo(editor):
+    token = secrets.token_hex(3)
+    pid = emit_problem(editor, token)
+    assert [r["Id"] for r in listed(editor, token, "Active")] == [pid]
+    run(editor, f"LogAcknowledge -Id {pid}")
+    row = tail(run(editor, f"LogProblems -Query code:P1.{token.upper()}"))[1][0]
+    assert row["Triage"] == "Acknowledged" and row["Suppression"] == "None"
+    assert listed(editor, token, "Active") == [], "an acknowledged problem leaves Active"
+    assert [r["Id"] for r in listed(editor, token, "All")] == [pid], "...and stays in All: acknowledging does not hide anything"
+    assert "Triage=Acknowledged" in run(editor, f"LogProblem -Id {pid}")
+    editor.cmd("Undo")
+    assert [r["Id"] for r in listed(editor, token, "Active")] == [pid], "Undo gives the problem back"
+    assert "Triage=Unreviewed" in run(editor, f"LogProblem -Id {pid}")
+    editor.cmd("Redo")
+    assert listed(editor, token, "Active") == []
+
+
+def test_a_muted_problem_is_hidden_but_still_collected_and_countable(editor):
+    token = secrets.token_hex(3)
+    pid = emit_problem(editor, token, "warning")
+    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
+    editor.cmd(f"LogMute -Id {pid}")
+    assert listed(editor, token, "All") == [], "muted: not listed"
+    assert listed(editor, token, "Active") == []
+    shown = listed(editor, token, "All", "-IncludeMuted true")
+    assert [r["Id"] for r in shown] == [pid] and shown[0]["Suppression"] == "Muted"
+    assert shown[0]["Occurrences"] == "2", "collection continues while it is muted"
+    run(editor, f"LogEmit -Text {b64('P1 problem ' + token)} -Kind diagnostic -Severity warning -Channel test.p1 -Code P1.{token.upper()}")
+    assert listed(editor, token, "All", "-IncludeMuted true")[0]["Occurrences"] == "3"
+    editor.cmd("Undo")                                     # the last thing the person decided was the mute
+    assert [r["Id"] for r in listed(editor, token, "All")] == [pid]
+
+
+def test_a_fatal_problem_cannot_be_hidden(editor):
+    token = secrets.token_hex(3)
+    pid = emit_problem(editor, token, "fatal")
+    reply = editor.cmd(f"LogMute -Id {pid}")
+    assert "cannot be hidden" in reply, reply
+    assert [r["Id"] for r in listed(editor, token, "All")] == [pid]
+
+
+def test_marking_seen_moves_the_baseline_the_new_preset_counts_from(editor):
+    old, new = secrets.token_hex(3), secrets.token_hex(3)
+    emit_problem(editor, old)
+    assert len(listed(editor, old, "New")) == 1, "everything is New until the person says otherwise"
+    editor.cmd("LogMark -Kind baseline")
+    assert listed(editor, old, "New") == [], "marked seen"
+    assert len(listed(editor, old, "All")) == 1
+    emit_problem(editor, new)
+    assert len(listed(editor, new, "New")) == 1, "a problem first seen after the baseline is New"
+    editor.cmd("Undo")                                     # the baseline goes back
+    assert len(listed(editor, old, "New")) == 1
+
+
+def test_the_decision_commands_name_what_is_wrong(editor):
+    assert "no problem" in editor.cmd("LogAcknowledge -Id 00000000DEADBEEF")
+    assert "no problem" in editor.cmd("LogMute -Id 00000000DEADBEEF")
+    assert "must be baseline" in editor.cmd("LogMark -Kind nonsense")
+    assert "unknown state" in run(editor, "LogProblems -State Nonsense")
+
+
+# ---- resource compiles: the pipeline adapter and the Feedback view's source ---------------------------------------------------------
+
+def compile_output(token: str, error: str = "Unsupported texture format 'exr'") -> str:
+    """What xresource_pipeline's compilers print: [Info]/[Warning]/[Error] lines, progress bars, separators, untagged continuation lines."""
+    return "\n".join([
+        f"\"D:\\tools\\{token}_compiler.exe\" -PROJECT \"D:\\proj\" -DESCRIPTOR \"Descriptors\\Texture\\{token}.desc\"",
+        "==============================",
+        "------------------------------------------------------------------",
+        " Start Compilation",
+        "------------------------------------------------------------------",
+        "[Info] OUTPUT: D:\\proj\\Cache",
+        "[Info] Processing : [=======>                            ]  20%",
+        f"[Warning] Input Texture [{token}.png] is large",
+        f"[Error] {error} {token}",
+        "  supported: png, dds",
+        "  see the compiler's documentation",
+        "[Info] Compression: [===================================>] 100%",
+    ])
+
+
+def simulate_compile(editor, text: str, asset: int, exit_code: int, name: str = "Face") -> int:
+    reply = run(editor, f"LogSimulateCompile -Text {b64(text)} -Asset {asset} -Exit {exit_code} -Name {name}")
+    m = re.search(r"operation (\d+)", reply)
+    assert m, reply
+    return int(m[1])
+
+
+def test_a_resource_compile_is_an_operation_about_its_asset(editor):
+    token = secrets.token_hex(3)
+    asset = int(token, 16) + 1
+    op = simulate_compile(editor, compile_output(token), asset, 1)
+    _, ops = tail(run(editor, f"LogOperations -Id {op}"))
+    row = ops[0]
+    assert row["Kind"] == "asset.compile" and row["Outcome"] == "Failed" and row["EvidenceReady"] == "true"
+    assert row["Subject"] == "Face" and row["Errors"] == "1" and row["Warnings"] == "1"
+    _, problems = tail(run(editor, f"LogProblems -Operation {op}"))
+    by_severity = sorted((p["Severity"], p["Heuristic"]) for p in problems)
+    assert by_severity == [("error", "true"), ("warning", "true")], "the pipeline gives no codes: both are labelled heuristic"
+    error = next(p for p in problems if p["Severity"] == "error")
+    assert error["Title"].startswith("Unsupported texture format"), error
+
+
+def test_the_lines_under_a_pipeline_error_are_its_body_and_progress_is_not_a_problem(editor):
+    token = secrets.token_hex(3)
+    op = simulate_compile(editor, compile_output(token), int(token, 16) + 2, 1)
+    _, events = tail(run(editor, f'LogEvents -Operation {op} -Query "unsupported"'))
+    assert len(events) == 1 and events[0]["Lines"] == "2", events
+    reply = run(editor, f"LogEvent -Id {events[0]['Seq']}")
+    assert "|   supported: png, dds" in reply and "|   see the compiler's documentation" in reply, "the body keeps its lines as the compiler printed them, indentation included"
+    assert events[0]["Channel"] == "asset.compile.texture"
+    _, progress = tail(run(editor, f'LogEvents -Operation {op} -Query "Compression"'))
+    assert len(progress) == 1 and progress[0]["Severity"] == "debug", "a progress bar is one debug event, never a problem"
+    _, problems = tail(run(editor, f"LogProblems -Operation {op}"))
+    assert not any("Compression" in p["Title"] or "Processing" in p["Title"] for p in problems)
+
+
+def test_the_same_compile_error_is_one_problem_per_asset(editor):
+    token = secrets.token_hex(3)
+    a, b = int(token, 16) + 3, int(token, 16) + 4
+    # the numbers in the text are not part of the identity; the asset is
+    first = simulate_compile(editor, f"[Error] Mip count 13 is out of range {token}", a, 1, "A")
+    second = simulate_compile(editor, f"[Error] Mip count 14 is out of range {token}", a, 1, "A")
+    other = simulate_compile(editor, f"[Error] Mip count 13 is out of range {token}", b, 1, "B")
+    _, p1 = tail(run(editor, f"LogProblems -Operation {first}"))
+    _, p2 = tail(run(editor, f"LogProblems -Operation {second}"))
+    _, p3 = tail(run(editor, f"LogProblems -Operation {other}"))
+    assert p1[0]["Id"] == p2[0]["Id"] and p2[0]["Occurrences"] == "2", "the same asset failing the same way is one problem seen twice"
+    assert p3[0]["Id"] != p1[0]["Id"], "another asset failing the same way is another problem"
+
+
+def test_a_compile_that_fails_without_an_error_line_is_still_a_problem(editor):
+    token = secrets.token_hex(3)
+    op = simulate_compile(editor, f"[Info] starting {token}\n[Info] the compiler stopped", int(token, 16) + 5, 1, "Silent")
+    _, problems = tail(run(editor, f"LogProblems -Operation {op}"))
+    assert [p["Code"] for p in problems] == ["OPERATION.FAILED_WITHOUT_DIAGNOSTICS"]
+
+
+def test_a_successful_compile_with_warnings_succeeds_with_its_warnings(editor):
+    token = secrets.token_hex(3)
+    op = simulate_compile(editor, f"[Info] ok\n[Warning] Texture {token} is large\n[COMPILATION_SUCCESS]", int(token, 16) + 6, 0, "Fine")
+    _, ops = tail(run(editor, f"LogOperations -Id {op}"))
+    assert ops[0]["Outcome"] == "Succeeded" and ops[0]["Warnings"] == "1" and ops[0]["Errors"] == "0"
+    _, events = tail(run(editor, f"LogEvents -Operation {op}"))
+    assert not any("COMPILATION_SUCCESS" in e["Title"] for e in events), "the compiler's own end marker is not an event"
+
+
+def test_compiling_a_texture_in_its_editor_records_the_compile_and_feedback_opens_the_logs_on_it(editor):
+    """The real thing, end to end: the library manager's compile notification becomes an asset.compile operation (no editor hook), and the editor's
+    Feedback (F6) takes the person to the Logs with that operation as the filter."""
+    import time
+    found = editor.find_asset("Texture")
+    if found is None:
+        pytest.skip("the example project has no Texture asset")
+    guid, name = found
+    editor.cmd(f"OpenResourceEditor -Asset {guid} -Library {editor.libraries()[0][0]}")
+    try:
+        before = {r["Id"] for r in tail(run(editor, "LogOperations -Kind asset.compile -Limit 200"))[1]}
+        mine = []
+        # a different value each time so the descriptor really changes and the compiler really runs (the project guard puts the file back afterwards)
+        for quality in ("0.51", "0.52"):
+            editor.cmd(f"{name}\\SetProperty -Path {b64('Texture/Quality')} -Value {b64(quality)}")
+            editor.cmd(f"{name}\\Compile")
+            for _ in range(120):
+                time.sleep(0.5)
+                mine = [r for r in tail(run(editor, "LogOperations -Kind asset.compile -Limit 200"))[1] if r["Id"] not in before and r["Subject"] == name]
+                if mine and mine[0]["Outcome"] != "Running":
+                    break
+            else:
+                pytest.fail("the compile did not finish")
+            if mine:
+                break
+        assert mine, "no asset.compile operation was recorded for the compile"
+        assert mine[0]["Outcome"] == "Succeeded" and mine[0]["EvidenceReady"] == "true", mine[0]
+        _, events = tail(run(editor, f'LogEvents -Operation {mine[0]["Id"]} -Query "channel:asset.compile.texture" -Limit 100'))
+        assert any("Start Compilation" in e["Title"] for e in events), "the compiler's own output is the operation's events"
+        # Feedback (F6) opens the drawer on the Logs, filtered to this asset's last compile: the whole build situation, in the one place it lives
+        before_window = run(editor, "LogWindow")
+        editor.cmd("PressKeys -Keys F6")
+        time.sleep(0.5)
+        window = run(editor, "LogWindow")
+        assert "Page=Events" in window and f"Query=op:{mine[0]['Id']}" in window, window
+        back = lambda text: text.split("Back=")[1].splitlines()[0]
+        assert back(window) != "none" and back(window) != back(before_window), "Feedback left a way back to what the person was doing"
+        assert "back" in editor.cmd("LogBack"), "Back returns the window to where it was"
+        after = run(editor, "LogWindow")
+        assert f"Query=op:{mine[0]['Id']}" not in after, after
+        time.sleep(0.5)
+        assert editor.alive() and run(editor, "LogStatus").startswith("LogStatus: ok"), "the window draws the filtered view without upsetting the editor"
+    finally:
+        editor.cmd(f"CloseResourceEditor -Asset {guid}")
+
+
+def test_back_with_nowhere_to_go_says_so(editor):
+    for _ in range(20):                                    # whatever an earlier test left behind
+        if "nothing to go back" in editor.cmd("LogBack"):
+            break
+    assert "nothing to go back" in editor.cmd("LogBack")
+    assert "Back=none" in run(editor, "LogWindow")
+
+
+def window_values(editor) -> dict:
+    text = run(editor, "LogWindow")
+    return {
+        "query": re.search(r"^Query=(.*)$", text, re.M)[1],
+        "back": int(re.search(r"BackDepth=(\d+)", text)[1]),
+        "forward": int(re.search(r"ForwardDepth=(\d+)", text)[1]),
+        "back_at": tuple(float(v) for v in re.search(r"BackAt=(-?\d+),(-?\d+)", text).groups()),
+        "forward_at": tuple(float(v) for v in re.search(r"ForwardAt=(-?\d+),(-?\d+)", text).groups()),
+        "mouse_at": tuple(float(v) for v in re.search(r"MouseAt=(-?\d+),(-?\d+)", text).groups()),
+        "events_open": int(re.search(r"EventsOpen=(\d+)", text)[1]),
+        "range": tuple(int(v) for v in re.search(r"SelectedRange=(\d+)\.\.(\d+)", text).groups()),
+        "arrow_at": tuple(float(v) for v in re.search(r"EventArrowAt=(-?\d+),(-?\d+)", text).groups()),
+        "row_at": tuple(float(v) for v in re.search(r"EventRowAt=(-?\d+),(-?\d+)", text).groups()),
+        "stride": float(re.search(r"EventStride=(\d+)", text)[1]),
+    }
+
+
+def forget_the_way_back(editor):
+    for _ in range(40):
+        if "nothing to go back" in editor.cmd("LogBack"):
+            break
+
+
+def test_back_and_forward_walk_the_views_and_a_new_view_ends_the_way_forward(editor):
+    forget_the_way_back(editor)
+    start = window_values(editor)                          # earlier tests may have left ways forward behind: depths are relative
+    assert run(editor, "LogShow -Query op:1").strip() == "LogShow: shown"
+    run(editor, "LogShow -Query op:2")
+    assert window_values(editor)["query"] == "op:2" and window_values(editor)["back"] == start["back"] + 2 and window_values(editor)["forward"] == 0
+
+    assert "back" in editor.cmd("LogBack")
+    assert window_values(editor)["query"] == "op:1" and window_values(editor)["forward"] == 1
+    assert "back" in editor.cmd("LogBack")
+    now = window_values(editor)
+    assert now["query"] == start["query"] and now["back"] == start["back"] and now["forward"] == 2, "Back twice is where it began, with two ways forward"
+
+    assert "forward" in editor.cmd("LogForward")
+    assert window_values(editor)["query"] == "op:1" and window_values(editor)["back"] == start["back"] + 1
+    assert "forward" in editor.cmd("LogForward")
+    assert window_values(editor)["query"] == "op:2" and window_values(editor)["forward"] == 0
+    assert "nothing to go forward" in editor.cmd("LogForward")
+
+    editor.cmd("LogBack")
+    run(editor, "LogShow -Query op:3")                     # a new way somewhere: what was ahead of the old one is gone
+    assert window_values(editor)["forward"] == 0 and window_values(editor)["query"] == "op:3"
+    forget_the_way_back(editor)
+
+
+def test_clicking_back_and_forward_in_the_window_walks_the_views_and_never_crashes(editor):
+    """The Back button was drawn with a tooltip that read the entry its own click had just removed: the third Back crashed the editor. This clicks the real
+    buttons with the real pointer (see Editor.click), back and forward and all the way back, through the view that sent the person here."""
+    import time
+    forget_the_way_back(editor)
+    for q in ("op:1", "op:2", "op:3"):
+        run(editor, f"LogShow -Query {q}")
+
+    def wait_drawn(which: str) -> tuple:
+        for _ in range(40):
+            at = window_values(editor)[which]
+            if at[0] >= 0:
+                return at
+            time.sleep(0.1)
+        raise AssertionError(f"the {which} button was never drawn")
+
+    def click_until(which: str, key: str, expected: int):
+        editor.click(*wait_drawn(which))
+        for _ in range(20):
+            if window_values(editor)[key] == expected:
+                break
+            time.sleep(0.1)
+        assert editor.alive(), f"the editor must survive a click on {which}"
+        assert window_values(editor)[key] == expected, f"clicking {which} did not go (wanted {key} = {expected}, window says {window_values(editor)})"
+
+    base = window_values(editor)["back"]
+    click_until("back_at", "back", base - 1)               # three views in, two clicks back: still looking at the Logs
+    click_until("back_at", "back", base - 2)
+    assert window_values(editor)["forward"] == 2 and window_values(editor)["query"] == "op:1"
+    click_until("forward_at", "forward", 1)                # and forward again
+    click_until("forward_at", "forward", 0)
+    assert window_values(editor)["query"] == "op:3"
+
+    # all the way back, through the view that sent the person here (the drawer returns to what it was): the third Back used to crash the editor
+    for depth in range(window_values(editor)["back"] - 1, -1, -1):
+        click_until("back_at", "back", depth)
+    forget_the_way_back(editor)
+
+
+# ---- events: copy as text, open one in place, select a range ------------------------------------------------------------------------
+
+def emit_events(editor, channel: str, count: int) -> list[int]:
+    """Count events of their own, each with a body of two lines; returns their sequences."""
+    for i in range(count):
+        run(editor, f"LogEmit -Text {b64(f'event {i} of {channel}' + chr(10) + f'  detail {i} a' + chr(10) + f'  detail {i} b')} -Channel {channel} -Code EV.{i}")
+    _, rows = tail(run(editor, f"LogEvents -Query channel:{channel} -Limit {count + 5}"))
+    assert len(rows) == count, rows
+    return [int(r["Seq"]) for r in rows]
+
+
+def test_copying_events_gives_plain_text_one_header_line_each_and_the_body_under_it(editor):
+    channel = f"test.copy{secrets.token_hex(2)}"
+    seqs = emit_events(editor, channel, 2)
+    text = run(editor, f"LogCopy -From {seqs[0]} -To {seqs[1]}")
+    lines = text.splitlines()[1:]
+    assert len(lines) == 6, lines
+    assert re.fullmatch(rf"\d\d:\d\d\.\d{{3}}  info     {re.escape(channel)}  event 0 of {re.escape(channel)}  \[EV\.0\]", lines[0]), lines[0]
+    assert lines[1] == "      detail 0 a" and lines[2] == "      detail 0 b", "the body is indented under its header, as it was written"
+    assert lines[3].endswith("event 1 of " + channel + "  [EV.1]")
+    assert "not a sequence" in editor.cmd("LogCopy -From abc")
+
+
+def test_each_event_opens_by_its_own_arrow_and_shift_click_selects_a_range(editor):
+    import time
+    channel = f"test.rows{secrets.token_hex(2)}"
+    seqs = emit_events(editor, channel, 5)
+    run(editor, f"LogShow -Query channel:{channel}")
+
+    def drawn() -> dict:
+        for _ in range(40):
+            w = window_values(editor)
+            if w["arrow_at"][0] >= 0 and w["stride"] > 0:
+                return w
+            time.sleep(0.1)
+        raise AssertionError("the events were never drawn")
+
+    def row_arrow(k): w = drawn(); return (w["arrow_at"][0], w["arrow_at"][1] + k * w["stride"])
+    def row_body(k):  w = drawn(); return (w["row_at"][0], w["row_at"][1] + k * w["stride"])
+
+    # a click selects one event; Shift+click extends it to a range (the rows are in order of sequence)
+    editor.click(*row_body(1))
+    assert window_values(editor)["range"] == (seqs[1], seqs[1]), window_values(editor)
+    editor.click(*row_body(3), shift=True)
+    assert window_values(editor)["range"] == (seqs[1], seqs[3]), "Shift+click selects everything between"
+    editor.click(*row_body(4))
+    assert window_values(editor)["range"] == (seqs[4], seqs[4]), "a plain click starts again"
+
+    # the menu of the selection (right click) does Copy / Open / Close on every selected event; the pipe command is the same function
+    editor.click(*row_body(1))
+    editor.click(*row_body(3), shift=True)
+    copied = run(editor, "LogEventsAction -Action copy")
+    assert "copied 3 event(s)" in copied and f"event 1 of {channel}" in copied and f"event 3 of {channel}" in copied and f"event 4 of {channel}" not in copied
+    assert "open 3 event(s)" in run(editor, "LogEventsAction -Action open")
+    assert window_values(editor)["events_open"] == 3
+    assert "close 3 event(s)" in run(editor, "LogEventsAction -Action close")
+    assert window_values(editor)["events_open"] == 0
+    editor.click(*row_body(2), right=True)                 # the real menu opens inside the selection: the selection stays
+    assert window_values(editor)["range"] == (seqs[1], seqs[3])
+    editor.post_key(0x1B, hold=0.2)                        # Esc closes the menu
+    editor.click(*row_body(0))
+    assert editor.alive() and window_values(editor)["range"] == (seqs[0], seqs[0])
+    editor.click(*row_body(4))
+
+    # the arrow of one event opens that one alone, and closes it again; the click on it does not select
+    assert window_values(editor)["events_open"] == 0
+    first_row = drawn()["arrow_at"]
+    editor.click(*row_arrow(2))
+    assert window_values(editor)["events_open"] == 1 and window_values(editor)["range"] == (seqs[4], seqs[4])
+    editor.click(*row_arrow(0))
+    assert window_values(editor)["events_open"] == 2, "each event has its own arrow"
+    assert drawn()["arrow_at"] == first_row, "opening an event pushes what is below it down: the rows above it do not move"
+    editor.click(*row_arrow(0))
+    assert window_values(editor)["events_open"] == 1
+    assert drawn()["arrow_at"] == first_row, "and closing it does not move them either"
+    assert editor.alive()
+    forget_the_way_back(editor)
+
+
 # ---- headless parity -----------------------------------------------------------------------------------------------------------
 
 def test_the_headless_host_answers_the_log_commands_too(editor):
