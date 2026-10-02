@@ -1,0 +1,4 @@
+.sympath+ D:\LIONant\xLION\example.lionprj\Cache\Script\Build\GamePdb\Debug
+sxe -c ".echo ==AV==; kn 45; q" av
+bu ucrtbased!abort ".echo ==ABORT==; kn 45; q"
+g

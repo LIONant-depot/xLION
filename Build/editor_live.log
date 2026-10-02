@@ -1,0 +1,106 @@
+[MultiLib] ENTER EnsureLibraryLoaded path='D:\LIONant\xLION\example.lionprj' root=1
+[MultiLib] before process_info_job for guid=ADEB2E3BF97B6E03
+[MultiLib] after process_info_job for guid=ADEB2E3BF97B6E03
+[MultiLib] before root NewAsset, bHasRootFolder=1
+[MultiLib] after root NewAsset
+[MultiLib] before trash NewAsset, bHasTrashcan=1
+[MultiLib] after trash NewAsset
+[MultiLib] EXIT root/trash bootstrap for guid=ADEB2E3BF97B6E03
+File was modified but is not part of our asset list: cache\resources\logs\materialinstance\03\80\fc567067614d8003.log\log.txt In library D:\LIONant\xLION\example.lionprj
+File was modified but is not part of our asset list: cache\resources\logs\materialinstance\03\80\fc567067614d8003.log\log.txt In library D:\LIONant\xLION\example.lionprj
+Game.dll: sources changed - rebuilding in the background, the current build stays loaded until then
+Game.dll: source newer than DLL - rebuilding via cmake...
+Window Focus: Gained
+[SC] scan START chunk=D:\LIONant\xLION\example.lionprj|all
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/LIONant/xLION/example.lionprj/Cache/Script/Build
+File was modified but is not part of our asset list: cache\resources\logs\materialinstance\09\00\1efca8675ff20009.log\log.txt In library D:\LIONant\xLION\example.lionprj
+File was modified but is not part of our asset list: cache\resources\logs\materialinstance\09\00\1efca8675ff20009.log\log.txt In library D:\LIONant\xLION\example.lionprj
+MSBuild version 17.14.51+25f168cee for .NET Framework
+
+  cmake_pch.cxx
+[SC] scan END   chunk=D:\LIONant\xLION\example.lionprj|all (1373.1 ms)
+File was modified but is not part of our asset list: assets\imgui_level_editor.ini In library D:\LIONant\xLION\example.lionprj
+File was modified but is not part of our asset list: assets\imgui_level_editor.ini In library D:\LIONant\xLION\example.lionprj
+  soccer_game.cpp
+  xscript_game_entry.cpp
+  Game.vcxproj -> D:\LIONant\xLION\example.lionprj\Cache\Resources\Platforms\WINDOWS\Debug\Game.dll
+Game.dll: rebuild succeeded
+Game.dll: [Vn capture] 0 of 0 open scene(s) captured
+Window Focus: Lost
+[Prefab::EnsureLoaded] Guid=433EBA751EC6DDFD : begin
+[Prefab::EnsureLoaded] Guid=433EBA751EC6DDFD : PrefabGroupInfo read OK, nMembers=1 RootLocalId=1306939611
+[Prefab::EnsureLoaded] Guid=433EBA751EC6DDFD : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=433EBA751EC6DDFD : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=433EBA751EC6DDFD : end (success)
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : begin
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : PrefabGroupInfo read OK, nMembers=1 RootLocalId=2112278751
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : end (success)
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : begin
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : already resident
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : begin
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : already resident
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : begin
+[Prefab::EnsureLoaded] Guid=68B511D7A4E4CB4D : already resident
+[Prefab::EnsureLoaded] Guid=267C4C533488E711 : begin
+[Prefab::EnsureLoaded] Guid=267C4C533488E711 : PrefabGroupInfo read OK, nMembers=1 RootLocalId=3454521539
+[Prefab::EnsureLoaded] Guid=267C4C533488E711 : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=267C4C533488E711 : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=267C4C533488E711 : end (success)
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : begin
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : PrefabGroupInfo read OK, nMembers=1 RootLocalId=2887258311
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : end (success)
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : begin
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : already resident
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : begin
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : already resident
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : begin
+[Prefab::EnsureLoaded] Guid=6325BCD600D8F273 : already resident
+[Prefab::EnsureLoaded] Guid=4ADE8CD4AB58924D : begin
+[Prefab::EnsureLoaded] Guid=4ADE8CD4AB58924D : PrefabGroupInfo read OK, nMembers=1 RootLocalId=3424194763
+[Prefab::EnsureLoaded] Guid=4ADE8CD4AB58924D : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=4ADE8CD4AB58924D : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=4ADE8CD4AB58924D : end (success)
+[Prefab::EnsureLoaded] Guid=6FDCAD6EB1505295 : begin
+[Prefab::EnsureLoaded] Guid=6FDCAD6EB1505295 : PrefabGroupInfo read OK, nMembers=1 RootLocalId=1305841873
+[Prefab::EnsureLoaded] Guid=6FDCAD6EB1505295 : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=6FDCAD6EB1505295 : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=6FDCAD6EB1505295 : end (success)
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : PrefabGroupInfo read OK, nMembers=1 RootLocalId=605655247
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : all 1 member(s) loaded, resolving root
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : remapping references across 1 member(s)
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : end (success)
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : begin
+[Prefab::EnsureLoaded] Guid=66879B27D9D067FB : already resident
+Game.dll: up to date, no rebuild needed
+File was modified but is not part of our asset list: assets\imgui_level_editor.ini In library D:\LIONant\xLION\example.lionprj
+File was modified but is not part of our asset list: assets\imgui_level_editor.ini In library D:\LIONant\xLION\example.lionprj
+Window Focus: Gained
+Game.dll: up to date, no rebuild needed

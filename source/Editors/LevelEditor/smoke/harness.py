@@ -104,7 +104,8 @@ class Session:
 
 
 class Editor:
-    def __init__(self, exe: Path = DEFAULT_EXE, *, log_dir: Optional[Path] = None, min_gap: float = 0.05) -> None:
+    def __init__(self, exe: Path = DEFAULT_EXE, *, log_dir: Optional[Path] = None, min_gap: float = 0.05, extra_env: Optional[dict] = None) -> None:
+        self.extra_env = dict(extra_env or {})
         self.exe = Path(exe)
         self.log_dir = Path(log_dir) if log_dir else SMOKE_DIR / ".logs"
         self.min_gap = min_gap
@@ -142,7 +143,7 @@ class Editor:
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
         self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
-                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1"})   # an assert is logged + ends the editor, never a dialog nobody clicks
+                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
             while time.monotonic() < deadline:
@@ -158,7 +159,17 @@ class Editor:
             self.stop()                     # never leave a half-started editor holding the pipe
             raise
 
-    def stop(self) -> None:
+    def stop(self, graceful: bool = True) -> None:
+        """Ends the editor: it is asked to exit first (so its Logs end the launch cleanly, the way a person closing it does) and is killed if it has not gone in a few seconds."""
+        if self.alive() and graceful:
+            try:
+                self.cmd("Exit", timeout=5.0)
+            except Exception:
+                pass
+            try:
+                self.proc.wait(timeout=8)
+            except Exception:
+                pass
         if self.alive():
             self.proc.kill()
             self.proc.wait(timeout=10)
@@ -289,7 +300,11 @@ class Editor:
         time.sleep(0.1)
         return result
 
-    def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False) -> None:
+    def drag(self, x: float, y: float, to_x: float, to_y: float) -> None:
+        """Press at the screen point (x, y), move to (to_x, to_y) in steps, release: a drag with the real pointer (see click)."""
+        self.click(x, y, to=(to_x, to_y))
+
+    def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False, to: tuple[float, float] | None = None) -> None:
         """A real left click at the SCREEN point (x, y) - the coordinates ImGui and the editor's queries (LogWindow's BackAt...) report. It uses the real pointer: xGPU only
         hands ImGui a pointer position while Windows says the pointer is over the window, which messages posted to it cannot keep true. So the editor's window is brought
         forward (a click focuses a window, and ImGui ignores the pointer of one that is not focused), the pointer goes there, presses and releases, and returns to where the
@@ -327,6 +342,11 @@ class Editor:
             time.sleep(0.1)
             user32.mouse_event(0x0008 if right else 0x0002, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTDOWN / RIGHTDOWN
             time.sleep(hold)
+            if to:
+                for i in range(1, 11):                            # a drag: the pointer travels, frames pass on the way
+                    user32.SetCursorPos(int(x + (to[0] - x) * i / 10), int(y + (to[1] - y) * i / 10))
+                    time.sleep(0.08)
+                time.sleep(0.2)
             user32.mouse_event(0x0010 if right else 0x0004, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTUP / RIGHTUP
             if shift: user32.keybd_event(0x10, 0, 2, 0)           # VK_SHIFT up (KEYEVENTF_KEYUP)
             time.sleep(0.3)

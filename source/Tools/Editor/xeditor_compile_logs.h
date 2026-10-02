@@ -21,6 +21,8 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
+#include <algorithm>
 
 namespace xeditor
 {
@@ -42,14 +44,56 @@ namespace xeditor
     class compile_log_bridge
     {
     public:
-        compile_log_bridge() noexcept  { xresource_editor::g_LibMgr.m_OnCompilationState.Register<&compile_log_bridge::OnState>(*this); }
-        ~compile_log_bridge() noexcept { xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this); }
+        compile_log_bridge() noexcept  { xresource_editor::g_LibMgr.m_OnCompilationState.Register<&compile_log_bridge::OnState>(*this); InstallDependencyProvider(); }
+        ~compile_log_bridge() noexcept { xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this); if (auto* pHub = xlog::hub::current(); pHub && m_bInstalled) pHub->SetDependencyProvider({}); }
         compile_log_bridge(const compile_log_bridge&) = delete;
         compile_log_bridge& operator=(const compile_log_bridge&) = delete;
 
     private:
         using log_t  = xresource_editor::compilation::historical_entry::log;
         using result = xresource_editor::compilation::historical_entry::result;
+
+        // The About lens's "and what it depends on": the assets this one needs, transitively (a few levels, a few dozen), as the libraries know them. Only assets the compile pipeline has
+        // told the Logs about can be asked for - the Logs name an asset by the id of its instance, and a library is searched by type and instance.
+        struct known_asset { xresource::full_guid m_Guid; std::string m_Name; };
+
+        void InstallDependencyProvider() noexcept
+        {
+            auto* pHub = xlog::hub::current();
+            if (!pHub || m_bInstalled) return;
+            pHub->SetDependencyProvider([this](std::string_view Asset) { return DependenciesOf(Asset); });
+            m_bInstalled = true;
+        }
+
+        std::vector<xlog::ref> DependenciesOf(std::string_view Asset) noexcept
+        {
+            std::vector<xresource::full_guid> Queue;
+            {
+                std::lock_guard Lock(m_Mutex);
+                const bool bId = Asset.size() >= 8 && Asset.size() <= 16 && std::all_of(Asset.begin(), Asset.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; });
+                const std::uint64_t Id = bId ? std::strtoull(std::string(Asset).c_str(), nullptr, 16) : 0;
+                for (const auto& [Instance, K] : m_Known)
+                    if ((bId && Instance == Id) || (!K.m_Name.empty() && xlog::details::ContainsNoCase(K.m_Name, Asset))) Queue.push_back(K.m_Guid);
+            }
+            std::vector<xlog::ref> Out;
+            std::unordered_set<std::uint64_t> Seen;
+            for (const auto& G : Queue) Seen.insert(G.m_Instance.m_Value);
+            const std::size_t Roots = Queue.size();
+            for (std::size_t i = 0; i < Queue.size() && Out.size() < 64; ++i)
+            {
+                std::vector<xresource::full_guid> Next; std::string Name;
+                xresource_editor::g_LibMgr.getNodeInfo(Queue[i], [&](const xresource_editor::library_db::info_node& Node)
+                {
+                    Name = Node.m_Info.m_Name;
+                    for (const auto& D : Node.m_Dependencies.m_Resources)        Next.push_back(D);
+                    for (const auto& D : Node.m_Dependencies.m_VirtualResources) Next.push_back(D);
+                });
+                if (i >= Roots) { xlog::ref R = AssetRef(Queue[i]); R.m_Path = Name; Out.push_back(std::move(R)); }
+                if (i >= Roots + 48) continue;                                   // a deep tree is cut: the closest ones are listed first
+                for (const auto& D : Next) if (Seen.insert(D.m_Instance.m_Value).second) Queue.push_back(D);
+            }
+            return Out;
+        }
 
         struct open_compile
         {
@@ -75,6 +119,7 @@ namespace xeditor
             }
             const bool bRunning = Result == result::COMPILING || Result == result::COMPILING_WARNINGS;
 
+            InstallDependencyProvider();
             std::lock_guard Lock(m_Mutex);
             auto It = m_Open.find(Log.get());
             if (It == m_Open.end())
@@ -90,6 +135,11 @@ namespace xeditor
                 std::string Name;
                 if (bRunning) LibMgr.getNodeInfo(Library, Guid, [&](xresource_editor::library_db::info_node& Node) { Name = Node.m_Info.m_Name; });
                 Fresh.m_Subject.m_Path = Name;
+                {
+                    auto& K = m_Known[Fresh.m_Asset];
+                    K.m_Guid = Guid;
+                    if (!Name.empty()) K.m_Name = Name;
+                }
                 for (auto Old = m_Open.begin(); Old != m_Open.end(); ) Old = Old->second.m_Asset == Fresh.m_Asset ? m_Open.erase(Old) : std::next(Old);      // an unfinished one of the same asset is abandoned
                 Fresh.m_Op = pHub->Begin("asset.compile", { xlog::origin::type::System, "asset pipeline", 0 }, Fresh.m_Subject
                     , std::format("Compile {}", Name.empty() ? Fresh.m_TypeName : Name));
@@ -116,6 +166,8 @@ namespace xeditor
         }
 
         std::mutex                                          m_Mutex;
+        std::unordered_map<std::uint64_t, known_asset>      m_Known;            // the assets that were compiled (or failed to): by the id of their instance
+        bool                                                m_bInstalled = false;
         std::unordered_map<const void*, open_compile>       m_Open;             // by the compile's log: what a start and its end have in common
         std::deque<std::weak_ptr<log_t>>                    m_Finished;         // the logs already recorded, to tell a cascade from a new compile
     };

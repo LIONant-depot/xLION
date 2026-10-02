@@ -107,6 +107,48 @@ namespace level_editor
                 }
                 xeditor::diagnostics::Log("startup: opening project complete");
 
+                // The Logs are kept from here on: <project>/Cache/Logs/<this launch>/, and the earlier launches are read back in the background (how each ended is classified
+                // from its stream and from the crash records xeditor::diagnostics keeps next to the working folder).
+                {
+                    xlog::store::import_options Options;
+                    Options.m_Logs = RepoRoot / L"example.lionprj" / L"Cache" / L"Logs";
+                    std::error_code Ec;
+                    const std::filesystem::path ProblemsLog = std::filesystem::current_path(Ec) / "LevelEditor.problems.log";
+                    Options.m_CrashRecord = [ProblemsLog](std::uint32_t Pid, std::uint64_t StartWallMs) { return xlog::store::FindCrashRecord(ProblemsLog, Pid, StartWallMs); };
+                    xlog::store::StartPersistence(EditorHost.m_Logs, std::move(Options), xstrtool::To(std::wstring(szModulePath)));
+
+                    // What the person decided (acknowledged, muted, saved views) comes back from the last launch; the team's views are a file of the project (source control).
+                    xlog::store::user_files Files;
+                    std::filesystem::path Config = RepoRoot / L"example.lionprj" / L"Project.config" / L"Logs";
+                    char* pDir = nullptr; std::size_t DirLen = 0;
+                    if (_dupenv_s(&pDir, &DirLen, "XLOG_USER_DIR") == 0 && pDir && *pDir) Config = pDir;       // the smoke tests keep what they decide out of the project
+                    std::free(pDir);
+                    char* pUser = nullptr; std::size_t UserLen = 0;
+                    std::string User = (_dupenv_s(&pUser, &UserLen, "USERNAME") == 0 && pUser) ? pUser : "user";
+                    std::free(pUser);
+                    Files.m_Personal = Config / (User + ".logs.txt"); Files.m_Team = Config / "team.logs.txt";
+                    xlog::store::StartUserState(EditorHost.m_Logs, std::move(Files));
+
+                    // Runtimes of other processes (a game, a server) speak into these Logs over a named pipe; its name is published next to the launches for them to find. And this
+                    // process may itself be such a runtime (XLOG_REMOTE_PIPE = the pipe of the editor that started it): then everything it says is also sent there.
+                    {
+                        std::string Why;
+                        const std::string Pipe = std::format("xlion.logs.{}", static_cast<unsigned>(GetCurrentProcessId()));
+                        if (EditorHost.m_RemoteLogs.Start(EditorHost.m_Logs, Pipe, Why))
+                        {
+                            std::error_code RemoteEc;
+                            std::filesystem::create_directories(RepoRoot / L"example.lionprj" / L"Cache" / L"Logs", RemoteEc);
+                            std::ofstream(RepoRoot / L"example.lionprj" / L"Cache" / L"Logs" / L"remote.txt", std::ios::trunc) << "\\\\.\\pipe\\" << Pipe << "\n";
+                            EditorHost.m_Logs.SetRemoteStatus([pRemote = &EditorHost.m_RemoteLogs] { return std::format("Listening=true Pipe={} Connected={} Connections={} Records={} Rejected={}", pRemote->Pipe(), pRemote->Connected(), pRemote->Connections(), pRemote->Records(), pRemote->Rejected()); });
+                        }
+                        else xeditor::diagnostics::Log("startup: the Logs' remote pipe is not available: %s", Why.c_str());
+                        char* pRemote = nullptr; std::size_t RemoteLen = 0;
+                        if (_dupenv_s(&pRemote, &RemoteLen, "XLOG_REMOTE_PIPE") == 0 && pRemote && *pRemote)
+                            xlog::remote::Connect(EditorHost.m_Logs, pRemote, xstrtool::To(std::wstring(szModulePath)));
+                        std::free(pRemote);
+                    }
+                }
+
                 // Every xresource::loader<T>::Load() builds its path from this root - dropped during the
                 // Level-ownership split (it sat next to the Level-specific pGameMgr->*Mgr.m_ProjectPath lines
                 // that correctly moved into xlevel_session.h, but this one is resource-manager-global, not

@@ -53,6 +53,7 @@
 
 #include "dependencies/xeditor/include/xeditor/diagnostics.h"
 #include "dependencies/xeditor/include/xeditor/gpu_log.h"
+#include "dependencies/xlog/source/xlog_store.h"
 
 #include "ximgui_toolbar.h"
 
