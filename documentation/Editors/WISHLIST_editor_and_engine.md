@@ -27,7 +27,7 @@ Within a group the first is the most urgent. The italic line after each number s
 
 34. *(next step of the time work)* **The game owns more than the game manager and the time**: the physics instance (today `game.m_pPhysics` only points at the physics system, which still owns the Box3D world), the resource manager, ... and the Level is loaded by the game (today the editor session still does the loading). `game_mgr::getUserData<xlioncore::game>()` is the way systems reach all of it.
 
-99. Popups should default at the middle of the editor (which ever editor it belongs) 
+99. [done] *(every modal opens through xeditor::BeginModal (xeditor/popup.h): centered on the editor it belongs to, same flags; the error popup is drawn by the app frame, once a frame, and opens on the editor that had the focus when the error was raised; tests in test_modal_position.py. Left: a modal does not yet have a way to be placed on an editor other than the focused or current one)* Popups should default at the middle of the editor (which ever editor it belongs) 
 ## 2. Soon: a polished game and a trustworthy editor
 
 12. *(a game needs its own camera)* **A camera for games**: a `Camera` component and system, or at least a pipe command to place the Level viewport's camera. The viewport starts 15 units

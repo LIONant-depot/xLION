@@ -10,6 +10,7 @@ test that caused it (the exit code is in the failure) instead of every test afte
 from __future__ import annotations
 
 import itertools
+import time
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,6 +99,16 @@ class Level:
         return m[1]
 
 
+def _dismiss_modals(lv) -> None:
+    """A modal left open by an earlier test (an error popup raised by something a test did on purpose) would sit over every test after it:
+    Enter closes it."""
+    for _ in range(5):
+        if "Open=true" not in lv.cmd("ModalState"):
+            return
+        lv.ed.post_key(0x0D, hold=0.2)                        # VK_RETURN
+        time.sleep(0.2)
+
+
 @pytest.fixture
 def level(editor):
     guid, name = editor.levels()[0]
@@ -107,8 +118,10 @@ def level(editor):
     scenes = [(m[1], m[2].strip()) for l in editor.cmd(f"{name}\\ListScenes").splitlines()
               if (m := re.match(r"(\w{16})\s+(.*)", l))]
     lv = Level(editor, guid, name, scenes, itertools.count(1))
+    _dismiss_modals(lv)
     yield lv
     if editor.alive():
+        _dismiss_modals(lv)
         if editor.play_state() != "Stopped":
             editor.cmd("Stop -Keep false")
             editor.wait_play_state("Stopped")

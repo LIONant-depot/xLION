@@ -154,6 +154,10 @@ namespace level_editor
         // xlevel_session.h's own Render() for what used to be hand-rendered here directly.
         ResourceEditors.RenderAll();
 
+        // The error popup belongs to the application, not to one editor: it is drawn here, once a frame, whichever editor is in front (drawn from
+        // the Level editor it never showed while another editor had the screen), and it opens in the middle of the editor that had the focus.
+        EditorHost.m_Notifier.render();
+
         // With no Level open there is still a (empty) Level tab, like at startup: its File menu reaches the Asset Browser to open one.
         {
             bool bAnyLevel = false;
