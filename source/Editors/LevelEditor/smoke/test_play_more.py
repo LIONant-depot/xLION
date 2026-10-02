@@ -1,4 +1,6 @@
 """More play tests: pause/resume, step refusal, keep/discards tweaks."""
+import time
+import pytest
 from harness import b64
 
 
@@ -137,3 +139,28 @@ def test_stop_keep_false(level):
     editor.wait_play_state("Stopped")
     
     assert editor.property_value(level.name, scene, entity, path) == original
+
+
+@pytest.mark.parametrize("scale", ["0.25", "3"], ids=["slow_most_frames_have_no_step", "fast_most_frames_have_several_steps"])
+def test_transform_edit_during_play_survives_every_kind_of_frame(level, scale):
+    """Slow: most frames have no fixed step due, and the physics must not read the old pose back over an edit made in between. Fast: several steps
+    run in one frame, and the edit must reach the body in the first of them and survive the rest."""
+    editor = level.ed
+    scene, entity, transform = level.find_with_component("Transform")
+    path = "Transform/Position/X"
+    original = editor.property_value(level.name, scene, entity, path)
+    type_guid = level.property_type(entity, path, scene)
+
+    assert "done" in level.cmd(f"SetTimeScale -Scale {scale}")
+    try:
+        editor.cmd("Play")
+        editor.wait_play_state("Playing")
+        level.ok(f"SetProperty -Scene {scene} -Id {entity} -Component {transform} -Path {b64(path)}"
+                 f" -TypeGuid {type_guid} -Before {b64(original)} -After {b64('5.000000')}")
+        for _ in range(20):                                    # a second of frames, most of them with no step
+            assert editor.property_value(level.name, scene, entity, path) == "5.000000"
+            time.sleep(0.05)
+    finally:
+        level.cmd("SetTimeScale -Scale 1")
+        editor.cmd("Stop -Keep false")
+        editor.wait_play_state("Stopped")
