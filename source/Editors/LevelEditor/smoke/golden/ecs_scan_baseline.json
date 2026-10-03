@@ -61,11 +61,6 @@
   "m_BitID": 3,
   "m_pPool": 21
  },
- "plugins/xscene.plugin/source/Editor/xscene_commands_property_edit.h": {
-  "findComponentTypeInfo": 1,
-  "getEntityDetails": 2,
-  "m_pPool": 8
- },
  "plugins/xscene.plugin/source/Editor/xscene_commands_scene_organization.h": {
   "getComponentBits": 2,
   "getEntityDetails": 2,
@@ -93,13 +88,6 @@
   "getComponentBits": 3,
   "getEntityDetails": 2,
   "m_pPool": 7
- },
- "plugins/xscene.plugin/source/Editor/xscene_prefab_authoring.h": {
-  "getComponentBits": 10,
-  "getEntityDetails": 14,
-  "info_v": 13,
-  "m_BitID": 10,
-  "m_pPool": 35
  },
  "plugins/xscene.plugin/source/Editor/xscene_prefab_overrides.h": {
   "getEntityDetails": 5,
