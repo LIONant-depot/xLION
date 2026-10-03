@@ -46,7 +46,7 @@ namespace level_editor
         std::vector<xecs::scene::component_dependency> Missing;
         for (auto& SceneGuid : pSession->m_State.m_OpenScenes)
             for (auto& Dep : xecs::scene::LoadSceneComponentDependencies(xresource_editor::g_LibMgr.m_ProjectPath, SceneGuid))
-                if (!xscene::IsComponentInLiveRegistry(Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
+                if (!xscene::IsComponentInLiveRegistry(*pSession->m_pGameMgr, Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
                     Missing.push_back(Dep);
 
         std::string Result = std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
