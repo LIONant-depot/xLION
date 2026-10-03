@@ -25,7 +25,7 @@ namespace level_editor
 
             ForEachLevelSession([](xlevel::session& S)
             {
-                if (S.m_State.m_PlayState == xlevel::level_state::play_state::Playing) S.m_pGameMgr->Run();
+                if (S.m_State.m_PlayState == xlevel::level_state::play_state::Playing) S.m_pEcs->RunSystems();
             });
 
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
