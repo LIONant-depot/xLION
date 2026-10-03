@@ -141,6 +141,7 @@ namespace level_editor
     struct command_set
     {
         level_editor::commands::open_resource_editor_cmd          CmdOpenResourceEditor;
+        level_editor::commands::open_type_source_cmd              CmdOpenTypeSource;
         level_editor::commands::resource_editor_command_cmd       CmdResourceEditorCommand;
         level_editor::commands::close_resource_editor_cmd         CmdCloseResourceEditor;
         level_editor::commands::capture_window_cmd                CmdCaptureWindow;
@@ -190,6 +191,11 @@ namespace level_editor
         level_editor::commands::set_script_source_file_content_cmd CmdSetScriptSourceFileContent;
         level_editor::commands::rename_script_source_file_cmd     CmdRenameScriptSourceFile;
         level_editor::commands::rescan_script_module_cmd          CmdRescanScriptModule;
+        level_editor::commands::set_project_game_cmd              CmdSetProjectGame;
+        level_editor::commands::list_module_registrations_query_cmd CmdListModuleRegistrations;
+        level_editor::commands::list_scene_modules_query_cmd      CmdListSceneModules;
+        level_editor::commands::check_game_compatibility_query_cmd CmdCheckGameCompatibility;
+        level_editor::commands::list_scenes_using_module_query_cmd CmdListScenesUsingModule;
         level_editor::commands::regenerate_project_module_sources_query_cmd CmdRegenerateProjectModuleSources;
         xresource_editor::commands::rename_asset_file_cmd             CmdRenameAssetFile;
         xresource_editor::commands::move_asset_file_cmd               CmdMoveAssetFile;
@@ -218,6 +224,7 @@ namespace level_editor
 
         command_set(xundo::system& Workspace, xlevel::level_context* pEditor) noexcept
         : CmdOpenResourceEditor(Workspace, pEditor)
+        , CmdOpenTypeSource(Workspace, pEditor)
         , CmdResourceEditorCommand(Workspace, pEditor)
         , CmdCloseResourceEditor(Workspace, pEditor)
         , CmdCaptureWindow(Workspace, pEditor)
@@ -270,6 +277,11 @@ namespace level_editor
         , CmdSetScriptSourceFileContent(Workspace, pEditor)
         , CmdRenameScriptSourceFile(Workspace, pEditor)
         , CmdRescanScriptModule(Workspace, pEditor)
+        , CmdSetProjectGame(Workspace, pEditor)
+        , CmdListModuleRegistrations(Workspace, pEditor)
+        , CmdListSceneModules(Workspace, pEditor)
+        , CmdCheckGameCompatibility(Workspace, pEditor)
+        , CmdListScenesUsingModule(Workspace, pEditor)
         , CmdRegenerateProjectModuleSources(Workspace, pEditor)
         , CmdRenameAssetFile(Workspace, pEditor)
         , CmdMoveAssetFile(Workspace, pEditor)
@@ -301,6 +313,7 @@ namespace level_editor
         void SetLevelTarget(xlevel::level_context* pEditor) noexcept
         {
             CmdOpenResourceEditor.m_pDataBase = pEditor;
+            CmdOpenTypeSource.m_pDataBase = pEditor;
             CmdResourceEditorCommand.m_pDataBase = pEditor;
             CmdCloseResourceEditor.m_pDataBase = pEditor;
             CmdCaptureWindow.m_pDataBase = pEditor;
@@ -349,6 +362,11 @@ namespace level_editor
             CmdSetScriptSourceFileContent.m_pDataBase = pEditor;
             CmdRenameScriptSourceFile.m_pDataBase = pEditor;
             CmdRescanScriptModule.m_pDataBase = pEditor;
+            CmdSetProjectGame.m_pDataBase = pEditor;
+            CmdListModuleRegistrations.m_pDataBase = pEditor;
+            CmdListSceneModules.m_pDataBase = pEditor;
+            CmdCheckGameCompatibility.m_pDataBase = pEditor;
+            CmdListScenesUsingModule.m_pDataBase = pEditor;
             CmdRegenerateProjectModuleSources.m_pDataBase = pEditor;
             CmdRenameAssetFile.m_pDataBase = pEditor;
             CmdMoveAssetFile.m_pDataBase = pEditor;

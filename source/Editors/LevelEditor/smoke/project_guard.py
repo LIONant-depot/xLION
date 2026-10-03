@@ -19,7 +19,8 @@ from harness import REPO
 
 PROJECT = REPO / "example.lionprj"
 WATCHED = [PROJECT / "Descriptors", PROJECT / "Project.config"]
-RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture"]   # what a saved level rewrites, and a resource editor's Compile
+RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game"
+              , PROJECT / "Project.config" / "Script.config.txt"]   # what a saved level rewrites, and a resource editor's Compile; the Game's module list and which Game the project builds
 
 _state = {}
 
@@ -39,8 +40,11 @@ def pytest_sessionstart(session):
             dirs.update(p for p in root.rglob("*") if p.is_dir())
     backup = Path(tempfile.mkdtemp(prefix="xlion_smoke_backup_"))
     for root in RESTORABLE:
-        if root.exists():
+        if root.is_dir():
             shutil.copytree(root, backup / root.relative_to(PROJECT), dirs_exist_ok=True)
+        elif root.is_file():
+            (backup / root.relative_to(PROJECT)).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root, backup / root.relative_to(PROJECT))
     _state.update(snapshot=snap, dirs=dirs, backup=backup, started=time.time_ns())
 
 

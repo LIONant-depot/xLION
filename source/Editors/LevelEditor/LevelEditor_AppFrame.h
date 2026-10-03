@@ -42,8 +42,19 @@ namespace level_editor
         std::string Result = std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
         if (!Missing.empty())
         {
+            // Each one with the script module its scene was saved with, when it says (the module the Game has to list for the component to be there)
+            const auto ModuleNames = xlevel::commands::BuildAssetNameMap(xscript::module::type_guid_v);
             std::string Names;
-            for (auto& Dep : Missing) Names += (Names.empty() ? "" : ", ") + Dep.m_Name;
+            for (auto& Dep : Missing)
+            {
+                std::string Item = Dep.m_Name;
+                if (Dep.m_Module != 0 && Dep.m_Module != xecs::scene::unknown_module_v)
+                {
+                    const auto Found = ModuleNames.find(Dep.m_Module);
+                    Item += std::format(" (module {})", Found == ModuleNames.end() ? std::format("{:X}", Dep.m_Module) : Found->second);
+                }
+                Names += (Names.empty() ? "" : ", ") + Item;
+            }
             Result += std::format(" - WARNING: {} component type(s) used by these scenes are not currently registered: {}", Missing.size(), Names);
         }
         return Result;

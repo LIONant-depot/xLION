@@ -3,6 +3,7 @@ AddProjectModuleReference
 AddScriptSourceFile
 BindKey
 CaptureWindow
+CheckGameCompatibility
 Close
 CloseResourceEditor
 CompileAuto
@@ -27,7 +28,10 @@ ListKeymaps
 ListLegalReferenceLibraries
 ListLevels
 ListLibraries
+ListModuleRegistrations
 ListProjectModuleReferences
+ListSceneModules
+ListScenesUsingModule
 ListScriptSourceFiles
 LogAcknowledge
 LogAttach
@@ -68,6 +72,7 @@ MoveAsset
 MoveAssetFile
 OpenLevel
 OpenResourceEditor
+OpenTypeSource
 Pause
 Play
 PressKeys
@@ -91,6 +96,7 @@ Save
 SaveAssets
 SaveKeymapAs
 Say
+SetProjectGame
 SetScriptSourceFileContent
 SourceControlCommit
 SourceControlDepotStatus

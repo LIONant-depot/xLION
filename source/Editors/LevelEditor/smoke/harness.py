@@ -49,7 +49,7 @@ _EOF_ERRORS = (109, 233)      # ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED: th
 DISK_WRITERS = frozenset({
     "Save", "SaveAssets", "CreateAsset", "CreateLibrary", "RenameAsset", "MoveAsset", "DeleteAsset", "RestoreAsset",
     "RenameAssetFile", "MoveAssetFile", "DeleteAssetFileToTrash", "RestoreAssetFileFromTrash", "CopyAssetFile",
-    "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources",
+    "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources", "SetProjectGame",
     "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",
     "SourceControlCommit", "SourceControlPull", "SourceControlPush", "SourceControlRevert", "SourceControlStage",
     "SourceControlLock", "SourceControlUnlock",
@@ -308,11 +308,15 @@ class Editor:
         time.sleep(0.1)
         return result
 
+    def double_click(self, x: float, y: float) -> None:
+        """Two quick left clicks at the SCREEN point (x, y): what ImGui calls a double click (the pointer is placed once, the presses come 60 ms apart)."""
+        self.click(x, y, double=True)
+
     def drag(self, x: float, y: float, to_x: float, to_y: float) -> None:
         """Press at the screen point (x, y), move to (to_x, to_y) in steps, release: a drag with the real pointer (see click)."""
         self.click(x, y, to=(to_x, to_y))
 
-    def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False, to: tuple[float, float] | None = None) -> None:
+    def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False, to: tuple[float, float] | None = None, double: bool = False) -> None:
         """A real left click at the SCREEN point (x, y) - the coordinates ImGui and the editor's queries (LogWindow's BackAt...) report. It uses the real pointer: xGPU only
         hands ImGui a pointer position while Windows says the pointer is over the window, which messages posted to it cannot keep true. So the editor's window is brought
         forward (a click focuses a window, and ImGui ignores the pointer of one that is not focused), the pointer goes there, presses and releases, and returns to where the
@@ -350,6 +354,11 @@ class Editor:
             time.sleep(0.1)
             user32.mouse_event(0x0008 if right else 0x0002, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTDOWN / RIGHTDOWN
             time.sleep(hold)
+            if double:
+                user32.mouse_event(0x0004, 0, 0, 0, 0)
+                time.sleep(0.06)
+                user32.mouse_event(0x0002, 0, 0, 0, 0)
+                time.sleep(hold)
             if to:
                 for i in range(1, 11):                            # a drag: the pointer travels, frames pass on the way
                     user32.SetCursorPos(int(x + (to[0] - x) * i / 10), int(y + (to[1] - y) * i / 10))

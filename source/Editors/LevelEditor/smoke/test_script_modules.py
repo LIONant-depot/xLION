@@ -8,6 +8,7 @@ import secrets
 import pytest
 
 from harness import REPO, quote
+from script_project import game_project_text
 
 PROJECT = REPO / "example.lionprj"
 MODULE_GUID = "3849E1DE2402B1A5"
@@ -43,7 +44,7 @@ def module(editor):
             return [p for p, (_, _, state) in self.files().items() if state != "unlisted"]
 
         def cmake(self) -> str:
-            return CMAKE.read_text(errors="replace").replace("\\", "/")
+            return game_project_text()                                  # waits for the resource pipeline to have made the project
 
         def undo(self, times: int = 1) -> None:
             for _ in range(times):
@@ -71,7 +72,7 @@ def test_the_generated_project_builds_what_the_descriptor_lists(module):
     text = module.cmake()
     for name in module.order():
         assert f"/source_db/{name}" in text, f"{name} is in the generated project"
-    assert "cmake_minimum_required(VERSION 3.13)" in text
+    assert "cmake_minimum_required(VERSION 3.18)" in text
 
 
 def test_adding_a_file_creates_it_lists_it_and_the_undo_removes_it(module):

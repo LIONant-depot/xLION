@@ -76,7 +76,7 @@ endif()
 # core LevelEditor is actually built on - plus xPhysicsMaterial.plugin (its editor). Header-only
 # (nothing to compile ahead of time), so - same as xGPU's own root CMakeLists.txt - they're never in
 # Install.bat's PLUGINS loop, just cloned straight here and referenced through the plugins/ worm hole above.
-foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xPhysicsMaterial.plugin)
+foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xgame.plugin xPhysicsMaterial.plugin)
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}/source")
         execute_process(
             COMMAND git clone --depth 1 https://github.com/LIONant-depot/${HeaderOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}"
@@ -84,6 +84,28 @@ foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xPhys
         )
         if(result)
             message(FATAL_ERROR "Failed to clone ${HeaderOnlyPlugin}: ${result}")
+        endif()
+    endif()
+endforeach()
+
+# xscript_module.plugin and xgame.plugin ship the compilers of the ScriptModule and Game resources (Descriptor.txt -> the CMake file of the module; the modules' CMake files ->
+# the CMake project of the game). The resource pipeline runs the compilers of every type as exes, and Install.bat only builds the ones it knows, so these are built here when they
+# are missing (a developer rebuilds one with its plugin's build/CreateAndBuildProject.bat). A failed build is a warning: the resources then report "compiler not found" when they are
+# compiled, and nothing else is affected.
+foreach(CompilerPlugin xscript_module xgame)
+    set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
+    if(EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
+        if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
+            file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies" "${COMPILER_PLUGIN_DIR}/dependencies" SYMBOLIC RESULT result)
+        endif()
+        message(STATUS "Building the ${CompilerPlugin} compiler...")
+        execute_process(
+            COMMAND "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" "return"
+            WORKING_DIRECTORY "${COMPILER_PLUGIN_DIR}/build"
+            RESULT_VARIABLE result
+        )
+        if(result)
+            message(WARNING "The ${CompilerPlugin} compiler did not build (${result}): its resources cannot be compiled until it does")
         endif()
     endif()
 endforeach()

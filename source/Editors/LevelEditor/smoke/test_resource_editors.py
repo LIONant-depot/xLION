@@ -21,6 +21,8 @@ RESOURCE_EDITOR_TYPES = [
     "Skeleton",
     "Font",
     "AnimPackage",
+    "ScriptModule",
+    "Game",
 ]
 
 

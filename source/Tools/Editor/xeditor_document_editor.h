@@ -577,6 +577,9 @@ namespace xeditor
         virtual void OnCompileStarted()   noexcept {}           // a compile of this resource began: the compiled files are about to be replaced, let go of them
         virtual void OnCompiled()         noexcept {}           // a compile of this resource finished: reload what shows it
         virtual void OnCompileFailed()    noexcept {}           // a compile of this resource failed: the log says why
+        // Windows an editor draws of its own inside its dock space, besides its fixed panels (the script module editor: one window per open source file). Called
+        // after the panels, with the window class that keeps them docked to this editor only.
+        virtual void RenderExtraWindows(const ImGuiWindowClass&) noexcept {}
 
         IDocument&     getDocument() noexcept override { return m_Document; }
         xundo::system& getUndo()     noexcept override { return m_Undo; }
@@ -678,6 +681,7 @@ namespace xeditor
                 if (BeginEditorWindow(P.m_Title.c_str(), nullptr, P.m_Flags)) P.m_Render();      // the keys are live while this panel has the focus
                 ImGui::End();
             }
+            RenderExtraWindows(WindowClass);
         }
 
         // The whole editor window: a tab in the host's main dock space (icon + resource name) with the toolbar over a dock space of panels.

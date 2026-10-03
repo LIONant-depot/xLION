@@ -15,6 +15,8 @@
 #include "plugins/xgeom_skin.plugin/source/Editor/xgeom_skin_editor.h"
 #include "plugins/xskeleton.plugin/source/Editor/xskeleton_editor.h"
 #include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
+#include "plugins/xscript_module.plugin/source/Editor/xscript_module_editor.h"
+#include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
@@ -72,6 +74,49 @@ namespace level_editor::commands
         auto* pHost = xeditor::host::current();
         return pHost ? pHost->find<xeditor::open_resource_editors>() : nullptr;
     }
+
+    // Shows the file a component or a system is defined in: the module's editor is opened (or brought to the front) and its viewer shows the file; a type of the engine has its file handed
+    // to the system. What a click on the module tag of a component header, or "Open ..." of the System Registry's menu, does.
+    inline bool OpenTypeSource(const xscene::type_source& Source) noexcept
+    {
+        if (Source.m_Path.empty()) return false;
+        if (Source.m_Module)
+            if (auto* pEditors = FindResourceEditors())
+            {
+                const xresource::full_guid Asset{ xresource::instance_guid{ Source.m_Module }, xscript::module::type_guid_v };
+                if (const auto Library = xeditor::open_resource_editors::FindLibraryOf(Asset); !Library.empty()) pEditors->Open(Asset, Library);
+            }
+        xeditor::OpenRef(xlog::ref{ xlog::ref::type::File, Source.m_Path, 0, 0, 0, 0 });
+        return true;
+    }
+    inline const bool g_TypeSourceOpener = (xscene::g_OpenTypeSource = &OpenTypeSource, true);
+
+    // OpenTypeSource -Guid hex16 [-System true]: the same, by the guid of the component (or of the system, with -System true): what the AI and the tests use instead of the mouse.
+    struct open_type_source_cmd : xlevel::commands::level_query_command
+    {
+        open_type_source_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "OpenTypeSource", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Shows the file a component (or, with -System true, a system) is defined in: the module's editor opens at it. Usage: OpenTypeSource -Guid hexguid [-System true]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hGuid   = m_Parser.addOption("Guid",   "The guid of the component or the system, 16 hex digits", true, 1);
+            m_hSystem = m_Parser.addOption("System", "true: it is a system", false, 1);
+        }
+        std::string Query() noexcept override
+        {
+            auto GuidArg = m_Parser.getOptionArgAs<std::string>(m_hGuid, 0);
+            if (std::holds_alternative<xerr>(GuidArg)) return "OpenTypeSource: bad arguments";
+            const std::uint64_t Guid = std::strtoull(std::get<std::string>(GuidArg).c_str(), nullptr, 16);
+            auto SystemArg = m_Parser.getOptionArgAs<std::string>(m_hSystem, 0);
+            const bool bSystem = !std::holds_alternative<xerr>(SystemArg) && std::get<std::string>(SystemArg) == "true";
+
+            const auto Source = xscene::SourceOfType(bSystem, Guid);
+            if (!Source.m_bKnown)   return "OpenTypeSource: nothing is known about where types come from (is Game.dll loaded, and recent enough?)";
+            if (Source.m_bBuiltIn)  return std::format("OpenTypeSource: {:016X} is built in (the engine's or the editor's own): no module defines it", Guid);
+            if (!OpenTypeSource(Source)) return "OpenTypeSource: the type has no file";
+            return std::format("OpenTypeSource: ok\nModule={}\nFile={}\nPath={}", Source.m_ModuleName, Source.m_File, Source.m_Path);
+        }
+        xcmdline::parser::handle m_hGuid, m_hSystem;
+    };
 
     struct open_resource_editor_cmd : xlevel::commands::level_query_command
     {
