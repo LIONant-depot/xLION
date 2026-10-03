@@ -43,6 +43,7 @@ def test_the_scan_compares_per_file_and_per_token():
 
 
 def test_the_scan_covers_the_editor_and_not_the_tests():
-    seen = ecs_gate.scan()
+    seen = [f.relative_to(ecs_gate.REPO).as_posix() for f in ecs_gate.scanned_files()]          # every file read, whether it uses the tokens or not (a clean editor has none that does)
     assert any(f.startswith("plugins/xscene.plugin/") for f in seen) and any(f.startswith("plugins/xlevel.plugin/") for f in seen)
+    assert any(f.startswith("source/Editors/LevelEditor/") for f in seen)
     assert not any("/smoke/" in f for f in seen)

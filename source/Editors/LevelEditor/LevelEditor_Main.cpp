@@ -1,3 +1,7 @@
+// The editor knows the TYPES of the engine's components (their reflection, to inspect them) but never registers them: the copy of the core it talks to does (xECSEditor::RegisterHostComponents).
+// Without this, a header that says XSCRIPT_REGISTER_COMPONENT would make this binary run xECS registration code of its own (see xscript_registration.h, documentation/Editors/ecs_link_gate.md).
+#define XSCRIPT_IMPORT_ONLY
+
 // Folded in directly (not a separate CMake source) - see the port's own CMakeLists.txt comment
 // at the removed xgpu_imgui_breach target for why: it reproducibly fails to compile as its own
 // independent MSBuild-invoked translation unit ("xgpu::device/window not a member of xgpu"), for

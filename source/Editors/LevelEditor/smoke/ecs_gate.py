@@ -58,22 +58,26 @@ def strip_comments_and_strings(text: str) -> str:
     return "".join(out)
 
 
-def scan() -> dict:
-    """{relative file: {token: count}} of the code of the editor's sources."""
-    found: dict = {}
+def scanned_files() -> list:
+    """The sources the scan reads (relative to the repo), whether they use the tokens or not."""
+    out = []
     for root in SCAN_DIRS:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in SKIP_PARTS]
-            for name in filenames:
-                path = Path(dirpath) / name
-                if path.suffix.lower() not in SCAN_SUFFIXES:
-                    continue
-                code = strip_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
-                counts: dict = {}
-                for m in TOKEN_RE.finditer(code):
-                    counts[m[1]] = counts.get(m[1], 0) + 1
-                if counts:
-                    found[path.relative_to(REPO).as_posix()] = dict(sorted(counts.items()))
+            out += [Path(dirpath) / name for name in filenames if (Path(dirpath) / name).suffix.lower() in SCAN_SUFFIXES]
+    return out
+
+
+def scan() -> dict:
+    """{relative file: {token: count}} of the code of the editor's sources (the files that use none are not in it)."""
+    found: dict = {}
+    for path in scanned_files():
+        code = strip_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
+        counts: dict = {}
+        for m in TOKEN_RE.finditer(code):
+            counts[m[1]] = counts.get(m[1], 0) + 1
+        if counts:
+            found[path.relative_to(REPO).as_posix()] = dict(sorted(counts.items()))
     return dict(sorted(found.items()))
 
 

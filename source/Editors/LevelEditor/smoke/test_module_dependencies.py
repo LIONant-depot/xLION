@@ -151,7 +151,8 @@ def test_saving_a_scene_does_not_forget_the_entities_that_could_not_be_loaded(ed
         deps_file = PHYSICS_SCENE / "ComponentDeps.txt"
         deps = deps_file.read_bytes().decode()
         count = int(re.search(r"\[ ComponentDeps : (\d+) \]", deps)[1])
-        deps = deps.replace(f"[ ComponentDeps : {count} ]", f"[ ComponentDeps : {count + 1} ]").rstrip() + '\n  #DEADBEEF00000001  "Ghost"\n'
+        ghost = '\n  #DEADBEEF00000001  "Ghost"' + ("     #0" if "Module:G" in deps else "") + "\n"                    # in the columns the file has: a Save of another test may have rewritten it with the Module column
+        deps = deps.replace(f"[ ComponentDeps : {count} ]", f"[ ComponentDeps : {count + 1} ]").rstrip() + ghost
         deps_file.write_bytes(deps.encode())
         before = (PHYSICS_SCENE / "Descriptor.txt").read_bytes().decode()
         assert "ActiveEntities[G:0]\"    ;u32    #101" in before

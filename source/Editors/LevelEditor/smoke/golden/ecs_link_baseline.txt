@@ -1,2 +1,2 @@
 # Symbols the editor still takes from LIONCore.dll / LIONRender.dll through xLION.exe's own import (decorated names). May only shrink: python ecs_gate.py link --update
-__imp_?s_Registry@mgr@component@xecs@@2Uregistry@type@23@A
+
