@@ -209,6 +209,7 @@ namespace level_editor
         level_editor::commands::get_level_game_query_cmd          CmdGetLevelGame;
         level_editor::commands::describe_level_query_cmd          CmdDescribeLevel;
         level_editor::commands::probe_engine_set_query_cmd        CmdProbeEngineSet;
+        level_editor::commands::get_project_query_cmd             CmdGetProject;
         level_editor::commands::list_module_registrations_query_cmd CmdListModuleRegistrations;
         level_editor::commands::list_scene_modules_query_cmd      CmdListSceneModules;
         level_editor::commands::check_game_compatibility_query_cmd CmdCheckGameCompatibility;
@@ -298,6 +299,7 @@ namespace level_editor
         , CmdGetLevelGame(Workspace, pEditor)
         , CmdDescribeLevel(Workspace, pEditor)
         , CmdProbeEngineSet(Workspace, pEditor)
+        , CmdGetProject(Workspace, pEditor)
         , CmdListModuleRegistrations(Workspace, pEditor)
         , CmdListSceneModules(Workspace, pEditor)
         , CmdCheckGameCompatibility(Workspace, pEditor)
@@ -386,6 +388,7 @@ namespace level_editor
             CmdGetLevelGame.m_pDataBase = pEditor;
             CmdDescribeLevel.m_pDataBase = pEditor;
             CmdProbeEngineSet.m_pDataBase = pEditor;
+            CmdGetProject.m_pDataBase = pEditor;
             CmdListModuleRegistrations.m_pDataBase = pEditor;
             CmdListSceneModules.m_pDataBase = pEditor;
             CmdCheckGameCompatibility.m_pDataBase = pEditor;

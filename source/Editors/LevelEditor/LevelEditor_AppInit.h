@@ -1,7 +1,55 @@
 #pragma once
+#include <shellapi.h>
 
 namespace level_editor
 {
+    // The project the person asked for: `xLION.exe <project folder>` (or `--project <folder>`), else the XLION_PROJECT environment variable. Empty when none was asked for: the editor then opens the
+    // example project that sits above the executable (the repository's own).
+    inline std::filesystem::path RequestedProject() noexcept
+    {
+        std::filesystem::path Asked;
+        int    Argc = 0;
+        LPWSTR* pArgv = CommandLineToArgvW(GetCommandLineW(), &Argc);
+        for (int i = 1; pArgv && i < Argc; ++i)
+        {
+            const std::wstring Arg = pArgv[i];
+            if (Arg == L"--project" || Arg == L"-project" || Arg == L"/project") { if (i + 1 < Argc) Asked = pArgv[++i]; }
+            else if (!Arg.empty() && Arg[0] != L'-' && Arg[0] != L'/' && Asked.empty()) Asked = Arg;
+        }
+        if (pArgv) LocalFree(pArgv);
+        if (Asked.empty())
+        {
+            wchar_t* pEnv = nullptr; std::size_t Len = 0;
+            if (_wdupenv_s(&pEnv, &Len, L"XLION_PROJECT") == 0 && pEnv && *pEnv) Asked = pEnv;
+            std::free(pEnv);
+        }
+        return Asked;
+    }
+
+    // The folder of a project to open, made absolute, or empty with Why saying what is wrong with it. A project is a folder with its Project.config\Library.config.txt (which names the library) and the
+    // resource plugins in Cache\Plugins (the project's Install.bat puts them there); the Assets and Descriptors folders are made when they are missing.
+    inline std::filesystem::path ResolveProjectFolder(const std::filesystem::path& Asked, std::string& Why) noexcept
+    {
+        std::error_code Ec;
+        auto Folder = std::filesystem::absolute(Asked, Ec);
+        if (Ec || !std::filesystem::is_directory(Folder, Ec)) { Why = std::format("'{}' is not a folder", Asked.string()); return {}; }
+        Folder = std::filesystem::canonical(Folder, Ec);
+        if (Ec) { Why = std::format("'{}' cannot be opened", Asked.string()); return {}; }
+        if (!std::filesystem::exists(Folder / L"Project.config" / L"Library.config.txt", Ec))
+        {
+            Why = std::format("'{}' is not a project: it has no Project.config\\Library.config.txt", Folder.string());
+            return {};
+        }
+        if (!std::filesystem::is_directory(Folder / L"Cache" / L"Plugins", Ec))
+        {
+            Why = std::format("'{}' has no Cache\\Plugins: the resource plugins of a project are installed by its Install.bat", Folder.string());
+            return {};
+        }
+        std::filesystem::create_directories(Folder / L"Assets", Ec);
+        std::filesystem::create_directories(Folder / L"Descriptors", Ec);
+        return Folder;
+    }
+
     inline int app::Init(bool bHeadlessMode)
     {
         bHeadless = bHeadlessMode;
@@ -11,6 +59,25 @@ namespace level_editor
         xeditor::diagnostics::InstallTerminateHandler();
         xeditor::diagnostics::InstallUnhandledExceptionFilter();
         xeditor::diagnostics::Log("startup: LevelEditor_Example begin");
+
+        // A project that was asked for is checked before anything is created (no window for a path that is wrong).
+        std::filesystem::path RequestedFolder;
+        if (const auto Asked = RequestedProject(); !Asked.empty())
+        {
+            std::string Why;
+            RequestedFolder = ResolveProjectFolder(Asked, Why);
+            if (RequestedFolder.empty())
+            {
+                xeditor::diagnostics::Log("startup: the project asked for cannot be opened: %s", Why.c_str());
+                std::fprintf(stderr, "xLION: %s\n", Why.c_str());
+                // A person gets a box (there is no console); a script (XEDITOR_NO_ASSERT_DIALOG, what the tests set) or the headless build only gets the line on stderr and the exit code.
+                if (!bHeadless && !std::getenv("XEDITOR_NO_ASSERT_DIALOG")) MessageBoxW(nullptr, xstrtool::To(Why).c_str(), L"xLION - cannot open the project", MB_OK | MB_ICONERROR);
+                xeditor::diagnostics::RemoveCrtReportHook();
+                xeditor::diagnostics::RemoveTerminateHandler();
+                xeditor::diagnostics::Stop();
+                return 1;
+            }
+        }
 
         if (!bHeadless)
         {
@@ -80,19 +147,23 @@ namespace level_editor
             TCHAR szModulePath[MAX_PATH];
             GetModuleFileName(NULL, szModulePath, MAX_PATH);
 
-            std::filesystem::path RepoRoot;
-            for (std::filesystem::path Dir = std::filesystem::path(szModulePath).parent_path(); ; )
+            // The project that was asked for (command line, XLION_PROJECT), else the example project of the repository the executable is in.
+            std::filesystem::path ProjectDir = RequestedFolder;
+            if (ProjectDir.empty())
             {
-                std::error_code Ec;
-                if (std::filesystem::exists(Dir / L"example.lionprj" / L"Cache" / L"Plugins", Ec) && !Ec) { RepoRoot = Dir; break; }
-                const std::filesystem::path Parent = Dir.parent_path();
-                if (Parent.empty() || Parent == Dir) break; // reached the filesystem root without finding a bootstrapped project
-                Dir = Parent;
+                for (std::filesystem::path Dir = std::filesystem::path(szModulePath).parent_path(); ; )
+                {
+                    std::error_code Ec;
+                    if (std::filesystem::exists(Dir / L"example.lionprj" / L"Cache" / L"Plugins", Ec) && !Ec) { ProjectDir = Dir / L"example.lionprj"; break; }
+                    const std::filesystem::path Parent = Dir.parent_path();
+                    if (Parent.empty() || Parent == Dir) break; // reached the filesystem root without finding a bootstrapped project
+                    Dir = Parent;
+                }
             }
 
-            if (!RepoRoot.empty())
+            if (!ProjectDir.empty())
             {
-                const std::wstring ProjectPathW = (RepoRoot / L"example.lionprj").wstring();
+                const std::wstring ProjectPathW = ProjectDir.wstring();
                 TCHAR szFileName[MAX_PATH];
                 wcscpy_s(szFileName, MAX_PATH, ProjectPathW.c_str());
 
@@ -111,7 +182,7 @@ namespace level_editor
                 // from its stream and from the crash records xeditor::diagnostics keeps next to the working folder).
                 {
                     xlog::store::import_options Options;
-                    Options.m_Logs = RepoRoot / L"example.lionprj" / L"Cache" / L"Logs";
+                    Options.m_Logs = ProjectDir / L"Cache" / L"Logs";
                     {
                         char* pLogs = nullptr; std::size_t LogsLen = 0;
                         if (_dupenv_s(&pLogs, &LogsLen, "XLOG_LOGS_DIR") == 0 && pLogs && *pLogs) Options.m_Logs = pLogs;       // the smoke tests keep their launches apart from the project's own history
@@ -125,7 +196,7 @@ namespace level_editor
 
                     // What the person decided (acknowledged, muted, saved views) comes back from the last launch; the team's views are a file of the project (source control).
                     xlog::store::user_files Files;
-                    std::filesystem::path Config = RepoRoot / L"example.lionprj" / L"Project.config" / L"Logs";
+                    std::filesystem::path Config = ProjectDir / L"Project.config" / L"Logs";
                     char* pDir = nullptr; std::size_t DirLen = 0;
                     if (_dupenv_s(&pDir, &DirLen, "XLOG_USER_DIR") == 0 && pDir && *pDir) Config = pDir;       // the smoke tests keep what they decide out of the project
                     std::free(pDir);
@@ -170,7 +241,7 @@ namespace level_editor
             }
             else
             {
-                xeditor::diagnostics::Log("startup: could not locate a bootstrapped example.lionprj above the executable");
+                xeditor::diagnostics::Log("startup: no project: none was asked for (xLION.exe <project folder>) and no bootstrapped example.lionprj is above the executable");
             }
         }
         xeditor::diagnostics::Log("startup: editor state and asset browser constructed");

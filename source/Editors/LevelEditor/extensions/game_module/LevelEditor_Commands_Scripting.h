@@ -928,6 +928,19 @@ namespace level_editor::commands
         }
     };
 
+    // GetProject: the project the editor has open (xLION.exe <project folder>, XLION_PROJECT, or the example project of the repository).
+    struct get_project_query_cmd : xlevel::commands::level_query_command
+    {
+        get_project_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GetProject", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Says which project is open: its folder and its library. The project is chosen when the editor starts (xLION.exe <project folder>, --project <folder> or XLION_PROJECT); without one it is the example project. Usage: GetProject"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            const auto& Mgr = xresource_editor::g_LibMgr;
+            return std::format("GetProject: ok\nProject={}\nLibrary={:016X}", std::filesystem::path(Mgr.m_ProjectPath).string(), Mgr.m_ProjectGUID.m_Instance.m_Value);
+        }
+    };
+
     // ProbeEngineSet: makes a set of copies of the engine DLLs the way a Level that opens does (xlevel_engine_copies.h), shows that the copy of the core is a registry of its own (registering in it does not
     // touch the one this Level runs on) and that the render copy is bound to it, then frees the set again. What the independence of the Levels stands on, as a command.
     struct probe_engine_set_query_cmd : xlevel::commands::level_query_command

@@ -23,6 +23,7 @@ GetIdleTasks
 GetLevelGame
 GetLog
 GetPlayState
+GetProject
 ListActions
 ListAssets
 ListGestures

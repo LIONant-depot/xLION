@@ -112,8 +112,9 @@ class Session:
 
 
 class Editor:
-    def __init__(self, exe: Path = DEFAULT_EXE, *, log_dir: Optional[Path] = None, min_gap: float = 0.05, extra_env: Optional[dict] = None) -> None:
+    def __init__(self, exe: Path = DEFAULT_EXE, *, log_dir: Optional[Path] = None, min_gap: float = 0.05, extra_env: Optional[dict] = None, args: Optional[list] = None) -> None:
         self.extra_env = dict(extra_env or {})
+        self.args = [str(x) for x in (args or [])]        # the command line of the editor (a project folder, ...)
         self.exe = Path(exe)
         self.log_dir = Path(log_dir) if log_dir else SMOKE_DIR / ".logs"
         self.min_gap = min_gap
@@ -150,7 +151,7 @@ class Editor:
                 pass
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
-        self.proc = subprocess.Popen([str(self.exe)], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
+        self.proc = subprocess.Popen([str(self.exe), *self.args], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
                                      env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
