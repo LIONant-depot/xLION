@@ -109,7 +109,7 @@ namespace level_editor::commands
             auto SystemArg = m_Parser.getOptionArgAs<std::string>(m_hSystem, 0);
             const bool bSystem = !std::holds_alternative<xerr>(SystemArg) && std::get<std::string>(SystemArg) == "true";
 
-            const auto Source = xscene::SourceOfType(bSystem, Guid);
+            const auto Source = LevelContext().Display().SourceOf(bSystem, Guid);
             if (!Source.m_bKnown)   return "OpenTypeSource: nothing is known about where types come from (is Game.dll loaded, and recent enough?)";
             if (Source.m_bBuiltIn)  return std::format("OpenTypeSource: {:016X} is built in (the engine's or the editor's own): no module defines it", Guid);
             if (!OpenTypeSource(Source)) return "OpenTypeSource: the type has no file";

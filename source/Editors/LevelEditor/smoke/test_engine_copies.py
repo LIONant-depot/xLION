@@ -84,6 +84,7 @@ def test_two_levels_open_together_have_registries_of_their_own(editor):
         assert "SoccerBall" not in plain, "the Level with no Game has none of the Game's: its registry is its own"
         assert len(soccer.splitlines()) > len(plain.splitlines())
         assert "Transform" in soccer and "Transform" in plain, "both have the engine's"
+
     finally:
         editor.cmd("Close -Save 0")
         editor.cmd("Close -Save 0")
