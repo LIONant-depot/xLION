@@ -157,7 +157,7 @@ class Editor:
             deadline = time.monotonic() + ready_timeout
             while time.monotonic() < deadline:
                 if not self.alive():
-                    raise EditorCrashed(f"editor exited during startup (exit {self.describe_exit()})")
+                    raise EditorCrashed(f"editor exited during startup (exit {self.describe_exit()}){self.crash_summary()}")
                 try:
                     self._roundtrip("help", timeout=5.0)
                     return
@@ -194,6 +194,23 @@ class Editor:
     def describe_exit(self) -> str:
         code = self.exit_code()
         return "running" if code is None else f"{code & 0xFFFFFFFF:#010x}"
+
+    def crash_summary(self, frames: int = 8) -> str:
+        """What the editor itself wrote about how it died (its LevelEditor.trace.log: the assert or exception and the frames of the editor's own code), so a failure says it without a trip to the log."""
+        trace = self.exe.parent / "LevelEditor.trace.log"
+        try:
+            lines = trace.read_text(errors="replace").splitlines()
+        except OSError:
+            return ""
+        starts = [i for i, l in enumerate(lines) if l.startswith(("CRT report", "SEH exception"))]
+        if not starts:
+            return ""
+        block = lines[starts[-1]:]
+        head = block[0][:240]
+        mine = [l.split(" ", 2)[2][:200] for l in block[1:] if l.startswith(("CRT stack", "SEH stack")) and re.search(r"(xecs::|xlevel::|xscene::|xlioncore::|level_editor::|xeditor::)", l) and "CrtReportHook" not in l]
+        if not mine:                                                          # no frame of the editor's own code: the first frames as they are
+            mine = [l.split(" ", 2)[2][:200] for l in block[1:] if l.startswith(("CRT stack", "SEH stack")) and "CrtReportHook" not in l]
+        return "\n  " + "\n  ".join([head] + mine[:frames])
 
     # ------------------------------------------------------------------ pipe
     def _roundtrip(self, line: str, timeout: float) -> str:
@@ -244,14 +261,14 @@ class Editor:
             reply = self._roundtrip(line, timeout)
         except (TimeoutError, OSError) as e:
             if not self.alive():
-                raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()})") from e
+                raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()}){self.crash_summary()}") from e
             raise
         finally:
             self._last_cmd_at = time.monotonic()
         if not reply:                       # success for an edit command - but also all a dying editor leaves behind
             time.sleep(0.05)
             if not self.alive():
-                raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()})")
+                raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()}){self.crash_summary()}")
         return reply.rstrip()
 
     def ok(self, line: str, **kw) -> None:

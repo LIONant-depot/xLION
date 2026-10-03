@@ -26,6 +26,7 @@ namespace level_editor
         xscene::commands::clear_selection_cmd               CmdClearSelection;
         xscene::commands::rename_entity_cmd                 CmdRenameEntity;
         xscene::commands::set_property_cmd                  CmdSetProperty;
+        xscene::commands::get_property_query_cmd            CmdGetProperty;
         xscene::commands::snapshot_edit_cmd                 CmdSnapshotEdit;
         xscene::commands::translate_cmd                     CmdTranslate;
         xscene::commands::rotate_cmd                        CmdRotate;
@@ -102,6 +103,7 @@ namespace level_editor
         , CmdClearSelection(Level, pScene)
         , CmdRenameEntity(Level, pScene)
         , CmdSetProperty(Level, pScene)
+        , CmdGetProperty(Level, pScene)
         , CmdSnapshotEdit(Level, pScene)
         , CmdTranslate(Level, pScene)
         , CmdRotate(Level, pScene)

@@ -21,6 +21,10 @@ import pytest
 from harness import DEFAULT_EXE, GOLDEN_DIR, Editor, vulkan_messages_from_text
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "no_editor: the test needs no editor (it is not started for it)")
+
+
 def pytest_addoption(parser):
     parser.addoption("--exe", default=str(DEFAULT_EXE), help="xGPU_unit_test.exe to launch")
     parser.addoption("--update-golden", action="store_true", help="rewrite golden files from the running editor")
@@ -42,8 +46,12 @@ def pytest_runtest_makereport(item, call):
 
 
 @pytest.fixture(autouse=True)
-def _editor_alive(request, editor):
-    """Restart a dead editor before each test; fail the test that killed it (once)."""
+def _editor_alive(request):
+    """Restart a dead editor before each test; fail the test that killed it (once). A test marked no_editor (pytestmark = pytest.mark.no_editor) never starts one."""
+    if request.node.get_closest_marker("no_editor"):
+        yield
+        return
+    editor = request.getfixturevalue("editor")
     editor.ensure_running()
     yield
     if not editor.alive() and not getattr(request.node, "call_failed", False):
@@ -166,8 +174,12 @@ def pytest_sessionstart(session):
 
 
 @pytest.fixture(autouse=True)
-def _vulkan_from_the_logs(request, editor):
+def _vulkan_from_the_logs(request):
     """After every test: the Vulkan validation problems the editor's Logs hold (the harness as a client of the Logs, next to its reading of the text)."""
+    if request.node.get_closest_marker("no_editor"):
+        yield
+        return
+    editor = request.getfixturevalue("editor")
     yield
     if editor.alive():
         try:
