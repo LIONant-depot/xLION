@@ -16,29 +16,8 @@
   "m_pPool": 3,
   "s_Registry": 1
  },
- "plugins/xlevel.plugin/source/Editor/xlevel_panel_level_tree.h": {
-  "getComponentBits": 5,
-  "info_v": 4,
-  "m_BitID": 4,
-  "m_pPool": 9
- },
  "plugins/xlevel.plugin/source/Editor/xlevel_session.h": {
   "SyncLocalBitIDs": 1
- },
- "plugins/xscene.plugin/source/Editor/xscene_command_context.h": {
-  "getComponentBits": 1,
-  "getEntityDetails": 1,
-  "info_v": 1,
-  "m_BitID": 1,
-  "m_pPool": 2
- },
- "plugins/xscene.plugin/source/Editor/xscene_commands_apply_overrides.h": {
-  "findComponentTypeInfo": 2,
-  "getComponentBits": 3,
-  "getEntityDetails": 15,
-  "info_v": 14,
-  "m_BitID": 3,
-  "m_pPool": 44
  },
  "plugins/xscene.plugin/source/Editor/xscene_entity_inspector_bridge.h": {
   "getComponentBits": 1,
@@ -55,11 +34,6 @@
   "getComponentBits": 3,
   "getEntityDetails": 2,
   "m_pPool": 7
- },
- "plugins/xscene.plugin/source/Editor/xscene_prefab_overrides.h": {
-  "getEntityDetails": 5,
-  "info_v": 5,
-  "m_pPool": 13
  },
  "plugins/xscene.plugin/source/Editor/xscene_system_usage.h": {
   "findComponentTypeInfo": 1,

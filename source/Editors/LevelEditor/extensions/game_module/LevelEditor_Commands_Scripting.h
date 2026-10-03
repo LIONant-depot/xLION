@@ -448,7 +448,7 @@ namespace level_editor::commands
             const bool bRunsHere = Game == 0 || Game == xlevel::ProjectGameValue();         // the open scenes run under the project's Game: another Game's list is not in their way
             if (bRunsHere)
             for (auto& SceneGuid : State().m_OpenScenes)
-                for (const auto& Dep : World().m_SceneMgr.CollectSceneComponentDependencies(SceneGuid))
+                for (const auto& Dep : xlioncore::Ecs(World()).CollectSceneComponentDependencies(SceneGuid))
                     if (Dep.m_Module == ModuleValue && std::find(InUse.begin(), InUse.end(), Dep.m_Name) == InUse.end()) InUse.push_back(Dep.m_Name);
             if (!InUse.empty())
             {
