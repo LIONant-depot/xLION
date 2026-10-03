@@ -20,6 +20,16 @@ namespace level_editor
             return std::format("OpenLevel: {:016X} is already open", Value);
         }
 
+        // One Game.dll runs in this editor: the project's Game. A Level that names another Game cannot open until the editor can switch Games, and says so instead of running its scenes under the
+        // wrong systems. (SetLevelGame -Level <guid> gives it the project's Game again, or changes which Game the project builds.)
+        if (const auto Named = xlevel::ReadLevelGame(xlevel::ProjectRoot().wstring(), Value); Named != 0 && xlevel::ProjectGameValue() != 0 && Named != xlevel::ProjectGameValue())
+        {
+            const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
+            auto Label = [&](std::uint64_t Game) { const auto It = Names.find(Game); return It == Names.end() ? std::format("{:X}", Game) : It->second; };
+            return std::format("OpenLevel: refused - Level {:016X} runs under the Game '{}', but this editor runs the project's Game '{}' (one Game at a time). "
+                               "Give the Level the project's Game (SetLevelGame -Level {:016X}), or make '{}' the project's Game (SetProjectGame).", Value, Label(Named), Label(xlevel::ProjectGameValue()), Value, Label(Named));
+        }
+
         auto* pEditor  = ResourceEditors.Open(LevelGuid, xeditor::open_resource_editors::FindLibraryOf(LevelGuid));
         auto* pSession = dynamic_cast<xlevel::session*>(pEditor);
         if (pSession == nullptr || pSession->m_State.m_CurrentLevel.empty())
@@ -56,6 +66,16 @@ namespace level_editor
                 Names += (Names.empty() ? "" : ", ") + Item;
             }
             Result += std::format(" - WARNING: {} component type(s) used by these scenes are not currently registered: {}", Missing.size(), Names);
+        }
+        // The same question, answered from the files: does the Game this Level runs under list the modules its scenes need?
+        {
+            const std::wstring Project = xlevel::ProjectRoot().wstring();
+            xlevel::scene_module_needs Needs;
+            for (auto& SceneGuid : pSession->m_State.m_OpenScenes) xlevel::AddSceneModuleNeeds(Needs, Project, SceneGuid.m_Instance.m_Value, /*bTransitive*/ false);
+            const auto Game = xlevel::ReadGame(xlevel::EffectiveGameOf(Value));
+            if (Game.HasGame())
+                if (const auto Gaps = xlevel::MissingModules(Needs, Game.m_Modules); !Gaps.empty())
+                    Result += std::format(" - WARNING: the Game does not list {} module(s) these scenes need (CheckGameCompatibility -Level {:016X} says which)", Gaps.size(), Value);
         }
         return Result;
     }

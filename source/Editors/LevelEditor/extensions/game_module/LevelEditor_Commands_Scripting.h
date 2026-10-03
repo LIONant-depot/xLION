@@ -338,13 +338,30 @@ namespace level_editor::commands
     // game from it. Add, Remove and Set are undoable and persist at once - no separate "Save" step. A project that has no Game resource gets one
     // (named "Game") the first time a module is added. No cycle/orphan checks: this is a flat list, not a graph.
     //================================================================================================
+    namespace game_arg
+    {
+        // -Game assetguid (optional) on the module commands: the Game resource they work on. 0 is the project's own Game. Returns "" or what is wrong with the argument.
+        inline std::string Read(const xcmdline::parser& Parser, xcmdline::parser::handle H, std::uint64_t& Game) noexcept
+        {
+            Game = 0;
+            auto Arg = Parser.getOptionArgAs<std::string>(H, 0);
+            if (std::holds_alternative<xerr>(Arg)) return {};
+            const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(Arg));
+            if (Guid.m_Type != xgame::type_guid_v || Guid.m_Instance.empty()) return "not a Game asset guid";
+            if (xgame::FindGameFolder(xlevel::ProjectRoot(), xgame::game_ref{ Guid.m_Instance }).empty()) return "the Game is not in the project";
+            Game = Guid.m_Instance.m_Value;
+            return {};
+        }
+    }
+
     struct add_project_module_reference_cmd : xlevel::commands::level_command
     {
         add_project_module_reference_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "AddProjectModuleReference", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Adds a Script-Module resource to the project's Game (undoable, persisted immediately; the project gets a Game resource when it has none). Usage: AddProjectModuleReference -Module assetguid"; }
+        const char* getCommandHelp() const noexcept override { return "Adds a Script-Module resource to a Game (default: the project's; undoable, persisted immediately; the project gets a Game resource when it has none). Usage: AddProjectModuleReference -Module assetguid [-Game assetguid]"; }
         void RegisterArguments() noexcept override
         {
             m_hModule = m_Parser.addOption("Module", "Script-Module asset guid, 32 hex digits", true, 1);
+            m_hGame   = m_Parser.addOption("Game",   "Game asset guid, 32 hex digits (default: the project's Game)", false, 1);
         }
 
         std::string Redo() noexcept override
@@ -354,9 +371,11 @@ namespace level_editor::commands
 
             const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
             if (Guid.m_Type != xscript::module::type_guid_v || Guid.m_Instance.empty()) return "AddProjectModuleReference: not a Script-Module asset guid";
-            if (auto Why = xlevel::EnsureProjectGame(); !Why.empty()) return "AddProjectModuleReference: " + Why;
+            std::uint64_t Game = 0;
+            if (auto Bad = game_arg::Read(m_Parser, m_hGame, Game); !Bad.empty()) return "AddProjectModuleReference: " + Bad;
+            if (Game == 0) if (auto Why = xlevel::EnsureProjectGame(); !Why.empty()) return "AddProjectModuleReference: " + Why;
             const xscript::module::module_ref Module{ Guid.m_Instance };
-            auto Why = xlevel::EditProjectGame([&](xgame::descriptor& D) -> std::string
+            auto Why = xlevel::EditGame(Game, [&](xgame::descriptor& D) -> std::string
             {
                 if (std::find(D.m_Modules.begin(), D.m_Modules.end(), Module) == D.m_Modules.end()) D.m_Modules.push_back(Module);
                 return {};
@@ -369,39 +388,44 @@ namespace level_editor::commands
             auto ModuleArg = m_Parser.getOptionArgAs<std::string>(m_hModule, 0);
             xeditor::WriteString(File, std::holds_alternative<xerr>(ModuleArg) ? std::string(32, '0') : std::get<std::string>(ModuleArg));
             // whether the module was there before: Redo of an already listed module changes nothing, and its undo must not remove it
+            std::uint64_t Game = 0;
+            game_arg::Read(m_Parser, m_hGame, Game);
             std::uint8_t bWas = 0;
             if (!std::holds_alternative<xerr>(ModuleArg))
             {
                 const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
-                const auto Modules = xlevel::ProjectModules();
+                const auto Modules = xlevel::ReadGame(Game).m_Modules;
                 bWas = std::find(Modules.begin(), Modules.end(), xscript::module::module_ref{ Guid.m_Instance }) != Modules.end();
             }
             File.Write(bWas);
+            File.Write(Game);
         }
 
         void Undo(xundo::undo_file& File) noexcept override
         {
             const auto Guid = xresource_editor::commands::ParseAssetGuid(xeditor::ReadString(File));
             std::uint8_t bWas = 0; File.Read(bWas);
+            std::uint64_t Game = 0; File.Read(Game);
             if (bWas) return;
             const xscript::module::module_ref Module{ Guid.m_Instance };
-            xlevel::EditProjectGame([&](xgame::descriptor& D) -> std::string
+            xlevel::EditGame(Game, [&](xgame::descriptor& D) -> std::string
             {
                 if (auto It = std::find(D.m_Modules.begin(), D.m_Modules.end(), Module); It != D.m_Modules.end()) D.m_Modules.erase(It);
                 return {};
             });
         }
 
-        xcmdline::parser::handle m_hModule;
+        xcmdline::parser::handle m_hModule, m_hGame;
     };
 
     struct remove_project_module_reference_cmd : xlevel::commands::level_command
     {
         remove_project_module_reference_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "RemoveProjectModuleReference", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Removes a Script-Module resource from the project's Game (undoable, persisted immediately). Usage: RemoveProjectModuleReference -Module assetguid"; }
+        const char* getCommandHelp() const noexcept override { return "Removes a Script-Module resource from a Game (default: the project's; undoable, persisted immediately). Usage: RemoveProjectModuleReference -Module assetguid [-Game assetguid]"; }
         void RegisterArguments() noexcept override
         {
             m_hModule = m_Parser.addOption("Module", "Script-Module asset guid, 32 hex digits", true, 1);
+            m_hGame   = m_Parser.addOption("Game",   "Game asset guid, 32 hex digits (default: the project's Game)", false, 1);
         }
 
         std::string Redo() noexcept override
@@ -411,14 +435,18 @@ namespace level_editor::commands
 
             const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
             const xscript::module::module_ref Module{ Guid.m_Instance };
-            const auto Modules = xlevel::ProjectModules();
-            if (std::find(Modules.begin(), Modules.end(), Module) == Modules.end()) return "RemoveProjectModuleReference: not a project module reference";
+            std::uint64_t Game = 0;
+            if (auto Bad = game_arg::Read(m_Parser, m_hGame, Game); !Bad.empty()) return "RemoveProjectModuleReference: " + Bad;
+            const auto Modules = xlevel::ReadGame(Game).m_Modules;
+            if (std::find(Modules.begin(), Modules.end(), Module) == Modules.end()) return "RemoveProjectModuleReference: not a module reference of that Game";
 
             // Refused when a scene that is OPEN uses components of this module: its live entities say so, no rebuild needed (this used to build the game without the module, on this thread, and
             // look at what the new DLL still registered: minutes of a frozen editor for a question the data answers). The scenes of other, closed Levels are not in the way - they are checked
             // against the Game that runs them when they are opened - but the person is told how many there are.
             const auto ModuleValue = Module.m_Instance.m_Value;
             std::vector<std::string> InUse;
+            const bool bRunsHere = Game == 0 || Game == xlevel::ProjectGameValue();         // the open scenes run under the project's Game: another Game's list is not in their way
+            if (bRunsHere)
             for (auto& SceneGuid : State().m_OpenScenes)
                 for (const auto& Dep : World().m_SceneMgr.CollectSceneComponentDependencies(SceneGuid))
                     if (Dep.m_Module == ModuleValue && std::find(InUse.begin(), InUse.end(), Dep.m_Name) == InUse.end()) InUse.push_back(Dep.m_Name);
@@ -429,7 +457,7 @@ namespace level_editor::commands
                 return std::format("RemoveProjectModuleReference: refused - the open scene(s) use {} component(s) of this module: {}. Remove those components, or close the level, first", InUse.size(), Names);
             }
 
-            if (auto Why = xlevel::EditProjectGame([&](xgame::descriptor& D) -> std::string
+            if (auto Why = xlevel::EditGame(Game, [&](xgame::descriptor& D) -> std::string
                 {
                     if (auto Found = std::find(D.m_Modules.begin(), D.m_Modules.end(), Module); Found != D.m_Modules.end()) D.m_Modules.erase(Found);
                     return {};
@@ -446,23 +474,27 @@ namespace level_editor::commands
         {
             auto ModuleArg = m_Parser.getOptionArgAs<std::string>(m_hModule, 0);
             std::uint32_t Index = 0;
+            std::uint64_t Game = 0;
+            game_arg::Read(m_Parser, m_hGame, Game);
             if (!std::holds_alternative<xerr>(ModuleArg))
             {
                 const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(ModuleArg));
-                const auto Modules = xlevel::ProjectModules();
+                const auto Modules = xlevel::ReadGame(Game).m_Modules;
                 if (auto It = std::find(Modules.begin(), Modules.end(), xscript::module::module_ref{ Guid.m_Instance }); It != Modules.end())
                     Index = static_cast<std::uint32_t>(std::distance(Modules.begin(), It));
             }
             xeditor::WriteString(File, std::holds_alternative<xerr>(ModuleArg) ? std::string(32, '0') : std::get<std::string>(ModuleArg));
             File.Write(Index);
+            File.Write(Game);
         }
 
         void Undo(xundo::undo_file& File) noexcept override
         {
             const auto Guid = xresource_editor::commands::ParseAssetGuid(xeditor::ReadString(File));
             std::uint32_t Index = 0; File.Read(Index);
+            std::uint64_t Game = 0; File.Read(Game);
             const xscript::module::module_ref Module{ Guid.m_Instance };
-            xlevel::EditProjectGame([&](xgame::descriptor& D) -> std::string
+            xlevel::EditGame(Game, [&](xgame::descriptor& D) -> std::string
             {
                 if (std::find(D.m_Modules.begin(), D.m_Modules.end(), Module) == D.m_Modules.end())
                     D.m_Modules.insert(D.m_Modules.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(Index, D.m_Modules.size())), Module);
@@ -470,7 +502,7 @@ namespace level_editor::commands
             });
         }
 
-        xcmdline::parser::handle m_hModule;
+        xcmdline::parser::handle m_hModule, m_hGame;
     };
 
     //================================================================================================
@@ -480,19 +512,25 @@ namespace level_editor::commands
     struct list_project_module_references_query_cmd : xlevel::commands::level_query_command
     {
         list_project_module_references_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ListProjectModuleReferences", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Lists the project's Game resource and the Script-Modules it is made of. Usage: ListProjectModuleReferences"; }
-        void RegisterArguments() noexcept override {}
+        const char* getCommandHelp() const noexcept override { return "Lists a Game resource (default: the project's) and the Script-Modules it is made of. Usage: ListProjectModuleReferences [-Game assetguid]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hGame = m_Parser.addOption("Game", "Game asset guid, 32 hex digits (default: the project's Game)", false, 1);
+        }
 
         std::string Query() noexcept override
         {
-            const auto Game = xlevel::ReadProjectGame();
+            std::uint64_t GameValue = 0;
+            if (auto Bad = game_arg::Read(m_Parser, m_hGame, GameValue); !Bad.empty()) return "ListProjectModuleReferences: " + Bad;
+            const auto Game = xlevel::ReadGame(GameValue);
             if (!Game.HasGame()) return "Game: (none)\n(empty)";
-            std::string Out = "Game: " + xresource_editor::commands::FormatAssetGuid(xresource::full_guid{ xlevel::g_ScriptConfig.m_Game.m_Instance, xgame::type_guid_v }) + "\n";
+            std::string Out = "Game: " + xresource_editor::commands::FormatAssetGuid(xresource::full_guid{ xresource::instance_guid{ GameValue ? GameValue : xlevel::ProjectGameValue() }, xgame::type_guid_v }) + "\n";
             if (Game.m_Modules.empty()) return Out + "(empty)";
             for (auto& M : Game.m_Modules)
                 Out += xresource_editor::commands::FormatAssetGuid(xresource::full_guid{ M.m_Instance, xscript::module::type_guid_v }) + "\n";
             return Out;
         }
+        xcmdline::parser::handle m_hGame;
     };
 
     //================================================================================================
@@ -733,14 +771,7 @@ namespace level_editor::commands
                     Out += "\n";
                     continue;
                 }
-                Out += Header + "\tincompatible\n";
-                for (const auto& [Module, Need] : Missing)
-                {
-                    std::vector<std::string> SceneLabels;
-                    for (const auto S : Need.m_Scenes) SceneLabels.push_back(std::format("{:016X} ({})", S, module_dependencies::Label(SceneNames, S)));
-                    Out += std::format("  needs module {} ({}) for {}; used by scene {}. Add the module to the Game, or run the level with another Game.\n"
-                        , module_dependencies::Label(Modules, Module), module_dependencies::ModuleAsset(Module), module_dependencies::Join(Need.m_Components), module_dependencies::Join(SceneLabels));
-                }
+                Out += Header + "\tincompatible\n" + xlevel::DescribeMissingModules(Missing);
             }
             return Out;
         }
@@ -770,6 +801,115 @@ namespace level_editor::commands
             return Out;
         }
         xcmdline::parser::handle m_hModule;
+    };
+
+    //================================================================================================
+    // SetLevelGame / GetLevelGame - the Game a Level runs under (the Level's descriptor: `Game`). Empty is the project's Game. A Game that does not list a module that one of the Level's scenes
+    // needs is refused, with the modules (the data-only check: ListSceneModules / CheckGameCompatibility say the same). Persisted at once, undoable.
+    //================================================================================================
+    namespace level_game
+    {
+        inline std::filesystem::path LevelFolder(std::uint64_t Level) noexcept
+        {
+            return xlevel::ProjectRoot() / "Descriptors" / "Level" / std::format("{:02X}", Level & 0xFF) / std::format("{:02X}", (Level >> 8) & 0xFF) / std::format("{:X}.desc", Level);
+        }
+
+        // Writes the Level's Descriptor.txt with another Game (the scenes stay as they are on disk), and the live Level of every open editor with it, so that a later Save keeps it.
+        inline std::string Write(std::uint64_t Level, std::uint64_t Game) noexcept
+        {
+            const auto Folder = LevelFolder(Level);
+            std::error_code Ec;
+            if (!std::filesystem::is_directory(Folder, Ec)) return "the Level is not in the project";
+            xecs::level::descriptor D;
+            xproperty::settings::context Context{};
+            const auto File = (Folder / "Descriptor.txt").wstring();
+            if (std::filesystem::exists(File, Ec)) D.Serialize(true, File, Context);        // a Level that was never saved has none: it starts empty
+            D.m_Game = xecs::level::game_ref{ xresource::instance_guid{ Game } };
+            std::string Why;
+            const bool bWritten = xscript::module::Retry([&]
+            {
+                xproperty::settings::context WriteContext{};
+                if (auto Err = D.Serialize(false, File, WriteContext); Err) { Why = std::string(Err.getMessage()); return false; }
+                return true;
+            });
+            if (!bWritten) return "the Level could not be saved: " + Why;
+            for (auto* pContext : xlevel::g_LevelContexts)
+                if (auto* pLevel = pContext->World().m_LevelMgr.Find(xecs::level::guid{ xresource::instance_guid{ Level } })) pLevel->m_Game = D.m_Game;
+            return {};
+        }
+    }
+
+    struct set_level_game_cmd : xlevel::commands::level_command
+    {
+        set_level_game_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "SetLevelGame", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Sets the Game a Level runs under (undoable, persisted immediately); without -Game the Level runs under the project's Game. A Game that lacks a module the Level's scenes need is refused. Usage: SetLevelGame -Level hexguid [-Game assetguid]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hLevel = m_Parser.addOption("Level", "Level instance guid, 16 hex digits", true, 1);
+            m_hGame  = m_Parser.addOption("Game",  "Game asset guid, 32 hex digits (default: none, the Level runs under the project's Game)", false, 1);
+        }
+
+        std::string Redo() noexcept override
+        {
+            bool bGiven = false;
+            const auto Level = module_dependencies::HexArg(m_Parser, m_hLevel, bGiven);
+            if (!bGiven || !Level) return "SetLevelGame: bad arguments";
+            std::uint64_t Game = 0;
+            if (auto Bad = game_arg::Read(m_Parser, m_hGame, Game); !Bad.empty()) return "SetLevelGame: " + Bad;
+
+            // What the Level's scenes need must be in the Game that is to run them (the project's Game when none is named)
+            const std::wstring Project = xlevel::ProjectRoot().wstring();
+            xlevel::scene_module_needs Needs;
+            for (const auto Scene : xlevel::ReadLevelScenes(Project, Level)) xlevel::AddSceneModuleNeeds(Needs, Project, Scene, /*bTransitive*/ true);
+            const auto Target = xlevel::ReadGame(Game);
+            if (Target.HasGame())
+                if (const auto Missing = xlevel::MissingModules(Needs, Target.m_Modules); !Missing.empty())
+                    return "SetLevelGame: refused - the Game does not list what the Level needs:\n" + xlevel::DescribeMissingModules(Missing);
+
+            if (auto Why = level_game::Write(Level, Game); !Why.empty()) return "SetLevelGame: " + Why;
+            return {};
+        }
+
+        void BackupCurrenState(xundo::undo_file& File) noexcept override
+        {
+            bool bGiven = false;
+            const auto Level = module_dependencies::HexArg(m_Parser, m_hLevel, bGiven);
+            File.Write(Level);
+            File.Write(bGiven ? xlevel::ReadLevelGame(xlevel::ProjectRoot().wstring(), Level) : std::uint64_t{ 0 });
+        }
+
+        void Undo(xundo::undo_file& File) noexcept override
+        {
+            std::uint64_t Level = 0, Before = 0;
+            File.Read(Level); File.Read(Before);
+            if (Level) level_game::Write(Level, Before);
+        }
+
+        xcmdline::parser::handle m_hLevel, m_hGame;
+    };
+
+    struct get_level_game_query_cmd : xlevel::commands::level_query_command
+    {
+        get_level_game_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GetLevelGame", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Says the Game a Level runs under: the one it names, or the project's. Usage: GetLevelGame -Level hexguid"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hLevel = m_Parser.addOption("Level", "Level instance guid, 16 hex digits", true, 1);
+        }
+        std::string Query() noexcept override
+        {
+            bool bGiven = false;
+            const auto Level = module_dependencies::HexArg(m_Parser, m_hLevel, bGiven);
+            if (!bGiven || !Level) return "GetLevelGame: bad arguments";
+            std::error_code Ec;
+            if (!std::filesystem::is_directory(level_game::LevelFolder(Level), Ec)) return std::format("GetLevelGame: Level {:016X} is not in the project", Level);
+            const auto Named     = xlevel::ReadLevelGame(xlevel::ProjectRoot().wstring(), Level);
+            const auto Effective = Named ? Named : xlevel::ProjectGameValue();
+            const auto Names     = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
+            return std::format("GetLevelGame: ok\nGame={}\nSource={}\nName={}", Effective ? module_dependencies::GameAsset(Effective) : std::string("(none)"), Named ? "set" : "default"
+                , Effective ? module_dependencies::Label(Names, Effective) : std::string());
+        }
+        xcmdline::parser::handle m_hLevel;
     };
 
     //================================================================================================

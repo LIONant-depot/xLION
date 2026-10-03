@@ -68,7 +68,7 @@ def test_a_module_added_to_the_game_is_in_the_project_and_the_undo_takes_it_out(
         assert project_game(editor)[1] == [MODULE_ASSET, module], "and the redo put it back"
         assert editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True) == ""
         assert project_game(editor)[1] == [MODULE_ASSET]
-        assert "not a project module reference" in editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True)
+        assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True)
     finally:
         editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True)
     wait_for_pipeline(120)
@@ -78,7 +78,7 @@ def test_a_module_added_to_the_game_is_in_the_project_and_the_undo_takes_it_out(
 
 def test_a_guid_that_is_not_a_module_is_refused(editor):
     assert "not a Script-Module" in editor.cmd(f"AddProjectModuleReference -Module 0000000000000001{GAME_TYPE}", allow_disk=True)
-    assert "not a project module reference" in editor.cmd(f"RemoveProjectModuleReference -Module 0000000000000001{MODULE_TYPE}", allow_disk=True)
+    assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module 0000000000000001{MODULE_TYPE}", allow_disk=True)
 
 
 def test_the_project_can_be_pointed_at_another_game_and_the_undo_points_it_back(editor, lib):

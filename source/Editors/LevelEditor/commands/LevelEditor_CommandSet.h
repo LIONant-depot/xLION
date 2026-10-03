@@ -192,6 +192,8 @@ namespace level_editor
         level_editor::commands::rename_script_source_file_cmd     CmdRenameScriptSourceFile;
         level_editor::commands::rescan_script_module_cmd          CmdRescanScriptModule;
         level_editor::commands::set_project_game_cmd              CmdSetProjectGame;
+        level_editor::commands::set_level_game_cmd                CmdSetLevelGame;
+        level_editor::commands::get_level_game_query_cmd          CmdGetLevelGame;
         level_editor::commands::list_module_registrations_query_cmd CmdListModuleRegistrations;
         level_editor::commands::list_scene_modules_query_cmd      CmdListSceneModules;
         level_editor::commands::check_game_compatibility_query_cmd CmdCheckGameCompatibility;
@@ -278,6 +280,8 @@ namespace level_editor
         , CmdRenameScriptSourceFile(Workspace, pEditor)
         , CmdRescanScriptModule(Workspace, pEditor)
         , CmdSetProjectGame(Workspace, pEditor)
+        , CmdSetLevelGame(Workspace, pEditor)
+        , CmdGetLevelGame(Workspace, pEditor)
         , CmdListModuleRegistrations(Workspace, pEditor)
         , CmdListSceneModules(Workspace, pEditor)
         , CmdCheckGameCompatibility(Workspace, pEditor)
@@ -363,6 +367,8 @@ namespace level_editor
             CmdRenameScriptSourceFile.m_pDataBase = pEditor;
             CmdRescanScriptModule.m_pDataBase = pEditor;
             CmdSetProjectGame.m_pDataBase = pEditor;
+            CmdSetLevelGame.m_pDataBase = pEditor;
+            CmdGetLevelGame.m_pDataBase = pEditor;
             CmdListModuleRegistrations.m_pDataBase = pEditor;
             CmdListSceneModules.m_pDataBase = pEditor;
             CmdCheckGameCompatibility.m_pDataBase = pEditor;

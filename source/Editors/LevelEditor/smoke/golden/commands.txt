@@ -19,6 +19,7 @@ DescribeAsset
 Exit
 ExplainLastKey
 GetIdleTasks
+GetLevelGame
 GetLog
 GetPlayState
 ListActions
@@ -96,6 +97,7 @@ Save
 SaveAssets
 SaveKeymapAs
 Say
+SetLevelGame
 SetProjectGame
 SetScriptSourceFileContent
 SourceControlCommit
