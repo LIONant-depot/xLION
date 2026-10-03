@@ -10,13 +10,13 @@ import time
 import pytest
 
 from harness import REPO, quote
-from script_project import game_project_text, module_cmake_text
+from script_project import CMAKELISTS, game_project_text, module_cmake_text
 
 PROJECT = REPO / "example.lionprj"
 ASSET = "3849E1DE2402B1A58D3968CB1287FA04"
 MODULE_DIR = PROJECT / "Descriptors" / "ScriptModule" / "A5" / "B1" / "3849E1DE2402B1A5.desc"
 SOURCE_DB = MODULE_DIR / "source_db"
-CMAKE = PROJECT / "Cache" / "Script" / "CMakeLists.txt"
+CMAKE = CMAKELISTS
 NAME = "SoccerGame"
 
 

@@ -1,7 +1,7 @@
 """The game project of the example project, as the resource pipeline makes it.
 
 The project's Game resource lists the script modules; the pipeline compiles each module into its CMake file (Cache/Resources/Platforms/WINDOWS/ScriptModule/xx/yy/<guid>), then
-the Game into Cache/Script/CMakeLists.txt, which includes them. Both happen in the background after the descriptor of a module changes, so a test that changed one waits here before
+the Game into Cache/Script/<Game guid>/CMakeLists.txt (one folder per Game resource), which includes them. Both happen in the background after the descriptor of a module changes, so a test that changed one waits here before
 it looks at the project: the same rule the build of Game.dll uses (the project is current when it was made after everything it is made from last changed).
 """
 import re
@@ -16,7 +16,23 @@ MODULE_REST = f"ScriptModule/A5/B1/{MODULE_GUID}"
 MODULE_DESCRIPTOR = PROJECT / "Descriptors" / f"{MODULE_REST}.desc" / "Descriptor.txt"
 MODULE_CMAKE = PROJECT / "Cache" / "Resources" / "Platforms" / "WINDOWS" / MODULE_REST
 MODULE_LOG = PROJECT / "Cache" / "Resources" / "Logs" / f"{MODULE_REST}.log" / "Log.txt"
-CMAKELISTS = PROJECT / "Cache" / "Script" / "CMakeLists.txt"
+
+
+def _default_game_guid() -> int:
+    """The Game the project loads at startup (Script.config.txt), as the instance guid; 0 when the file names none."""
+    try:
+        named = re.search(r'"ScriptConfig/Game"\s*;full_guid\s+#(\w+)', (PROJECT / "Project.config" / "Script.config.txt").read_text())
+        return int(named[1], 16) if named else 0
+    except OSError:
+        return 0
+
+
+def script_folder(guid: int):
+    """Where a Game's game project is: Cache/Script/<guid>/ (every Game resource has its own)."""
+    return PROJECT / "Cache" / "Script" / f"{guid:X}"
+
+
+CMAKELISTS = script_folder(_default_game_guid()) / "CMakeLists.txt"       # the default Game's game project
 
 
 def game_folder():
@@ -77,6 +93,9 @@ def remove_asset(type_name, asset):
     shutil.rmtree(PROJECT / "Descriptors" / f"{rest}.desc", ignore_errors=True)
     shutil.rmtree(PROJECT / "Cache" / "Resources" / "Logs" / f"{rest}.log", ignore_errors=True)
     (PROJECT / "Cache" / "Resources" / "Platforms" / "WINDOWS" / rest).unlink(missing_ok=True)
+    if type_name == "Game":                                                # a Game's game project, its build and its DLL
+        shutil.rmtree(script_folder(value), ignore_errors=True)
+        shutil.rmtree(PROJECT / "Cache" / "Resources" / "Platforms" / "WINDOWS" / "GameDll" / f"{value:X}", ignore_errors=True)
 
 
 def new_asset(editor, lib, type_guid, name):

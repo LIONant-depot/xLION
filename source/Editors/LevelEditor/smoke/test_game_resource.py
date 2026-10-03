@@ -140,7 +140,7 @@ def test_a_project_from_before_the_game_resource_gets_one_from_its_module_list(e
 
 # ---- the build of Game.dll ----------------------------------------------------------------------------------------------------------------------------------------------
 
-CONFIGURED = PROJECT / "Cache" / "Script" / "Build" / "configured.stamp"
+CONFIGURED = CMAKELISTS.parent / "Build" / "configured.stamp"          # the build of the default Game: its own folder
 
 
 def play_once(editor):
@@ -160,7 +160,7 @@ def test_editing_a_source_file_builds_game_dll_without_configuring_cmake_again(e
         wait_for_pipeline(60)
         play_once(editor)                                      # the project changed: configured, then built
         configured = CONFIGURED.stat().st_mtime_ns
-        pch = PROJECT / "Cache" / "Script" / "Build" / "CMakeFiles" / "Game.dir" / "cmake_pch.cxx"
+        pch = CMAKELISTS.parent / "Build" / "CMakeFiles" / "Game.dir" / "cmake_pch.cxx"
         pch_time = pch.stat().st_mtime_ns if pch.exists() else None
         built_before = editor.log_text().count("Game.dll: rebuild succeeded")
         for n in range(2):

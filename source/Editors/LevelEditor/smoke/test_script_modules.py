@@ -8,14 +8,14 @@ import secrets
 import pytest
 
 from harness import REPO, quote
-from script_project import game_project_text
+from script_project import CMAKELISTS, game_project_text
 
 PROJECT = REPO / "example.lionprj"
 MODULE_GUID = "3849E1DE2402B1A5"
 MODULE_TYPE = "8D3968CB1287FA04"
 MODULE_DIR = PROJECT / "Descriptors" / "ScriptModule" / "A5" / "B1" / f"{MODULE_GUID}.desc"
 SOURCE_DB = MODULE_DIR / "source_db"
-CMAKE = PROJECT / "Cache" / "Script" / "CMakeLists.txt"
+CMAKE = CMAKELISTS
 
 
 def read(path) -> str:

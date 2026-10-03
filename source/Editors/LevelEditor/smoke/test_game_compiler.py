@@ -1,6 +1,6 @@
 """The compiler of the Game resource: the Game's list of script modules in, the CMake project of the game out.
 
-The project (Cache/Script/CMakeLists.txt) is made from the CMake file the ScriptModule compiler wrote for each module, so these tests make a throwaway project with a few
+The project of a Game (Cache/Script/<Game guid>/CMakeLists.txt) is made from the CMake file the ScriptModule compiler wrote for each module, so these tests make a throwaway project with a few
 modules, compile each one, and then the Game. What the Game depends on (the log of each module's compile, never a source file), when it refuses to make the project, and
 that the project is only written when it changed (its time says when it has to be configured again) are what they pin down.
 """
@@ -36,7 +36,7 @@ class GameScratch:
 """)
         self.out = project / "Cache" / "Resources" / "Platforms" / "WINDOWS"
         self.log = project / "Cache" / "Resources" / "Logs" / f"{self.rest}.log"
-        self.cmakelists = project / "Cache" / "Script" / "CMakeLists.txt"
+        self.cmakelists = project / "Cache" / "Script" / f"{guid:X}" / "CMakeLists.txt"       # every Game has its own game project
 
     def modules(self, guids) -> None:
         rows = [f'  "Game/Modules[]" ;s64 {len(guids)}'] + [f'  "Game/Modules[G:{i}]" ;full_guid #{g:016X} #{MODULE_TYPE}' for i, g in enumerate(guids)]
@@ -91,6 +91,8 @@ def test_the_project_names_no_place_so_it_is_the_same_on_every_machine(game):
     assert str(game.project).replace("\\", "/") not in text, "the project is found from the file's own folder"
     assert "${GAME_PROJECT_ROOT}/Cache/Resources/Platforms/WINDOWS/ScriptModule/" in text
     assert "XGPU_BIN_DIR is not set" in text and "-DXGPU_ROOT" in text, "the engine's folders come from the configure, not from the text"
+    assert "${CMAKE_CURRENT_LIST_DIR}/../../.." in text, "the project is three folders up: <project>/Cache/Script/<Game>/CMakeLists.txt"
+    assert "Platforms/WINDOWS/GameDll/CD" in text, "the DLL of the Game goes to the folder of that Game"
 
 
 def test_the_game_depends_on_the_log_of_each_module_and_on_no_source_file(game):
@@ -162,18 +164,15 @@ def test_the_project_configures_and_the_folders_of_the_modules_reach_visual_stud
     assert "ball.h" in (build / "Game.vcxproj").read_text() and "tennis.cpp" in (build / "Game.vcxproj").read_text()
 
 
-def test_the_game_that_the_project_names_writes_the_project(game):
-    game.project_builds(0xCD)
-    assert game.compile().returncode == 0
-    assert game.cmakelists.is_file()
-
-
-def test_a_game_that_the_project_does_not_build_leaves_the_project_alone(game):
-    """Two Game resources would write the same Cache/Script/CMakeLists.txt: only the one Script.config.txt names does. The other is compiled and checked all the same."""
-    game.project_builds(0xEF)                                              # another Game
-    done = game.compile()
-    assert done.returncode == 0 and "[COMPILATION_SUCCESS]" in done.stdout and "not the Game that the project builds" in done.stdout, done.stdout
-    assert not game.cmakelists.exists(), "the project was not written"
-    assert (game.out / game.rest).is_file(), "but the Game was compiled"
+def test_every_game_writes_its_own_project_whatever_the_project_names(game):
+    """Each Game resource is compiled into Cache/Script/<its guid>/: Script.config.txt (the default Game of the editor) does not decide which Game writes a project."""
+    game.project_builds(0xEF)                                              # the default Game is another one
+    other = GameScratch(game.project, 0xEF)
+    other.modules([0xA1B3])
+    assert game.compile().returncode == 0 and other.compile().returncode == 0
+    assert game.cmakelists.is_file() and other.cmakelists.is_file() and game.cmakelists != other.cmakelists, "a project each"
+    assert (game.out / game.rest).is_file() and (other.out / other.rest).is_file()
+    assert "GameDll/CD" in game.text().replace("\\", "/") and "GameDll/EF" in other.text().replace("\\", "/"), "each one builds its DLL into its own folder"
+    assert other.text().count("include(") == 1 and game.text().count("include(") == 2, "and has the modules it lists"
     game.modules([0xA1B3, 0xA1B3])
     assert game.compile().returncode != 0, "and it is checked: a module listed twice still fails"
