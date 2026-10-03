@@ -26,7 +26,7 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
     assert "Game.dll: rebuild succeeded" in log
     assert log.count("[Vn restore]") == reloads_before + 1, "the world should have been rebuilt exactly once"
     assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
-    assert game_level.ed.sessions()[0].name == game_level.name
+    assert game_level.name in [x.name for x in game_level.ed.sessions()], "the Level is still open (an editor of a module may be open beside it)"
     # the reload's bridge file is this process's own (its name carries the process id, so a second editor on the same Level cannot collide with it) and is gone
     # once it has been read
     import tempfile
