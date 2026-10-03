@@ -22,7 +22,7 @@ The new names are never longer than the old ones (the import table is patched in
 
 ## The game module of a Level
 
-`game_plugin_state` is a member of the session. The Level's Game (`GameOfLevel`) decides everything: no Game means no scripts, no components of any module, no systems of one. A Game that has no `Game.dll` yet is built before a Level of it opens (`GameNeedsFirstBuild` / `StartFirstBuild`: the Level tree waits, a command waits right in `OpenLevel`); one build runs at a time in the process (Levels of one Game share its build folder). The Level's world asks its own module which module defines a component (`m_pModuleOfComponent` with the plugin state as its user pointer), and what the editor shows about its types (categories, where each comes from) is the Level's own `xscene::component_display` (`scene_context::Display()`).
+`game_plugin_state` is a member of the session. The Level's Game (`GameOfLevel`) decides everything: no Game means no scripts, no components of any module, no systems of one. A Game that has no `Game.dll` yet is built before a Level of it opens (`GameNeedsFirstBuild` / `StartFirstBuild`: the Level tree waits, a command waits right in `OpenLevel`); builds are per Game (see Builds). The Level's world asks its own module which module defines a component (`m_pModuleOfComponent` with the plugin state as its user pointer), and what the editor shows about its types (categories, where each comes from) is the Level's own `xscene::component_display` (`scene_context::Display()`).
 
 ## What is gone
 
