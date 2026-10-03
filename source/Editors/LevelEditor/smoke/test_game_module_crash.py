@@ -17,10 +17,10 @@ def _status(editor_or_level) -> dict:
 
 
 @pytest.fixture
-def module_level(level):
-    """The level, with a loaded game module; whatever a test does, the module and Play are put back at the end."""
-    if _status(level)["Loaded"] != "true":
-        pytest.skip("the example project has no script modules, so there is no game module to crash")
+def module_level(game_level):
+    """A Level that names a Game, with its game module loaded (the Level's own: a Level with no Game has none); whatever a test does, the module and Play are put back at the end."""
+    level = game_level
+    assert _status(level)["Loaded"] == "true", "the Soccer level's Game is loaded for it"
     yield level
     level.cmd("SimulateModuleCrash -State off")
     if level.ed.play_state().startswith("Playing") or "Paused" in level.ed.play_state():
@@ -94,3 +94,21 @@ def test_a_crashed_module_stays_out_until_the_cause_is_gone(module_level):
     assert editor.log_text().count(CRASH_LINE) == first, "the module runs again without a new crash"
     editor.cmd("Stop")
     editor.wait_play_state("Stopped")
+
+
+def test_the_module_of_one_level_crashing_does_not_touch_another_level(editor, game_level):
+    """Every Level has a game module of its own: the switches and the status are addressed to a Level, and a crash in one is not seen by the other."""
+    other = next(n for g, n in editor.levels() if g != "0166FAE5EB82F3F3" and n != game_level.name)
+    assert editor.cmd(f"OpenLevel -Level {next(g for g, n in editor.levels() if n == other)} -Save 0").startswith("Opened Level")
+    try:
+        assert game_level.cmd("SimulateModuleCrash -State on") == "SimulateModuleCrash: on"
+        mine = dict(re.findall(r"^(Loaded|Crashed)=(\w+)$", game_level.cmd("GameModuleStatus"), re.M))
+        theirs = dict(re.findall(r"^(Loaded|Crashed)=(\w+)$", editor.cmd(f"{other}\\GameModuleStatus"), re.M))
+        assert mine["Loaded"] == "true"
+        assert theirs == {"Loaded": "false", "Crashed": "false"}, "a Level of no Game has no module to crash"
+        assert editor.cmd(f"{other}\\SimulateModuleCrash -State on") == "SimulateModuleCrash: on"
+        assert dict(re.findall(r"^(Loaded|Crashed)=(\w+)$", game_level.cmd("GameModuleStatus"), re.M))["Crashed"] == "false", "the switch of the other Level did not reach this one"
+    finally:
+        game_level.cmd("SimulateModuleCrash -State off")
+        editor.cmd(f"{other}\\SimulateModuleCrash -State off")
+        editor.cmd(f"{other}\\Close -Save 0")

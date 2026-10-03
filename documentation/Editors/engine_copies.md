@@ -30,8 +30,11 @@ The new names are never longer than the old ones (the import table is patched in
 - The project's own Game: `Script.config.txt` is not read, there is no Scripting settings page and no `SetProjectGame`. The module commands (`AddProjectModuleReference`, `RemoveProjectModuleReference`, `ListProjectModuleReferences`) take `-Game`.
 - "One Game at a time": a Level that names another Game opens on that Game.
 
+## Builds
+
+Each plugin state has its own build job (every process cmake, MSBuild and the compiler start runs in it), so closing a Level stops only its own build. Builds are serialized per build folder (Levels of one Game share it and the second finds the DLL up to date); builds of different Games run side by side. A first build that failed is tried again by the Level that asks for it (opening it, or Play): the Level opens without the module meanwhile. What is refused after a rebuild (the open scenes need components the new build lacks) is the Level's own prompt (`game_plugin_state::m_PendingMissing`), and `GameModuleStatus`, `SimulateModuleCrash` and `SimulateSnapshotFailure` act on the Level they are addressed to.
+
 ## Known limits
 
-- Closing a Level cancels any Game build that is running (the job is shared by all builds).
-- A Game build that failed is not retried until the Level asks again (opening it, or Play).
 - Memory and DLL count grow with the Levels that are open: accepted.
+- The Logs' "verify a build problem" re-check starts a build for the Level the user touched last.
