@@ -16,6 +16,7 @@ CreateLibrary
 DeleteAsset
 DeleteAssetFileToTrash
 DescribeAsset
+DescribeLevel
 Exit
 ExplainLastKey
 GetIdleTasks

@@ -20,6 +20,8 @@ namespace level_editor
         xlevel::commands::save_query_cmd                    CmdSessionSave;       // Name\Save: saves this Level (the Scenes it may write)
         xlevel::commands::close_query_cmd                   CmdSessionClose;      // Name\Close
         xscene::commands::select_cmd                        CmdSelect;
+        xscene::commands::select_level_cmd                  CmdSelectLevel;
+        level_editor::commands::set_level_game_cmd          CmdSetLevelGame;      // Name\SetLevelGame: the Inspector's Game combo, undone with this Level's own undo
         xscene::commands::toggle_multi_select_cmd           CmdToggleMultiSelect;
         xscene::commands::clear_selection_cmd               CmdClearSelection;
         xscene::commands::rename_entity_cmd                 CmdRenameEntity;
@@ -84,6 +86,8 @@ namespace level_editor
         , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)
+        , CmdSelectLevel(Level, pScene)
+        , CmdSetLevelGame(Level, pEditor)
         , CmdToggleMultiSelect(Level, pScene)
         , CmdClearSelection(Level, pScene)
         , CmdRenameEntity(Level, pScene)
@@ -194,6 +198,7 @@ namespace level_editor
         level_editor::commands::set_project_game_cmd              CmdSetProjectGame;
         level_editor::commands::set_level_game_cmd                CmdSetLevelGame;
         level_editor::commands::get_level_game_query_cmd          CmdGetLevelGame;
+        level_editor::commands::describe_level_query_cmd          CmdDescribeLevel;
         level_editor::commands::list_module_registrations_query_cmd CmdListModuleRegistrations;
         level_editor::commands::list_scene_modules_query_cmd      CmdListSceneModules;
         level_editor::commands::check_game_compatibility_query_cmd CmdCheckGameCompatibility;
@@ -282,6 +287,7 @@ namespace level_editor
         , CmdSetProjectGame(Workspace, pEditor)
         , CmdSetLevelGame(Workspace, pEditor)
         , CmdGetLevelGame(Workspace, pEditor)
+        , CmdDescribeLevel(Workspace, pEditor)
         , CmdListModuleRegistrations(Workspace, pEditor)
         , CmdListSceneModules(Workspace, pEditor)
         , CmdCheckGameCompatibility(Workspace, pEditor)
@@ -369,6 +375,7 @@ namespace level_editor
             CmdSetProjectGame.m_pDataBase = pEditor;
             CmdSetLevelGame.m_pDataBase = pEditor;
             CmdGetLevelGame.m_pDataBase = pEditor;
+            CmdDescribeLevel.m_pDataBase = pEditor;
             CmdListModuleRegistrations.m_pDataBase = pEditor;
             CmdListSceneModules.m_pDataBase = pEditor;
             CmdCheckGameCompatibility.m_pDataBase = pEditor;

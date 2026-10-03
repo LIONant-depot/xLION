@@ -91,3 +91,4 @@ def test_the_error_popup_follows_the_editor_that_has_the_focus(editor, level, ra
     finally:
         _dismiss(level)
         editor.cmd(f"CloseResourceEditor -Asset {guid}")
+

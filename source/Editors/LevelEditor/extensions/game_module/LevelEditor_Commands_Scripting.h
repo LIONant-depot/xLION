@@ -842,7 +842,7 @@ namespace level_editor::commands
     struct set_level_game_cmd : xlevel::commands::level_command
     {
         set_level_game_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "SetLevelGame", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Sets the Game a Level runs under (undoable, persisted immediately); without -Game the Level runs under the project's Game. A Game that lacks a module the Level's scenes need is refused. Usage: SetLevelGame -Level hexguid [-Game assetguid]"; }
+        const char* getCommandHelp() const noexcept override { return "Sets the Game a Level runs under (undoable, persisted immediately); without -Game the Level names no Game: no scripts, components or systems of any module. A Game that lacks a module the Level's scenes need is refused (so is none). Usage: SetLevelGame -Level hexguid [-Game assetguid]"; }
         void RegisterArguments() noexcept override
         {
             m_hLevel = m_Parser.addOption("Level", "Level instance guid, 16 hex digits", true, 1);
@@ -861,8 +861,8 @@ namespace level_editor::commands
             const std::wstring Project = xlevel::ProjectRoot().wstring();
             xlevel::scene_module_needs Needs;
             for (const auto Scene : xlevel::ReadLevelScenes(Project, Level)) xlevel::AddSceneModuleNeeds(Needs, Project, Scene, /*bTransitive*/ true);
-            const auto Target = xlevel::ReadGame(Game);
-            if (Target.HasGame())
+            const auto Target = Game ? xlevel::ReadGame(Game) : xlevel::project_game{};      // no Game: no module, so a Level whose scenes need one cannot go without
+            if (!Game || Target.HasGame())
                 if (const auto Missing = xlevel::MissingModules(Needs, Target.m_Modules); !Missing.empty())
                     return "SetLevelGame: refused - the Game does not list what the Level needs:\n" + xlevel::DescribeMissingModules(Missing);
 
@@ -891,7 +891,7 @@ namespace level_editor::commands
     struct get_level_game_query_cmd : xlevel::commands::level_query_command
     {
         get_level_game_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GetLevelGame", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Says the Game a Level runs under: the one it names, or the project's. Usage: GetLevelGame -Level hexguid"; }
+        const char* getCommandHelp() const noexcept override { return "Says the Game a Level names (none: the Level has no scripts, components or systems of any module). Usage: GetLevelGame -Level hexguid"; }
         void RegisterArguments() noexcept override
         {
             m_hLevel = m_Parser.addOption("Level", "Level instance guid, 16 hex digits", true, 1);
@@ -903,13 +903,26 @@ namespace level_editor::commands
             if (!bGiven || !Level) return "GetLevelGame: bad arguments";
             std::error_code Ec;
             if (!std::filesystem::is_directory(level_game::LevelFolder(Level), Ec)) return std::format("GetLevelGame: Level {:016X} is not in the project", Level);
-            const auto Named     = xlevel::ReadLevelGame(xlevel::ProjectRoot().wstring(), Level);
-            const auto Effective = Named ? Named : xlevel::ProjectGameValue();
-            const auto Names     = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
-            return std::format("GetLevelGame: ok\nGame={}\nSource={}\nName={}", Effective ? module_dependencies::GameAsset(Effective) : std::string("(none)"), Named ? "set" : "default"
-                , Effective ? module_dependencies::Label(Names, Effective) : std::string());
+            const auto Named = xlevel::GameOfLevel(Level);
+            const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
+            return std::format("GetLevelGame: ok\nGame={}\nSource={}\nName={}", Named ? module_dependencies::GameAsset(Named) : std::string("(none)"), Named ? "set" : "none"
+                , Named ? module_dependencies::Label(Names, Named) : std::string());
         }
         xcmdline::parser::handle m_hLevel;
+    };
+
+    // DescribeLevel: what the Inspector shows when the Level is selected in the Level Tree (SelectLevel): the Level, its Game (and whether it can run the scenes), the Game's modules, and what each open scene needs.
+    struct describe_level_query_cmd : xlevel::commands::level_query_command
+    {
+        describe_level_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "DescribeLevel", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Describes the open Level the way the Inspector does when the Level is selected: its Game, the Game's modules and what each scene needs. Usage: DescribeLevel"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto& State = get<xlevel::level_context>().State();
+            if (State.m_CurrentLevel.empty()) return "DescribeLevel: no Level is open";
+            return xlevel::DescribeLevelView(xlevel::BuildLevelView(State)) + std::format("Selected={}\n", State.m_bRootSelected ? "true" : "false");
+        }
     };
 
     //================================================================================================

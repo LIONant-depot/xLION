@@ -15,12 +15,15 @@ GAME_TYPE = "A3F1D6C0452E9B17"
 MODULE = "3849E1DE2402B1A5"
 MODULE_ASSET = f"{MODULE}{MODULE_TYPE}"
 SOCCER_LEVEL = "0166FAE5EB82F3F3"
+PROJECT_GAME = f"6EDF20D2F3028001{GAME_TYPE}"                  # the example project's Game
+MY_TEST_LEVEL = "6162BB6775AC3293"                               # needs no script module
+MY_TEST_LEVEL_DESCRIPTOR = PROJECT / "Descriptors" / "Level" / "93" / "32" / "6162BB6775AC3293.desc" / "Descriptor.txt"
 LEVEL_DESCRIPTOR = PROJECT / "Descriptors" / "Level" / "F3" / "F3" / "166FAE5EB82F3F3.desc" / "Descriptor.txt"      # the guid without its leading zero, the way the pipeline names it
 
 
 def game_of(editor, level=SOCCER_LEVEL) -> tuple:
     reply = editor.cmd(f"GetLevelGame -Level {level}")
-    return re.search(r"^Game=(\w+)", reply, re.M)[1], re.search(r"^Source=(\w+)", reply, re.M)[1]
+    return re.search(r"^Game=(\S+)", reply, re.M)[1], re.search(r"^Source=(\w+)", reply, re.M)[1]
 
 
 @pytest.fixture
@@ -37,11 +40,48 @@ def scratch_game(editor):
     remove_asset("Game", game)
 
 
-def test_a_level_runs_under_the_projects_game_unless_it_names_one(editor):
+def test_a_level_names_the_game_it_runs_under_and_without_one_it_has_no_modules(editor):
     game, source = game_of(editor)
-    assert source == "default" and game.endswith(GAME_TYPE), "the Soccer level names no Game"
-    assert game == editor.cmd("ListProjectModuleReferences").splitlines()[0].removeprefix("Game: "), "it runs under the project's Game"
+    assert source == "set" and game.endswith(GAME_TYPE), "the Soccer level names its Game"
+    assert game == editor.cmd("ListProjectModuleReferences").splitlines()[0].removeprefix("Game: "), "the project's Game"
+    assert game_of(editor, MY_TEST_LEVEL) == ("(none)", "none"), "a Level that needs no module names none: no scripts, components or systems of any module"
     assert "is not in the project" in editor.cmd("GetLevelGame -Level 0000000000000001")
+
+
+def test_a_level_cannot_lose_its_game_while_its_scenes_need_the_modules(editor):
+    before = game_of(editor)
+    reply = editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL}", allow_disk=True)
+    assert "refused" in reply and "needs module SoccerGame" in reply, reply
+    assert game_of(editor) == before, "nothing changed"
+
+
+def test_a_level_that_needs_no_module_can_name_a_game_and_drop_it_again(editor, scratch_game):
+    original = MY_TEST_LEVEL_DESCRIPTOR.read_bytes()
+    try:
+        assert editor.cmd(f"SetLevelGame -Level {MY_TEST_LEVEL} -Game {scratch_game}", allow_disk=True) == ""
+        assert game_of(editor, MY_TEST_LEVEL) == (scratch_game, "set")
+        assert editor.cmd(f"SetLevelGame -Level {MY_TEST_LEVEL}", allow_disk=True) == ""
+        assert game_of(editor, MY_TEST_LEVEL) == ("(none)", "none")
+    finally:
+        MY_TEST_LEVEL_DESCRIPTOR.write_bytes(original)
+
+
+def test_a_level_whose_game_lacks_what_its_scenes_need_cannot_be_played(editor):
+    """The Soccer scenes need SoccerGame; with no Game on the Level nothing provides it. That is an error: the open says so, and Play and Step refuse."""
+    original = LEVEL_DESCRIPTOR.read_bytes()
+    editor.cmd("Close -Save 0")
+    try:
+        text = original.decode().replace("[ xProperties : 3 ]", "[ xProperties : 2 ]")
+        LEVEL_DESCRIPTOR.write_bytes("".join(l for l in text.splitlines(keepends=True) if "Level/Game" not in l).encode())
+        reply = editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0")
+        assert reply.startswith("Opened Level") and "ERROR" in reply and "names no Game" in reply, reply
+        editor.wait_for("GetPlayState", r"Building=false", timeout=240)
+        assert "refused" in editor.cmd("Play") and editor.play_state() == "Stopped"
+        assert "refused" in editor.cmd("Step") and editor.play_state() == "Stopped"
+        assert "names no Game" in editor.cmd("DescribeLevel") and "MISSING" in editor.cmd("DescribeLevel")
+    finally:
+        editor.cmd("Close -Save 0")
+        LEVEL_DESCRIPTOR.write_bytes(original)
 
 
 def test_a_level_can_be_given_a_game_that_lists_its_modules_and_the_undo_gives_it_back(editor, scratch_game):
@@ -72,7 +112,7 @@ def test_a_level_that_names_another_game_cannot_open_and_says_why(editor, scratc
     assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL} -Game {scratch_game}", allow_disk=True) == ""
     reply = editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0")
     assert "refused" in reply and "one Game at a time" in reply and "SetLevelGame" in reply, reply
-    assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL}", allow_disk=True) == "", "no -Game: back to the project's"
+    assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL} -Game {PROJECT_GAME}", allow_disk=True) == "", "back to the project's Game"
     assert editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0").startswith("Opened Level")
 
 

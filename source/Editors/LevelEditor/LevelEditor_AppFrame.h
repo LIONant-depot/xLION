@@ -27,7 +27,7 @@ namespace level_editor
             const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
             auto Label = [&](std::uint64_t Game) { const auto It = Names.find(Game); return It == Names.end() ? std::format("{:X}", Game) : It->second; };
             return std::format("OpenLevel: refused - Level {:016X} runs under the Game '{}', but this editor runs the project's Game '{}' (one Game at a time). "
-                               "Give the Level the project's Game (SetLevelGame -Level {:016X}), or make '{}' the project's Game (SetProjectGame).", Value, Label(Named), Label(xlevel::ProjectGameValue()), Value, Label(Named));
+                               "Give the Level the project's Game (SetLevelGame -Level {:016X} -Game <the project's Game>, or its Game in the Inspector), or make '{}' the project's Game (SetProjectGame).", Value, Label(Named), Label(xlevel::ProjectGameValue()), Value, Label(Named));
         }
 
         auto* pEditor  = ResourceEditors.Open(LevelGuid, xeditor::open_resource_editors::FindLibraryOf(LevelGuid));
@@ -72,10 +72,11 @@ namespace level_editor
             const std::wstring Project = xlevel::ProjectRoot().wstring();
             xlevel::scene_module_needs Needs;
             for (auto& SceneGuid : pSession->m_State.m_OpenScenes) xlevel::AddSceneModuleNeeds(Needs, Project, SceneGuid.m_Instance.m_Value, /*bTransitive*/ false);
-            const auto Game = xlevel::ReadGame(xlevel::EffectiveGameOf(Value));
-            if (Game.HasGame())
+            const auto Named = xlevel::GameOfLevel(Value);                       // no Game: no module's scripts, components or systems
+            const auto Game  = Named ? xlevel::ReadGame(Named) : xlevel::project_game{};
+            if (!Named || Game.HasGame())
                 if (const auto Gaps = xlevel::MissingModules(Needs, Game.m_Modules); !Gaps.empty())
-                    Result += std::format(" - WARNING: the Game does not list {} module(s) these scenes need (CheckGameCompatibility -Level {:016X} says which)", Gaps.size(), Value);
+                    Result += std::format(" - ERROR: {} {} module(s) these scenes need (CheckGameCompatibility -Level {:016X} says which)", Named ? "the Game does not list" : "the Level names no Game, so nothing provides", Gaps.size(), Value);
         }
         return Result;
     }
