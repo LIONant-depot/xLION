@@ -108,11 +108,15 @@ def test_a_game_that_lacks_a_module_the_scenes_need_is_refused_with_the_module(e
         remove_asset("Game", empty)
 
 
-def test_a_level_that_names_another_game_cannot_open_and_says_why(editor, scratch_game):
+def test_a_level_that_names_another_game_opens_on_that_game(editor, scratch_game):
+    """Every Level runs on its own game module, the one of the Game it names: another Game than the project's opens like any other, once its Game.dll is built (the open waits for it)."""
     assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL} -Game {scratch_game}", allow_disk=True) == ""
     reply = editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0")
-    assert "refused" in reply and "one Game at a time" in reply and "SetLevelGame" in reply, reply
+    assert reply.startswith("Opened Level") and "refused" not in reply and "ERROR" not in reply, reply
+    assert "not currently registered" not in reply, "the components of the Game's modules are registered: the Level opened on its own Game.dll"
+    assert game_of(editor)[0] == scratch_game
     assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL} -Game {PROJECT_GAME}", allow_disk=True) == "", "back to the project's Game"
+    editor.cmd("Close -Save 0")
     assert editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0").startswith("Opened Level")
 
 

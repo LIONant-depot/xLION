@@ -43,13 +43,47 @@ def test_the_render_copy_is_bound_to_its_own_core(editor):
 
 
 def test_a_set_is_gone_when_it_is_released(editor):
-    assert copies_on_disk(editor) == []
+    held = copies_on_disk(editor)                           # the sets of the editors that are open (every Level, and the one that stands in for none, runs on its own)
     for _ in range(2):
         editor.cmd("ProbeEngineSet")
-        assert copies_on_disk(editor) == [], "the modules are freed and the files deleted with the set"
+        assert copies_on_disk(editor) == held, "the modules are freed and the files deleted with the set"
+
+
+def test_every_open_level_runs_on_copies_of_its_own(level, editor):
+    held = copies_on_disk(editor)
+    assert len([n for n in held if n.startswith("LC")]) >= 2, "the editor that stands in and the Level each have a core of their own"
+    editor.cmd("Close -Save 0")
+    assert len(copies_on_disk(editor)) < len(held), "closing the Level frees its copies"
 
 
 def test_two_sets_do_not_share_names(editor):
     first = fields(editor.cmd("ProbeEngineSet"))["Core"]
     second = fields(editor.cmd("ProbeEngineSet"))["Core"]
     assert first != second, "every set gets a number of its own"
+
+
+# ---- Levels that are open together share nothing of the engine ---------------------------------------------------------------------------------------------------------------------
+
+MY_TEST_LEVEL = "6162BB6775AC3293"            # names no Game
+SOCCER_LEVEL = "0166FAE5EB82F3F3"             # names the project's Game (module SoccerGame)
+
+
+def test_two_levels_open_together_have_registries_of_their_own(editor):
+    """Each Level has its own core, its own render DLL and its own Game.dll: the components of the Game of one are not in the registry of the other."""
+    editor.cmd("Close -Save 0")
+    names = dict(editor.levels())
+    try:
+        assert editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0").startswith("Opened Level")
+        editor.wait_for("GetPlayState", r"Building=false", timeout=240)
+        assert editor.cmd(f"OpenLevel -Level {MY_TEST_LEVEL} -Save 0").startswith("Opened Level")
+        assert {names[SOCCER_LEVEL], names[MY_TEST_LEVEL]} <= {s.name for s in editor.sessions()}, "both are open at the same time"
+
+        soccer = editor.cmd(f"{names[SOCCER_LEVEL]}\\ListComponentTypes")
+        plain = editor.cmd(f"{names[MY_TEST_LEVEL]}\\ListComponentTypes")
+        assert "SoccerBall" in soccer, "the Level of the Game has its components"
+        assert "SoccerBall" not in plain, "the Level with no Game has none of the Game's: its registry is its own"
+        assert len(soccer.splitlines()) > len(plain.splitlines())
+        assert "Transform" in soccer and "Transform" in plain, "both have the engine's"
+    finally:
+        editor.cmd("Close -Save 0")
+        editor.cmd("Close -Save 0")

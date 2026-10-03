@@ -53,7 +53,7 @@ def test_the_game_of_the_selected_level_is_set_from_the_session_and_the_undo_giv
         assert level.cmd(f"SetLevelGame -Level {level.guid} -Game {game}", allow_disk=True) == ""
         text = ed.cmd("DescribeLevel")
         assert field(text, "Game") == game and field(text, "GameSource") == "set" and field(text, "GameName") == "Gym"
-        assert "one Game at a time" in field(text, "Issue"), "another Game than the one this editor runs cannot open"
+        assert field(text, "Issue") == "none", "a Level can name any Game of the project: it runs on that Game's own module"
 
         level.cmd("Undo")
         text = ed.cmd("DescribeLevel")

@@ -256,14 +256,15 @@ namespace level_editor
         {
             xresource_editor::source_control::ScanNewlyOpenedLibraries();
         };
+        // The sources a Game.dll is built from changed, or the window got the focus back: every open Level looks at its own game module.
         EditorHost.m_OnSourceChanged = [this]() noexcept
         {
-            xlevel::StartGameReload(xlevel::Services().Plugin);
+            for (auto* pContext : xlevel::g_LevelContexts) if (pContext->m_pGamePlugin) xlevel::StartGameReload(*pContext->m_pGamePlugin);
         };
         EditorHost.m_OnFocusRegain = [this]() noexcept
         {
 #if defined(XECS_BUILD_SHARED)
-            xlevel::StartGameReload(xlevel::Services().Plugin);
+            for (auto* pContext : xlevel::g_LevelContexts) if (pContext->m_pGamePlugin) xlevel::StartGameReload(*pContext->m_pGamePlugin);
 #endif
         };
         EditorHost.m_OnDrawerTab = [this](int TabIndex, const char* /*TabName*/) { DrawDrawerTab(TabIndex); };

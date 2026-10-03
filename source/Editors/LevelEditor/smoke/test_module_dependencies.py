@@ -55,7 +55,15 @@ def pitch_saved(editor):
 
 # ---- the map: which module defines each component and system -----------------------------------------------------------------------------------------------------------------------
 
-def test_the_components_and_systems_of_the_game_dll_are_mapped_to_their_module(editor):
+@pytest.fixture
+def soccer_open(editor):
+    """The Soccer level open: the Game it names is loaded for it, and the registrations are the ones of that Game."""
+    open_soccer(editor)
+    yield
+    editor.cmd("Close -Save 0")
+
+
+def test_the_components_and_systems_of_the_game_dll_are_mapped_to_their_module(editor, soccer_open):
     reply = editor.cmd("ListModuleRegistrations")
     table = {r[2]: r for r in rows(reply) if r[0] in ("component", "system")}
     assert table["SoccerBall"][3] == MODULE_ASSET, "a component is in the module whose header defines it"
@@ -64,7 +72,7 @@ def test_the_components_and_systems_of_the_game_dll_are_mapped_to_their_module(e
     assert table["Transform"][3] == "-", "the engine's own components belong to no module"
 
 
-def test_registrations_can_be_asked_for_one_module(editor):
+def test_registrations_can_be_asked_for_one_module(editor, soccer_open):
     reply = editor.cmd(f"ListModuleRegistrations -Module {MODULE_ASSET}")
     found = rows(reply)
     assert found and all(r[3] == MODULE_ASSET for r in found), "only that module's types"

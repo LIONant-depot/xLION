@@ -20,16 +20,14 @@ namespace level_editor
             return std::format("OpenLevel: {:016X} is already open", Value);
         }
 
-        // One Game.dll runs in this editor: the project's Game. A Level that names another Game cannot open until the editor can switch Games, and says so instead of running its scenes under the
-        // wrong systems. (SetLevelGame -Level <guid> gives it the project's Game again, or changes which Game the project builds.)
-        if (const auto Named = xlevel::ReadLevelGame(xlevel::ProjectRoot().wstring(), Value); Named != 0 && xlevel::ProjectGameValue() != 0 && Named != xlevel::ProjectGameValue())
+#if defined(XECS_BUILD_SHARED)
+        // A Level of a Game that has no DLL yet waits for its first build (a command waits right here; the Level tree's open waits in PumpLevels).
+        if (const auto Game = xlevel::GameOfLevel(Value); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
         {
-            const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
-            auto Label = [&](std::uint64_t Game) { const auto It = Names.find(Game); return It == Names.end() ? std::format("{:X}", Game) : It->second; };
-            return std::format("OpenLevel: refused - Level {:016X} runs under the Game '{}', but this editor runs the project's Game '{}' (one Game at a time). "
-                               "Give the Level the project's Game (SetLevelGame -Level {:016X} -Game <the project's Game>, or its Game in the Inspector), or make '{}' the project's Game (SetProjectGame).", Value, Label(Named), Label(xlevel::ProjectGameValue()), Value, Label(Named));
+            xlevel::StartFirstBuild(Game);
+            xlevel::WaitFirstBuild(Game);
         }
-
+#endif
         auto* pEditor  = ResourceEditors.Open(LevelGuid, xeditor::open_resource_editors::FindLibraryOf(LevelGuid));
         auto* pSession = dynamic_cast<xlevel::session*>(pEditor);
         if (pSession == nullptr || pSession->m_State.m_CurrentLevel.empty())
@@ -86,12 +84,25 @@ namespace level_editor
     // user is working on.
     inline void app::PumpLevels()
     {
-        // While the first Game.dll is still building (the editor started without a usable one) the Levels wait for it.
-        if (!xlevel::Services().bInitialBuild)
+        // A Level of a Game whose first Game.dll is still building waits for it.
+#if defined(XECS_BUILD_SHARED)
+        xlevel::PumpFirstBuilds();
+#endif
         {
             auto Pending = std::move(xlevel::g_PendingOpenLevels);
             xlevel::g_PendingOpenLevels.clear();
-            for (auto& LevelGuid : Pending) OpenLevelEditor(LevelGuid);
+            for (auto& LevelGuid : Pending)
+            {
+#if defined(XECS_BUILD_SHARED)
+                if (const auto Game = xlevel::GameOfLevel(LevelGuid.m_Instance.m_Value); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
+                {
+                    xlevel::StartFirstBuild(Game);
+                    xlevel::g_PendingOpenLevels.push_back(LevelGuid);
+                    continue;
+                }
+#endif
+                OpenLevelEditor(LevelGuid);
+            }
         }
 
         ResourceEditors.DropClosed();
@@ -128,7 +139,7 @@ namespace level_editor
 
         // The command pipe waits for the first Game.dll build too: a script sees the editor as ready only once its Levels can open.
         const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
-        if (!xlevel::Services().bInitialBuild)
+        if (!xlevel::Services().InitialBuild())
             level_editor::PumpCommandConsolePipe(ConsolePipeBridge, LevelEditorHistory, EditorHost.m_ConsoleLog);
         if (EditorHost.m_ConsoleLog.size() != ConsoleLogCountBefore)
             EditorHost.m_IdleWork.NotifyActivity();

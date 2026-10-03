@@ -151,7 +151,7 @@ def play_once(editor):
     editor.wait_play_state("Stopped")
 
 
-def test_editing_a_source_file_builds_game_dll_without_configuring_cmake_again(editor, level, lib):
+def test_editing_a_source_file_builds_game_dll_without_configuring_cmake_again(editor, game_level, lib):
     """Adding a file changes what the project is made of, so it is configured again. Editing the file does not: only MSBuild runs, and the precompiled header is left alone."""
     name = f"zz_nocfg_{secrets.token_hex(2)}.cpp"
     target = f"-Library {lib} -Asset {MODULE_ASSET}"

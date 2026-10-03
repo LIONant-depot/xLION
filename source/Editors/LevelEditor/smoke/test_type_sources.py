@@ -13,7 +13,7 @@ TRANSFORM = "663773C47FA1D0BA"                                                  
 MODULE_NAME = "SoccerGame"
 
 
-def test_a_component_can_be_shown_in_the_file_it_is_defined_in(editor):
+def test_a_component_can_be_shown_in_the_file_it_is_defined_in(editor, game_level):
     reply = editor.cmd(f"OpenTypeSource -Guid {SOCCER_BALL}")
     assert reply.startswith("OpenTypeSource: ok"), reply
     assert f"Module={MODULE_NAME}" in reply and "File=soccer_components.h" in reply and "source_db" in reply, "the module, and the file from its source_db"
@@ -22,7 +22,7 @@ def test_a_component_can_be_shown_in_the_file_it_is_defined_in(editor):
     assert "soccer_components.h" in files, "and its viewer shows the file"
 
 
-def test_a_system_can_be_shown_in_the_file_it_is_defined_in(editor):
+def test_a_system_can_be_shown_in_the_file_it_is_defined_in(editor, game_level):
     reply = editor.cmd(f"OpenTypeSource -Guid {SOCCER_BALL_SYSTEM} -System true")
     assert reply.startswith("OpenTypeSource: ok") and "File=soccer_ball_system.h" in reply, reply
     assert "soccer_ball_system.h" in editor.cmd(f"{MODULE_NAME}\\ListOpenFiles")

@@ -12,10 +12,10 @@ from harness import REPO
 GAME_SOURCE = REPO / "plugins" / "xscript_module.plugin" / "source" / "Runtime" / "xscript_game_entry.cpp"
 
 
-def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(editor, level):
+def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(editor, game_level):
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to rebuild")
-    before = {scene: level.entities(scene) for scene, _ in level.scenes}
+    before = {scene: game_level.entities(scene) for scene, _ in game_level.scenes}
     reloads_before = editor.log_text().count("[Vn restore]")
 
     os.utime(GAME_SOURCE)                               # looks edited: the module is now older than its source
@@ -25,8 +25,8 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
     log = editor.log_text()
     assert "Game.dll: rebuild succeeded" in log
     assert log.count("[Vn restore]") == reloads_before + 1, "the world should have been rebuilt exactly once"
-    assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
-    assert level.ed.sessions()[0].name == level.name
+    assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
+    assert game_level.ed.sessions()[0].name == game_level.name
     # the reload's bridge file is this process's own (its name carries the process id, so a second editor on the same Level cannot collide with it) and is gone
     # once it has been read
     import tempfile
@@ -35,17 +35,17 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
 
     assert editor.cmd("Stop") == "Stop requested"
     editor.wait_play_state("Stopped")
-    assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
+    assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
 
 
-def test_a_reload_whose_snapshot_brings_nothing_back_reopens_the_level_instead_of_crashing(editor, level):
+def test_a_reload_whose_snapshot_brings_nothing_back_reopens_the_level_instead_of_crashing(editor, game_level):
     """The scenes of a reload are moved back into the rebuilt world and trust the snapshot to have brought every entity back. When it did not (a snapshot
     that cannot be read) they name entities the new world never made: the Level tree and the save behind Play used to assert on the first of them. The
     editor now notices, says so (GAME.MODULE.RELOAD_STATE_LOST), and rebuilds the world from the saved level."""
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to rebuild")
-    before = {scene: level.entities(scene) for scene, _ in level.scenes}
-    assert level.cmd("SimulateSnapshotFailure -State on") == "SimulateSnapshotFailure: on"
+    before = {scene: game_level.entities(scene) for scene, _ in game_level.scenes}
+    assert game_level.cmd("SimulateSnapshotFailure -State on") == "SimulateSnapshotFailure: on"
     try:
         os.utime(GAME_SOURCE)
         assert editor.cmd("Play").startswith("Play requested")
@@ -56,10 +56,10 @@ def test_a_reload_whose_snapshot_brings_nothing_back_reopens_the_level_instead_o
         assert "snapshot restore failed: simulated" in log
         assert "reopening the Level from its last save" in log
         assert "GAME.MODULE.RELOAD_STATE_LOST" in editor.cmd("LogProblems -Query code:GAME.MODULE.RELOAD_STATE_LOST"), "the Logs say what happened"
-        assert {scene: level.entities(scene) for scene, _ in level.scenes} == before, "the level is back from its last save"
+        assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before, "the level is back from its last save"
 
         assert editor.cmd("Stop") == "Stop requested"
         editor.wait_play_state("Stopped")
-        assert {scene: level.entities(scene) for scene, _ in level.scenes} == before
+        assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
     finally:
-        level.cmd("SimulateSnapshotFailure -State off")
+        game_level.cmd("SimulateSnapshotFailure -State off")

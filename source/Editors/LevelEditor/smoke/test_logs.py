@@ -485,7 +485,7 @@ def test_verify_asks_the_producer_to_recheck_or_says_why_it_cannot(editor):
     assert "required option" in editor.cmd("LogVerify")
 
 
-def test_verify_on_a_build_problem_starts_a_real_build_whose_evidence_decides(editor):
+def test_verify_on_a_build_problem_starts_a_real_build_whose_evidence_decides(editor, game_level):
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to build")
     import time
@@ -999,7 +999,7 @@ def test_the_harness_reads_a_vulkan_complaint_the_same_from_the_text_and_from_th
 GAME_SOURCE = REPO / "plugins" / "xscript_module.plugin" / "source" / "Runtime" / "xscript_game_entry.cpp"
 
 
-def test_a_real_game_build_is_an_operation_with_an_outcome(editor, level):
+def test_a_real_game_build_is_an_operation_with_an_outcome(editor, game_level):
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to build")
     os.utime(GAME_SOURCE)                                  # looks edited: the module is stale, the next Play builds it

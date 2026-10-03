@@ -110,12 +110,13 @@ def _dismiss_modals(lv) -> None:
         time.sleep(0.2)
 
 
-@pytest.fixture
-def level(editor):
-    guid, name = editor.levels()[0]
+SOCCER_LEVEL = "0166FAE5EB82F3F3"          # the Level of the example project that names a Game (the project's: SoccerGame is one of its modules)
+
+
+def _open_level(editor, guid, name):
     editor.cmd("Close -Save 0")
     editor.cmd(f"OpenLevel -Level {guid} -Save 0")
-    editor.wait_for("GetPlayState", r"Building=false", timeout=120)   # the startup Game.dll check must settle
+    editor.wait_for("GetPlayState", r"Building=false", timeout=240)   # the Game.dll check of the Level must settle
     scenes = [(m[1], m[2].strip()) for l in editor.cmd(f"{name}\\ListScenes").splitlines()
               if (m := re.match(r"(\w{16})\s+(.*)", l))]
     lv = Level(editor, guid, name, scenes, itertools.count(1))
@@ -127,6 +128,19 @@ def level(editor):
             editor.cmd("Stop -Keep false")
             editor.wait_play_state("Stopped")
         editor.cmd("Close -Save 0")
+
+
+@pytest.fixture
+def level(editor):
+    guid, name = editor.levels()[0]
+    yield from _open_level(editor, guid, name)
+
+
+@pytest.fixture
+def game_level(editor):
+    """A Level that names a Game: its scripts, components and systems are the Game's. Only such a Level has a game module to build, load, reload or ask about."""
+    guid, name = next((g, n) for g, n in editor.levels() if g.lstrip("0").upper() == SOCCER_LEVEL.lstrip("0"))
+    yield from _open_level(editor, guid, name)
 
 
 # --------------------------------------------------------------------------------------------------------------------
