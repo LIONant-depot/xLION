@@ -1,0 +1,119 @@
+{
+ "plugins/xlevel.plugin/source/Editor/game_module/LevelEditor_GameReloadSession.h": {
+  "findComponentTypeInfo": 1,
+  "getComponentBits": 1,
+  "getEntityDetails": 1,
+  "m_BitID": 1,
+  "m_pPool": 3
+ },
+ "plugins/xlevel.plugin/source/Editor/game_module/LevelEditor_Panel_SystemRegistry.h": {
+  "findComponentTypeInfo": 1
+ },
+ "plugins/xlevel.plugin/source/Editor/xlevel_commands_workspace.h": {
+  "getComponentBits": 1,
+  "getEntityDetails": 1,
+  "m_ComponentInfoMap": 1,
+  "m_pPool": 3,
+  "s_Registry": 1
+ },
+ "plugins/xlevel.plugin/source/Editor/xlevel_panel_level_tree.h": {
+  "getComponentBits": 5,
+  "info_v": 4,
+  "m_BitID": 4,
+  "m_pPool": 9
+ },
+ "plugins/xlevel.plugin/source/Editor/xlevel_session.h": {
+  "SyncLocalBitIDs": 1
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_command_context.h": {
+  "getComponentBits": 1,
+  "getEntityDetails": 1,
+  "info_v": 1,
+  "m_BitID": 1,
+  "m_pPool": 2
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_apply_overrides.h": {
+  "findComponentTypeInfo": 2,
+  "getComponentBits": 3,
+  "getEntityDetails": 15,
+  "info_v": 14,
+  "m_BitID": 3,
+  "m_pPool": 44
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_component_edit.h": {
+  "findComponentTypeInfo": 5,
+  "getComponentBits": 1,
+  "getEntityDetails": 2,
+  "m_BitID": 1,
+  "m_pPool": 5
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_entity_lifecycle.h": {
+  "getComponentBits": 7,
+  "getEntityDetails": 11,
+  "info_v": 12,
+  "m_BitID": 7,
+  "m_pPool": 26
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_make_prefab.h": {
+  "getComponentBits": 3,
+  "getEntityDetails": 8,
+  "info_v": 8,
+  "m_BitID": 3,
+  "m_pPool": 21
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_property_edit.h": {
+  "findComponentTypeInfo": 1,
+  "getEntityDetails": 2,
+  "m_pPool": 8
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_commands_scene_organization.h": {
+  "getComponentBits": 2,
+  "getEntityDetails": 2,
+  "info_v": 2,
+  "m_BitID": 2,
+  "m_pPool": 5
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_dependencies.h": {
+  "findComponentTypeInfo": 1,
+  "getEntityDetails": 2,
+  "m_pPool": 8
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_entity_inspector_bridge.h": {
+  "getComponentBits": 1,
+  "getEntityDetails": 1,
+  "m_pPool": 2
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_panel_component_selector.h": {
+  "getComponentBits": 2,
+  "m_BitID": 1,
+  "m_ComponentInfoMap": 2,
+  "s_Registry": 2
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_panel_entity_properties.h": {
+  "getComponentBits": 3,
+  "getEntityDetails": 2,
+  "m_pPool": 7
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_prefab_authoring.h": {
+  "getComponentBits": 10,
+  "getEntityDetails": 14,
+  "info_v": 13,
+  "m_BitID": 10,
+  "m_pPool": 35
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_prefab_overrides.h": {
+  "getEntityDetails": 5,
+  "info_v": 5,
+  "m_pPool": 13
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_shared_component_template.h": {
+  "findComponentTypeInfo": 3,
+  "getEntityDetails": 4,
+  "m_pPool": 11
+ },
+ "plugins/xscene.plugin/source/Editor/xscene_system_usage.h": {
+  "findComponentTypeInfo": 1,
+  "m_BitID": 3,
+  "s_Registry": 1
+ }
+}

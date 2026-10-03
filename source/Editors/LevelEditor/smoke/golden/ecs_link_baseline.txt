@@ -1,0 +1,11 @@
+# Symbols the editor still takes from LIONCore.dll / LIONRender.dll through xLION.exe's own import (decorated names). May only shrink: python ecs_gate.py link --update
+__imp_?Draw@xlionrender@@YAXPEBXAEAUcmd_buffer@xgpu@@AEBU?$fmat4_t@$00@xmath@@MM@Z
+__imp_?Init@xlionrender@@YA_NAEAUdevice@xgpu@@@Z
+__imp_?Pick@xlionrender@@YA_KPEBXAEBU?$fvec3_t@$00@xmath@@1M@Z
+__imp_?Run@instance@game_mgr@xecs@@QEAAXXZ
+__imp_?SerializeGameState@instance@game_mgr@xecs@@QEAA?AUxerr@@PEBD_N1@Z
+__imp_?SetSelectedEntity@xlionrender@@YAX_K@Z
+__imp_?Stop@instance@game_mgr@xecs@@QEAAXXZ
+__imp_?SyncAllLocalBitIDs@mgr@component@xecs@@SAXXZ
+__imp_?TeleportDynamicBody@physics@xlioncore@@YA_NAEAUinstance@game_mgr@xecs@@Tentity@component@5@AEBU?$fvec3_t@$00@xmath@@AEBU?$fquat_t@$00@9@@Z
+__imp_?s_Registry@mgr@component@xecs@@2Uregistry@type@23@A

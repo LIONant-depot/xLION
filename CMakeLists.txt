@@ -622,9 +622,35 @@ endif()
 add_executable(xeditorcli "source/Tools/Editor/xeditorcli.cpp")
 set_target_properties(xeditorcli PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
+# The ECS link gate (see documentation/Editors/ecs_link_gate.md): the headless editor built exactly like
+# xLION_Headless but linked WITHOUT LIONCore.dll and LIONRender.dll. The headers still say dllimport
+# (XECS_BUILD_SHARED, ...), so everything the editor still takes from the engine through the exe's own
+# import of it - the registry, bit ids, Run/SerializeGameState, the render calls - is an unresolved external
+# here. That list is the measured to-do of moving the editor behind the xECSEditor interface (each
+# renamed copy of the core can then be used without the exe silently reaching the original one).
+# Never part of a normal build: EXCLUDE_FROM_ALL, and it is EXPECTED to fail to link until the list is empty
+# (tools/ecs_gate/check_link_gate.py compares it to the saved baseline: it may only shrink).
+option(XLION_ECS_LINK_GATE "Add the xLION_ecs_gate target (not built by default)" OFF)
+if(XLION_ECS_LINK_GATE)
+  add_executable(xLION_ecs_gate EXCLUDE_FROM_ALL ${XLION_HEADLESS_SOURCES})
+  target_include_directories(xLION_ecs_gate PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
+  target_compile_definitions(xLION_ecs_gate PRIVATE EDITOR XLION_EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX
+                             XECS_BUILD_SHARED XLIONCORE_BUILD_SHARED XLIONRENDER_BUILD_SHARED)
+  target_link_libraries(xLION_ecs_gate PRIVATE OpenMP::OpenMP_CXX)
+  if(WIN32)
+    target_link_libraries(xLION_ecs_gate PRIVATE Advapi32.lib)
+  endif()
+  if(MSVC)
+    target_compile_options(xLION_ecs_gate PRIVATE /bigobj)
+  endif()
+endif()
+
 # Pulls in xGPU's own "xGPU" component registration (source/xGPU.cpp + public headers) and the
 # imgui/imgui-node-editor components above, via their build/dependency/CMakeLists.txt files -
 # applied to BOTH targets in turn (ProcessComponents applies the whole registry to whichever
 # target TARGET names).
 ProcessComponents(TARGET ${TARGET_PROJECT})
 ProcessComponents(TARGET xLION_Headless)
+if(XLION_ECS_LINK_GATE)
+  ProcessComponents(TARGET xLION_ecs_gate)
+endif()
