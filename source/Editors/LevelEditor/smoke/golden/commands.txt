@@ -73,6 +73,7 @@ LogViews
 LogWindow
 MoveAsset
 MoveAssetFile
+OpenInVisualStudio
 OpenLevel
 OpenResourceEditor
 OpenTypeSource

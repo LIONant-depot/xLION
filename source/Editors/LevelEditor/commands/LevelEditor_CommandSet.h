@@ -189,6 +189,7 @@ namespace level_editor
         xlevel::commands::step_query_cmd                    CmdStep;
         xlevel::commands::stop_query_cmd                    CmdStop;
         xlevel::commands::get_play_state_query_cmd          CmdGetPlayState;
+        xlevel::commands::open_in_visual_studio_query_cmd   CmdOpenInVisualStudio;
         xlog::commands::command_set                        CmdLogs;     // LogStatus, LogOperations, LogProblems, LogProblem, LogEvents, LogEvent, ...
         xresource_editor::commands::list_assets_query_cmd             CmdListAssets;
         xresource_editor::commands::describe_asset_query_cmd          CmdDescribeAsset;
@@ -276,6 +277,7 @@ namespace level_editor
         , CmdStep(Workspace, pEditor)
         , CmdStop(Workspace, pEditor)
         , CmdGetPlayState(Workspace, pEditor)
+        , CmdOpenInVisualStudio(Workspace, pEditor)
         , CmdLogs(Workspace, []() -> xlog::view_state* { auto* pHost = xeditor::host::current(); return pHost ? &pHost->m_LogsUi : nullptr; }
                                                                   , []() { auto* pHost = xeditor::host::current(); return pHost && pHost->logs_back(); }
                                                                   , []() { auto* pHost = xeditor::host::current(); return pHost && pHost->logs_forward(); }
@@ -369,6 +371,7 @@ namespace level_editor
             CmdStep.m_pDataBase = pEditor;
             CmdStop.m_pDataBase = pEditor;
             CmdGetPlayState.m_pDataBase = pEditor;
+            CmdOpenInVisualStudio.m_pDataBase = pEditor;
             CmdListAssets.m_pDataBase = pEditor;
             CmdDescribeAsset.m_pDataBase = pEditor;
             CmdRenameAsset.m_pDataBase = pEditor;
