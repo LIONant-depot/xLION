@@ -18,10 +18,13 @@ MODULE_CMAKE = PROJECT / "Cache" / "Resources" / "Platforms" / "WINDOWS" / MODUL
 MODULE_LOG = PROJECT / "Cache" / "Resources" / "Logs" / f"{MODULE_REST}.log" / "Log.txt"
 
 
+SOCCER_LEVEL_DESCRIPTOR = PROJECT / "Descriptors" / "Level" / "F3" / "F3" / "166FAE5EB82F3F3.desc" / "Descriptor.txt"       # the Level of the example project that names a Game
+
+
 def _default_game_guid() -> int:
-    """The Game the project loads at startup (Script.config.txt), as the instance guid; 0 when the file names none."""
+    """The Game of the example project (the one the Soccer level names: the project has no Game of its own), as the instance guid; 0 when it names none."""
     try:
-        named = re.search(r'"ScriptConfig/Game"\s*;full_guid\s+#(\w+)', (PROJECT / "Project.config" / "Script.config.txt").read_text())
+        named = re.search(r'"Level/Game"\s*;full_guid\s+#(\w+)', SOCCER_LEVEL_DESCRIPTOR.read_text())
         return int(named[1], 16) if named else 0
     except OSError:
         return 0
@@ -32,15 +35,15 @@ def script_folder(guid: int):
     return PROJECT / "Cache" / "Script" / f"{guid:X}"
 
 
-CMAKELISTS = script_folder(_default_game_guid()) / "CMakeLists.txt"       # the default Game's game project
+CMAKELISTS = script_folder(_default_game_guid()) / "CMakeLists.txt"       # the example Game's game project
+GAME_TYPE = "A3F1D6C0452E9B17"
+GAME_ASSET = f"{_default_game_guid():016X}{GAME_TYPE}"                       # its asset guid: what the module commands take as -Game
 
 
 def game_folder():
-    """The .desc folder of the Game resource the project builds (Script.config.txt names it; tests may make others)."""
-    config = (PROJECT / "Project.config" / "Script.config.txt").read_text()
-    named = re.search(r'"ScriptConfig/Game"\s*;full_guid\s+#(\w+)', config)
-    assert named, "Script.config.txt names the project's Game"
-    guid = int(named[1], 16)
+    """The .desc folder of the example project's Game resource (the one the Soccer level names; tests may make others)."""
+    guid = _default_game_guid()
+    assert guid, "the Soccer level names the example project's Game"
     folder = PROJECT / "Descriptors" / "Game" / f"{guid & 0xFF:02X}" / f"{(guid >> 8) & 0xFF:02X}" / f"{guid:X}.desc"
     assert folder.is_dir(), f"the Game {guid:016X} is in the project"
     return folder

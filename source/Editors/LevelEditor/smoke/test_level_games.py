@@ -1,7 +1,7 @@
 """A Level names the Game it runs under (its descriptor: `Game`); empty is the project's Game.
 
-SetLevelGame writes it at once and can be undone, and refuses a Game that lacks a module the Level's scenes need. One Game.dll runs in the editor, so a Level that names another Game cannot open
-(for now) and says why. The module commands take -Game to work on any Game, not only the project's.
+SetLevelGame writes it at once and can be undone, and refuses a Game that lacks a module the Level's scenes need. Every Level runs on the game module of the Game it names, so Levels of
+different Games open (and play) together. The module commands take -Game: the project has no Game of its own.
 """
 import re
 
@@ -43,7 +43,7 @@ def scratch_game(editor):
 def test_a_level_names_the_game_it_runs_under_and_without_one_it_has_no_modules(editor):
     game, source = game_of(editor)
     assert source == "set" and game.endswith(GAME_TYPE), "the Soccer level names its Game"
-    assert game == editor.cmd("ListProjectModuleReferences").splitlines()[0].removeprefix("Game: "), "the project's Game"
+    assert game == editor.cmd(f"ListProjectModuleReferences -Game {game}").splitlines()[0].removeprefix("Game: "), "it is a Game of the project"
     assert game_of(editor, MY_TEST_LEVEL) == ("(none)", "none"), "a Level that needs no module names none: no scripts, components or systems of any module"
     assert "is not in the project" in editor.cmd("GetLevelGame -Level 0000000000000001")
 
@@ -137,11 +137,11 @@ def test_saving_an_open_level_keeps_the_game_it_names(editor):
 
 
 def test_the_module_commands_work_on_any_game(editor, scratch_game):
-    other = editor.cmd("ListProjectModuleReferences").splitlines()
+    other = editor.cmd(f"ListProjectModuleReferences -Game {PROJECT_GAME}").splitlines()
     assert MODULE_ASSET in editor.cmd(f"ListProjectModuleReferences -Game {scratch_game}")
     assert editor.cmd(f"RemoveProjectModuleReference -Module {MODULE_ASSET} -Game {scratch_game}", allow_disk=True) == ""
     assert MODULE_ASSET not in editor.cmd(f"ListProjectModuleReferences -Game {scratch_game}")
     editor.cmd("Undo")
     assert MODULE_ASSET in editor.cmd(f"ListProjectModuleReferences -Game {scratch_game}"), "the undo put it back in that Game"
-    assert editor.cmd("ListProjectModuleReferences").splitlines() == other, "the project's own Game was not touched"
+    assert editor.cmd(f"ListProjectModuleReferences -Game {PROJECT_GAME}").splitlines() == other, "the other Game was not touched"
     assert "not in the project" in editor.cmd(f"ListProjectModuleReferences -Game 0000000000000001{GAME_TYPE}")

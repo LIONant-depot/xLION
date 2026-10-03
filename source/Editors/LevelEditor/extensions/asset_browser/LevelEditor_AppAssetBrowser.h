@@ -10,44 +10,6 @@ namespace level_editor
         xresource_editor::RegisterAssetBrowserCallbacks(AssetBrowser, EditorHost.m_Workspace, IdleLevel ? IdleLevel->m_Undo : EditorHost.m_Workspace, MainWindow);
         xresource_editor::RegisterSourceControlCallbacks(AssetBrowser, EditorHost.m_Workspace);
 
-        // "Scripting" section in the merged Plugins/Project Settings tab (xresource_editor::plugin_tab,
-        // xresource_editor_asset_browser_plugin_tab.h) - the project's Script-Module build-membership list
-        // (Project.config\Script.config.txt, xlevel::g_ScriptConfig.m_Game: which Game resource the project builds; the modules are
-        // in that resource), rendered as a normal xproperty::inspector resource field. Reuses plugin_tab's OWN inherited xproperty::inspector (passed in by
-        // RightPanel()) rather than carrying a second, redundant instance.
-        AssetBrowser.m_ExtraPluginTabSections.push_back(
-        {
-            "Scripting",
-            [](xproperty::inspector& Inspector)
-            {
-                static bool bWired = false;
-                if (!bWired) { xresource_editor::WireResourcePickerCallbacks(Inspector); bWired = true; }
-
-                // Rebuild ONLY when the data actually changed (never unconditionally - see
-                // xgpu_imgui_per_frame_rebuild_activeid_bug), whether from this same UI or an external CLI command.
-                static std::uint64_t s_BuiltWith = ~0ull;
-                if (xlevel::g_ScriptConfig.m_Game.m_Instance.m_Value != s_BuiltWith)
-                {
-                    Inspector.clear();
-                    Inspector.AppendEntity();
-                    Inspector.AppendEntityComponent(*xproperty::getObjectByType<xlevel::script_config>(), &xlevel::g_ScriptConfig);
-                }
-
-                // Separate, frame-local snapshot - did THIS ShowEmbedded call itself edit the field?
-                const auto BeforeThisRender = xlevel::g_ScriptConfig.m_Game.m_Instance.m_Value;
-
-                xproperty::settings::context Context;
-                Inspector.ShowEmbedded(Context);
-
-                if (xlevel::g_ScriptConfig.m_Game.m_Instance.m_Value != BeforeThisRender)
-                {
-                    if (auto Err = xlevel::SaveScriptConfig(xresource_editor::g_LibMgr.m_ProjectPath, xlevel::g_ScriptConfig); Err)
-                        xeditor::NotifyToast(std::format("Failed to save Script.config.txt: {}", Err.getMessage()));
-                }
-                s_BuiltWith = xlevel::g_ScriptConfig.m_Game.m_Instance.m_Value;
-            }
-        });
-
         // "Keymap" section: every action's keys as an xproperty inspector (dependencies/actions.imgui), saved in this person's own
         // Project.config\Keymaps\<user>.keymap.txt. It has its own inspector; the tab's is shared with the other sections.
         AssetBrowser.m_ExtraPluginTabSections.push_back(

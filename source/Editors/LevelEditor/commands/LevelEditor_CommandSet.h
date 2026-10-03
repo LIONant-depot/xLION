@@ -205,7 +205,6 @@ namespace level_editor
         level_editor::commands::set_script_source_file_content_cmd CmdSetScriptSourceFileContent;
         level_editor::commands::rename_script_source_file_cmd     CmdRenameScriptSourceFile;
         level_editor::commands::rescan_script_module_cmd          CmdRescanScriptModule;
-        level_editor::commands::set_project_game_cmd              CmdSetProjectGame;
         level_editor::commands::set_level_game_cmd                CmdSetLevelGame;
         level_editor::commands::get_level_game_query_cmd          CmdGetLevelGame;
         level_editor::commands::describe_level_query_cmd          CmdDescribeLevel;
@@ -295,7 +294,6 @@ namespace level_editor
         , CmdSetScriptSourceFileContent(Workspace, pEditor)
         , CmdRenameScriptSourceFile(Workspace, pEditor)
         , CmdRescanScriptModule(Workspace, pEditor)
-        , CmdSetProjectGame(Workspace, pEditor)
         , CmdSetLevelGame(Workspace, pEditor)
         , CmdGetLevelGame(Workspace, pEditor)
         , CmdDescribeLevel(Workspace, pEditor)
@@ -384,7 +382,6 @@ namespace level_editor
             CmdSetScriptSourceFileContent.m_pDataBase = pEditor;
             CmdRenameScriptSourceFile.m_pDataBase = pEditor;
             CmdRescanScriptModule.m_pDataBase = pEditor;
-            CmdSetProjectGame.m_pDataBase = pEditor;
             CmdSetLevelGame.m_pDataBase = pEditor;
             CmdGetLevelGame.m_pDataBase = pEditor;
             CmdDescribeLevel.m_pDataBase = pEditor;

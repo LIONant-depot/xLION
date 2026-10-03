@@ -100,7 +100,6 @@ SaveAssets
 SaveKeymapAs
 Say
 SetLevelGame
-SetProjectGame
 SetScriptSourceFileContent
 SourceControlCommit
 SourceControlDepotStatus

@@ -42,9 +42,9 @@ def test_compile_status(level):
 
 
 def test_list_project_module_references(level):
-    """ListProjectModuleReferences reply is non-empty."""
-    refs = level.cmd("ListProjectModuleReferences")
-    assert refs.strip()
+    """ListProjectModuleReferences reply is non-empty (and says it needs the Game when none is given)."""
+    refs = level.ed.cmd("ListProjectModuleReferences")
+    assert refs.strip() and "required option" in refs
 
 
 def test_list_script_source_files(level):

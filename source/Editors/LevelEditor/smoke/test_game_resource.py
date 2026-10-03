@@ -1,5 +1,5 @@
-"""The project's Game resource, as the editor uses it: which Game the project builds (Script.config.txt), its modules (the commands the AI uses), and how a project from before
-the Game resource is moved onto one.
+"""A Game resource, as the editor uses it: its modules (the commands the AI uses; they say which Game they work on: the project has no Game of its own, every Level names the one it
+runs under) and that an old Script.config.txt is not read any more.
 
 The compilers are tested apart (test_game_compiler.py, test_script_module_compiler.py); these tests drive the editor with its resource pipeline.
 """
@@ -10,7 +10,7 @@ import time
 import pytest
 
 from harness import Editor, DEFAULT_EXE, REPO, SMOKE_DIR, quote
-from script_project import CMAKELISTS, MODULE_DESCRIPTOR, MODULE_GUID, PROJECT, game_folder, game_project_text, new_asset, remove_asset, wait_for_pipeline
+from script_project import CMAKELISTS, GAME_ASSET, MODULE_DESCRIPTOR, MODULE_GUID, PROJECT, game_folder, game_project_text, new_asset, remove_asset, wait_for_pipeline
 
 MODULE_TYPE = "8D3968CB1287FA04"
 GAME_TYPE = "A3F1D6C0452E9B17"
@@ -24,16 +24,16 @@ def lib(editor):
     return editor.libraries()[0][0]
 
 
-def project_game(editor):
+def project_game(editor, game=GAME_ASSET):
     """(game asset guid or None, [module asset guids]) from ListProjectModuleReferences."""
-    lines = editor.cmd("ListProjectModuleReferences").splitlines()
+    lines = editor.cmd(f"ListProjectModuleReferences -Game {game}").splitlines()
     game = re.match(r"Game: (\w{32})", lines[0])
     return (game[1] if game else None), [l for l in lines[1:] if re.fullmatch(r"\w{32}", l)]
 
 
-def test_the_project_has_a_game_resource_that_lists_its_modules(editor):
+def test_a_game_resource_lists_its_modules(editor):
     game, modules = project_game(editor)
-    assert game and game.endswith(GAME_TYPE), "Script.config.txt names the Game resource the project builds"
+    assert game and game.endswith(GAME_TYPE), "the Game the Soccer level names is a Game resource"
     assert MODULE_ASSET in modules, "the example project's game is made of the SoccerGame module"
     assert (game_folder() / "Descriptor.txt").is_file()
 
@@ -50,9 +50,9 @@ def test_a_module_added_to_the_game_is_in_the_project_and_the_undo_takes_it_out(
     stem = f"scratch_{secrets.token_hex(2)}"
     try:
         assert editor.cmd(f"AddScriptSourceFile -Library {lib} -Asset {module} -FileName {stem}.cpp", allow_disk=True) == "", "a module gets its Descriptor.txt with its first file"
-        assert editor.cmd(f"AddProjectModuleReference -Module {module}", allow_disk=True) == ""
+        assert editor.cmd(f"AddProjectModuleReference -Module {module} -Game {GAME_ASSET}", allow_disk=True) == ""
         assert project_game(editor)[1] == [MODULE_ASSET, module], "the module is listed after the ones that were there"
-        assert editor.cmd(f"AddProjectModuleReference -Module {module}", allow_disk=True) == "", "adding it again changes nothing"
+        assert editor.cmd(f"AddProjectModuleReference -Module {module} -Game {GAME_ASSET}", allow_disk=True) == "", "adding it again changes nothing"
         assert project_game(editor)[1].count(module) == 1
         value = int(module[:16], 16)
         rest = f"ScriptModule/{value & 0xFF:02X}/{(value >> 8) & 0xFF:02X}/{value:X}"
@@ -66,34 +66,29 @@ def test_a_module_added_to_the_game_is_in_the_project_and_the_undo_takes_it_out(
         assert project_game(editor)[1] == [MODULE_ASSET], "the undo took the module out of the game"
         editor.cmd("Redo"); editor.cmd("Redo")
         assert project_game(editor)[1] == [MODULE_ASSET, module], "and the redo put it back"
-        assert editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True) == ""
+        assert editor.cmd(f"RemoveProjectModuleReference -Module {module} -Game {GAME_ASSET}", allow_disk=True) == ""
         assert project_game(editor)[1] == [MODULE_ASSET]
-        assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True)
+        assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module {module} -Game {GAME_ASSET}", allow_disk=True)
     finally:
-        editor.cmd(f"RemoveProjectModuleReference -Module {module}", allow_disk=True)
+        editor.cmd(f"RemoveProjectModuleReference -Module {module} -Game {GAME_ASSET}", allow_disk=True)
     wait_for_pipeline(120)
     assert f"/{int(module[:16], 16):X}\"" not in CMAKELISTS.read_text(), "and the project is made again without it"
     remove_asset("ScriptModule", module)
 
 
 def test_a_guid_that_is_not_a_module_is_refused(editor):
-    assert "not a Script-Module" in editor.cmd(f"AddProjectModuleReference -Module 0000000000000001{GAME_TYPE}", allow_disk=True)
-    assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module 0000000000000001{MODULE_TYPE}", allow_disk=True)
+    assert "not a Script-Module" in editor.cmd(f"AddProjectModuleReference -Module 0000000000000001{GAME_TYPE} -Game {GAME_ASSET}", allow_disk=True)
+    assert "not a module reference of that Game" in editor.cmd(f"RemoveProjectModuleReference -Module 0000000000000001{MODULE_TYPE} -Game {GAME_ASSET}", allow_disk=True)
 
 
-def test_the_project_can_be_pointed_at_another_game_and_the_undo_points_it_back(editor, lib):
-    before = project_game(editor)
-    other = new_asset(editor, lib, GAME_TYPE, f"Other{secrets.token_hex(2)}")
-    try:
-        assert "not a Game" in editor.cmd(f"SetProjectGame -Game {MODULE_ASSET}", allow_disk=True)
-        assert editor.cmd(f"SetProjectGame -Game {other}", allow_disk=True) == ""
-        assert project_game(editor) == (other, []), "the other Game has no modules yet"
-        editor.cmd("Undo")
-        assert project_game(editor) == before, "the undo pointed the project back at its Game"
-        assert "not in the project" in editor.cmd(f"SetProjectGame -Game 0000000000000001{GAME_TYPE}", allow_disk=True)
-    finally:
-        editor.cmd(f"SetProjectGame -Game {before[0]}", allow_disk=True)
-        remove_asset("Game", other)
+def test_the_module_commands_need_the_game_they_work_on(editor):
+    """The project has no Game of its own (no SetProjectGame, no default): the commands that list or change the modules of a Game are told which."""
+    for command in ("ListProjectModuleReferences", f"AddProjectModuleReference -Module {MODULE_ASSET}", f"RemoveProjectModuleReference -Module {MODULE_ASSET}"):
+        reply = editor.cmd(command, allow_disk=True)
+        assert "required option" in reply or "give the Game" in reply, (command, reply)
+    assert "Unable find the command" in editor.cmd("SetProjectGame -Game " + GAME_ASSET, allow_disk=True), "there is no project Game to set"
+    assert "not a Game" in editor.cmd(f"ListProjectModuleReferences -Game {MODULE_ASSET}")
+    assert "not in the project" in editor.cmd(f"ListProjectModuleReferences -Game 0000000000000001{GAME_TYPE}")
 
 
 def test_regenerate_project_module_sources_compiles_the_game_again(editor):
@@ -108,39 +103,33 @@ def test_regenerate_project_module_sources_compiles_the_game_again(editor):
     assert stamp.stat().st_mtime_ns > before, "the Game was compiled again"
 
 
-def test_a_project_from_before_the_game_resource_gets_one_from_its_module_list(editor):
-    """Script.config.txt used to list the modules itself. The first start after that is the migration: a Game resource is made from the list and named by the file from then on."""
-    original = SCRIPT_CONFIG.read_bytes()
-    old_game = project_game(editor)[0]
-    legacy = original.decode().split("[ xProperties")[0] + (
+def test_an_old_script_config_is_not_read_any_more(editor):
+    """Script.config.txt used to name the project's Game and list the modules of a project from before the Game resource. Nothing reads it now: a file left over makes no Game."""
+    games = lambda: sorted(p.name for p in (PROJECT / "Descriptors" / "Game").glob("*/*/*.desc"))
+    original = SCRIPT_CONFIG.read_bytes() if SCRIPT_CONFIG.exists() else None
+    before = games()
+    legacy = (original.decode().split("[ xProperties")[0] if original else "") + (
         '[ xProperties : 2 ]\n{ Name:s                          Value:?                                        }\n//------------------------------  ----------------------------------------------\n'
         f'  "ScriptConfig/ModuleRefs[]"     ;s64       1                                  \n  "ScriptConfig/ModuleRefs[G:0]"  ;full_guid #{MODULE_GUID} #{MODULE_TYPE}\n')
     editor.stop()
     try:
         SCRIPT_CONFIG.write_bytes(legacy.encode())
-        migrating = Editor(DEFAULT_EXE, log_dir=SMOKE_DIR / ".logs" / "migration")
-        migrating.start()
-        try:
-            deadline = time.time() + 30                       # the migration runs when the editor's session opens, a moment after the command pipe answers
-            game, modules = project_game(migrating)
-            while not game and time.time() < deadline:
-                time.sleep(0.25)
-                game, modules = project_game(migrating)
-            assert game and game != old_game, "a new Game resource was made"
-            assert modules == [MODULE_ASSET], "from the list the file had"
-            assert "ScriptConfig/Game" in SCRIPT_CONFIG.read_text() and "ModuleRefs[]" in SCRIPT_CONFIG.read_text()
-            assert "ModuleRefs[G:0]" not in SCRIPT_CONFIG.read_text(), "the old list is empty from then on"
-        finally:
-            migrating.stop()
-        remove_asset("Game", game)                          # the Game the migration made
+        editor.start()
+        time.sleep(3)
+        assert games() == before, "no Game resource is made from the old module list"
+        assert project_game(editor)[1] == [MODULE_ASSET], "and the Game that was there is as it was"
     finally:
-        SCRIPT_CONFIG.write_bytes(original)
+        editor.stop()
+        if original is None:
+            SCRIPT_CONFIG.unlink(missing_ok=True)
+        else:
+            SCRIPT_CONFIG.write_bytes(original)
         editor.start()
 
 
 # ---- the build of Game.dll ----------------------------------------------------------------------------------------------------------------------------------------------
 
-CONFIGURED = CMAKELISTS.parent / "Build" / "configured.stamp"          # the build of the default Game: its own folder
+CONFIGURED = CMAKELISTS.parent / "Build" / "configured.stamp"          # the build of the example Game: its own folder
 
 
 def play_once(editor):

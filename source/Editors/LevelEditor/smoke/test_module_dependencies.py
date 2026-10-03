@@ -9,7 +9,7 @@ import re
 import pytest
 
 from harness import REPO
-from script_project import PROJECT, new_asset, remove_asset
+from script_project import GAME_ASSET, PROJECT, new_asset, remove_asset
 
 MODULE_TYPE = "8D3968CB1287FA04"
 GAME_TYPE = "A3F1D6C0452E9B17"
@@ -192,10 +192,10 @@ def test_a_module_that_an_open_scene_uses_cannot_be_removed_from_the_game_and_no
     try:
         builds = editor.log_text().count("rebuilding via cmake")
         started = time.time()
-        reply = editor.cmd(f"RemoveProjectModuleReference -Module {MODULE_ASSET}", allow_disk=True)
+        reply = editor.cmd(f"RemoveProjectModuleReference -Module {MODULE_ASSET} -Game {GAME_ASSET}", allow_disk=True)
         assert "refused" in reply and "SoccerBall" in reply and "close the level" in reply, reply
         assert time.time() - started < 10, "answered from data, not from a build"
         assert editor.log_text().count("rebuilding via cmake") == builds, "and nothing was built"
-        assert MODULE_ASSET in editor.cmd("ListProjectModuleReferences"), "the module is still in the Game"
+        assert MODULE_ASSET in editor.cmd(f"ListProjectModuleReferences -Game {GAME_ASSET}"), "the module is still in the Game"
     finally:
         editor.cmd("Close -Save 0")

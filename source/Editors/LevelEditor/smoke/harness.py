@@ -49,7 +49,7 @@ _EOF_ERRORS = (109, 233)      # ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED: th
 DISK_WRITERS = frozenset({
     "Save", "SaveAssets", "CreateAsset", "CreateLibrary", "RenameAsset", "MoveAsset", "DeleteAsset", "RestoreAsset",
     "RenameAssetFile", "MoveAssetFile", "DeleteAssetFileToTrash", "RestoreAssetFileFromTrash", "CopyAssetFile",
-    "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources", "SetProjectGame", "SetLevelGame",
+    "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources", "SetLevelGame",
     "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",
     "SourceControlCommit", "SourceControlPull", "SourceControlPush", "SourceControlRevert", "SourceControlStage",
     "SourceControlLock", "SourceControlUnlock",
