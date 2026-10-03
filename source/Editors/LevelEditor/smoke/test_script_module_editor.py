@@ -146,6 +146,48 @@ def test_a_file_has_one_viewer_ever_and_the_viewer_follows_a_rename(module):
     module.undo(2)                                                  # the rename, the add
 
 
+def test_a_viewer_zooms_its_text_and_each_file_keeps_its_own_size(module):
+    """Ctrl + the mouse wheel over the code changes the text's size; ZoomFile does the same for a script (one notch = one pixel, like the wheel)."""
+    size = lambda f: float({r["Path"]: r for r in table(module.cmd("ListOpenFiles"))}[f]["FontSize"])
+    module.cmd("OpenFile -Path soccer_game.cpp")
+    module.cmd("OpenFile -Path soccer_components.h")
+    time.sleep(0.5)                                                 # a frame draws them: the default size is known
+    default = size("soccer_game.cpp")
+    assert default > 0 and size("soccer_components.h") == default
+    assert module.cmd("ZoomFile -Path soccer_game.cpp -By 3") == "ZoomFile: ok" and size("soccer_game.cpp") == default + 3
+    assert size("soccer_components.h") == default, "each file's viewer has its own size"
+    assert module.cmd("ZoomFile -Path soccer_game.cpp -By -2") == "ZoomFile: ok" and size("soccer_game.cpp") == default + 1
+    module.cmd("ZoomFile -Path soccer_game.cpp -By 1000")
+    assert size("soccer_game.cpp") == 64, "not bigger than 64 pixels"
+    assert module.cmd("ZoomFile -Path soccer_game.cpp -By -1000") == "ZoomFile: ok"
+    assert size("soccer_game.cpp") == 6, "not smaller than 6 pixels"
+    module.cmd("ZoomFile -Path soccer_game.cpp -Size 0")
+    assert size("soccer_game.cpp") == default, "0 is the default size again"
+    assert "is not open" in module.cmd("ZoomFile -Path nothing_like_this.h -By 1")
+    assert "say -By" in module.cmd("ZoomFile -Path soccer_game.cpp")
+    module.cmd("CloseFile -Path soccer_game.cpp"); module.cmd("CloseFile -Path soccer_components.h")
+
+
+def test_ctrl_and_the_mouse_wheel_over_the_code_zoom_its_text_and_the_wheel_alone_does_not(module):
+    """The real wheel, the real Ctrl key and the real pointer: what a person does."""
+    row = lambda: {r["Path"]: r for r in table(module.cmd("ListOpenFiles"))}["soccer_game.cpp"]
+    module.cmd("OpenFile -Path soccer_game.cpp")
+    for _ in range(20):
+        if float(row()["X"]) > 0:
+            break
+        time.sleep(0.2)                                             # until a frame has drawn it
+    x, y, default = float(row()["X"]), float(row()["Y"]), float(row()["FontSize"])
+    assert x > 0 and y > 0 and default > 0
+    module.ed.wheel(x, y, 3, ctrl=True)
+    assert float(row()["FontSize"]) == default + 3, "three notches up with Ctrl: three pixels bigger"
+    module.ed.wheel(x, y, -5, ctrl=True)
+    assert float(row()["FontSize"]) == default - 2, "five notches down with Ctrl: five pixels smaller"
+    module.ed.wheel(x, y, 3)
+    assert float(row()["FontSize"]) == default - 2, "the wheel without Ctrl scrolls: the size does not change"
+    module.cmd("ZoomFile -Path soccer_game.cpp -Size 0")
+    module.cmd("CloseFile -Path soccer_game.cpp")
+
+
 def test_removing_a_file_closes_its_viewer(module):
     name = f"Gone{secrets.token_hex(2)}.h"
     assert module.cmd(f"AddFile -Path {name}") == ""
@@ -293,7 +335,7 @@ def test_a_module_exports_as_a_cmake_file_that_a_project_without_the_editor_can_
     values = cmake_values(fragment, "SOCCERGAME", tmp_path)
     assert values.get("APPLY") == "yes", "the file defines soccergame_apply(target)"
     sources, headers = values["SOURCES"].split(";"), values["HEADERS"].split(";")
-    assert [Path(p).name for p in sources] == ["soccer_game.cpp"] and len(headers) == 7
+    assert [Path(p).name for p in sources] == ["soccer_game.cpp"] and len(headers) == 8
     assert all(Path(p).is_file() for p in sources + headers), "every path in the file is a real file"
     assert Path(values["PROJECT_ROOT"]).resolve() == PROJECT.resolve(), "it finds the project root from where it is"
     assert all(Path(p).name in values["PCH_HEADERS"] for p in headers)

@@ -330,6 +330,48 @@ class Editor:
         """Two quick left clicks at the SCREEN point (x, y): what ImGui calls a double click (the pointer is placed once, the presses come 60 ms apart)."""
         self.click(x, y, double=True)
 
+    def wheel(self, x: float, y: float, notches: int, ctrl: bool = False) -> None:
+        """The real mouse wheel turned by `notches` (positive = away from the person, the way that scrolls up) with the pointer at the SCREEN point (x, y), Ctrl held if asked.
+        Like click: the window is brought forward and the real pointer goes there, then back."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+        pid = self.proc.pid
+        found: list[int] = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(hwnd, _):
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value == pid and user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
+                found.append(hwnd)
+            return True
+
+        user32.EnumWindows(each, 0)
+        if not found:
+            raise AssertionError("wheel: the editor has no visible window")
+        if user32.GetForegroundWindow() != found[0]:
+            user32.SetForegroundWindow(found[0])
+            time.sleep(0.6)
+        old = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(old))
+        try:
+            user32.SetCursorPos(int(x), int(y))
+            time.sleep(0.4)
+            if ctrl: user32.keybd_event(0x11, 0, 0, 0)                  # VK_CONTROL down
+            time.sleep(0.1)
+            for _ in range(abs(notches)):
+                user32.mouse_event(0x0800, 0, 0, (120 if notches > 0 else -120) & 0xFFFFFFFF, 0)   # MOUSEEVENTF_WHEEL, one notch
+                time.sleep(0.15)
+            if ctrl: user32.keybd_event(0x11, 0, 2, 0)                  # VK_CONTROL up (KEYEVENTF_KEYUP)
+            time.sleep(0.3)
+        finally:
+            user32.SetCursorPos(old.x, old.y)
+
     def drag(self, x: float, y: float, to_x: float, to_y: float) -> None:
         """Press at the screen point (x, y), move to (to_x, to_y) in steps, release: a drag with the real pointer (see click)."""
         self.click(x, y, to=(to_x, to_y))
