@@ -78,6 +78,7 @@ OpenTypeSource
 Pause
 Play
 PressKeys
+ProbeEngineSet
 RecompileAll
 RecompileErrors
 Redo

@@ -952,6 +952,57 @@ namespace level_editor::commands
             return std::format("SerializeRoundtrip: ok ({})", std::filesystem::path(Path).string());
         }
     };
+
+    // ProbeEngineSet: makes a set of copies of the engine DLLs the way a Level that opens does (xlevel_engine_copies.h), shows that the copy of the core is a registry of its own (registering in it does not
+    // touch the one this Level runs on) and that the render copy is bound to it, then frees the set again. What the independence of the Levels stands on, as a command.
+    struct probe_engine_set_query_cmd : xlevel::commands::level_query_command
+    {
+        probe_engine_set_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ProbeEngineSet", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Makes a set of renamed copies of the core and render DLLs, checks that the copy of the core has a registry of its own and that the render copy imports it, then frees the set. Usage: ProbeEngineSet"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            std::string Why;
+            auto pSet = xlevel::Services().Engines.Make(Why);
+            if (!pSet) return "ProbeEngineSet: failed: " + Why;
+
+            auto pEcs = xlevel::CreateEcsEditor(pSet->m_Core.c_str());
+            if (!pEcs) return "ProbeEngineSet: failed: the core copy has no editor interface";
+
+            auto& Mine = xlioncore::Ecs(World());
+            std::vector<const xecs::component::type::info*> Types;
+            Mine.ListComponentTypes(Types);
+            const auto MineBefore = Types.size();
+            pEcs->ListComponentTypes(Types);
+            const auto CopyBefore = Types.size();
+
+            auto& CopyWorld = pEcs->CreateWorld();
+            pEcs->RegisterHostComponents();
+            pEcs->RegisterHostSystems();                    // locks the component types: the registry is complete after it
+            pEcs->ListComponentTypes(Types);
+            const auto CopyAfter = Types.size();
+            Mine.ListComponentTypes(Types);
+            const auto MineAfter = Types.size();
+            const bool bIndependent = CopyAfter > CopyBefore && MineAfter == MineBefore && &CopyWorld != &World() && pEcs->Native() == &CopyWorld;
+
+            std::string RenderImport = "none";
+            bool bRender = false, bChecksum = true;
+            if (!pSet->m_Render.empty())
+            {
+                const auto Imports = xlevel::engine::ImportsOf(xlevel::engine::ReadFile(pSet->m_RenderPath));
+                RenderImport = Imports.empty() ? std::string("?") : Imports.front();
+                auto pRender = xlevel::CreateRenderEditor(pSet->m_Render.c_str());
+                bRender = pRender != nullptr;
+                bChecksum = xlevel::engine::ChecksumIsRight(pSet->m_RenderPath);
+            }
+
+            const auto Out = std::format("ProbeEngineSet: ok\nCore={}\nRender={}\nRenderImportsCore={}\nRenderEditor={}\nChecksum={}\nRegistry: copy {} -> {} types, this Level {} -> {} types\nIndependent={}"
+                , pSet->CoreName(), pSet->m_Render.empty() ? std::string("none") : std::filesystem::path(pSet->m_Render).string(), RenderImport, bRender ? "ok" : "none", bChecksum ? "ok" : "wrong"
+                , CopyBefore, CopyAfter, MineBefore, MineAfter, bIndependent ? "yes" : "no");
+            pEcs->DestroyWorld();
+            return Out;
+        }
+    };
 }
 
 #endif // LevelEditor_COMMANDS_SCRIPTING_H
