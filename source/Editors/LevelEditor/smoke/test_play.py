@@ -1,4 +1,4 @@
-"""Play / Pause / Step / Stop, the single-Play lock, and 'keep property tweaks?'.
+"""Play / Pause / Step / Stop and 'keep property tweaks?'. (Any number of Levels can play at once: test_engine_copies.py.)
 
 Play saves the open level first, so the `level` fixture (clean document) is required: the save then rewrites
 identical content, and the harness refuses to Play over unsaved edits.
@@ -22,7 +22,7 @@ def test_transport_cycle(editor, level):
     assert editor.cmd("Stop") == "Stop requested"
     editor.wait_play_state("Stopped")
 
-    # The single-Play lock must have been released by Stop, or this second Play would be refused.
+    # Stop leaves the Level ready to play again.
     assert editor.cmd("Play").startswith("Play requested")
     editor.wait_play_state("Playing")
 

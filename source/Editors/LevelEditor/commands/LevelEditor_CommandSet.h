@@ -77,12 +77,22 @@ namespace level_editor
         xeditor::camera_cmds::get_cmd                       CmdGetCamera;
         xlevel::commands::set_time_scale_cmd                CmdSetTimeScale;       // Name\SetTimeScale / GetTimeScale: the speed slider next to Play
         xlevel::commands::get_time_scale_cmd                CmdGetTimeScale;
+        xlevel::commands::play_query_cmd                    CmdSessionPlay;        // Name\Play / Pause / Step / Stop / GetPlayState: this Level's own transport (any number of Levels can play at once)
+        xlevel::commands::pause_query_cmd                   CmdSessionPause;
+        xlevel::commands::step_query_cmd                    CmdSessionStep;
+        xlevel::commands::stop_query_cmd                    CmdSessionStop;
+        xlevel::commands::get_play_state_query_cmd          CmdSessionGetPlayState;
 
         level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor, xeditor::camera_access Camera) noexcept
         : CmdSetCamera(Level, Camera)
         , CmdGetCamera(Level, Camera)
         , CmdSetTimeScale(Level, pEditor)
         , CmdGetTimeScale(Level, pEditor)
+        , CmdSessionPlay(Level, pEditor)
+        , CmdSessionPause(Level, pEditor)
+        , CmdSessionStep(Level, pEditor)
+        , CmdSessionStop(Level, pEditor)
+        , CmdSessionGetPlayState(Level, pEditor)
         , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)

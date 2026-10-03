@@ -21,6 +21,20 @@ def copies_on_disk(editor, wait=2.0):
         time.sleep(0.1)
 
 
+def settled_copies(editor, quiet=1.0, timeout=15.0):
+    """The copies in the folder once they stop changing: the editors that were just closed free theirs a frame later."""
+    deadline = time.monotonic() + timeout
+    last, since = None, time.monotonic()
+    while time.monotonic() < deadline:
+        now = copies_on_disk(editor, wait=0)
+        if now != last:
+            last, since = now, time.monotonic()
+        elif time.monotonic() - since >= quiet:
+            return now
+        time.sleep(0.1)
+    return last
+
+
 def test_a_set_of_copies_has_a_registry_of_its_own(editor):
     reply = editor.cmd("ProbeEngineSet")
     assert reply.startswith("ProbeEngineSet: ok"), reply
@@ -43,17 +57,17 @@ def test_the_render_copy_is_bound_to_its_own_core(editor):
 
 
 def test_a_set_is_gone_when_it_is_released(editor):
-    held = copies_on_disk(editor)                           # the sets of the editors that are open (every Level, and the one that stands in for none, runs on its own)
+    held = settled_copies(editor)                           # the sets of the editors that are open (every Level, and the one that stands in for none, runs on its own)
     for _ in range(2):
         editor.cmd("ProbeEngineSet")
         assert copies_on_disk(editor) == held, "the modules are freed and the files deleted with the set"
 
 
 def test_every_open_level_runs_on_copies_of_its_own(level, editor):
-    held = copies_on_disk(editor)
+    held = settled_copies(editor)
     assert len([n for n in held if n.startswith("LC")]) >= 2, "the editor that stands in and the Level each have a core of their own"
     editor.cmd("Close -Save 0")
-    assert len(copies_on_disk(editor)) < len(held), "closing the Level frees its copies"
+    assert len(settled_copies(editor)) < len(held), "closing the Level frees its copies"
 
 
 def test_two_sets_do_not_share_names(editor):
@@ -86,5 +100,43 @@ def test_two_levels_open_together_have_registries_of_their_own(editor):
         assert "Transform" in soccer and "Transform" in plain, "both have the engine's"
 
     finally:
+        editor.cmd("Close -Save 0")
+        editor.cmd("Close -Save 0")
+
+
+def test_two_levels_can_play_at_the_same_time_and_stop_on_their_own(editor):
+    """There is no Play lock any more: every Level runs on its own core, so a Level of one Game plays next to a Level of none, and stopping one leaves the other playing."""
+    editor.cmd("Close -Save 0")
+    names = dict(editor.levels())
+    soccer, plain = names[SOCCER_LEVEL], names[MY_TEST_LEVEL]
+
+    def state(name):
+        return re.search(r"PlayState=(\w+)", editor.cmd(f"{name}\\GetPlayState"))[1]
+
+    def wait(name, wanted, timeout=120):
+        deadline = time.monotonic() + timeout
+        while state(name) != wanted:
+            assert time.monotonic() < deadline, f"{name} did not reach {wanted}"
+            time.sleep(0.2)
+
+    try:
+        assert editor.cmd(f"OpenLevel -Level {SOCCER_LEVEL} -Save 0").startswith("Opened Level")
+        editor.wait_for("GetPlayState", r"Building=false", timeout=240)
+        assert editor.cmd(f"OpenLevel -Level {MY_TEST_LEVEL} -Save 0").startswith("Opened Level")
+
+        assert editor.cmd(f"{soccer}\\Play").startswith("Play requested")
+        assert editor.cmd(f"{plain}\\Play").startswith("Play requested"), "the second Level is not refused: nothing is shared"
+        wait(soccer, "Playing")
+        wait(plain, "Playing")
+
+        assert editor.cmd(f"{soccer}\\Stop") == "Stop requested"
+        wait(soccer, "Stopped")
+        assert state(plain) == "Playing", "the other Level keeps playing"
+        assert editor.cmd(f"{plain}\\Stop") == "Stop requested"
+        wait(plain, "Stopped")
+    finally:
+        for name in (soccer, plain):
+            if editor.alive() and state(name) != "Stopped":
+                editor.cmd(f"{name}\\Stop -Keep false")
         editor.cmd("Close -Save 0")
         editor.cmd("Close -Save 0")
