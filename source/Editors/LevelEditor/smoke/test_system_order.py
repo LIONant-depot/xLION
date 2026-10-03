@@ -58,3 +58,22 @@ def test_saving_the_system_order_keeps_the_entries_of_systems_that_are_not_loade
         assert len(after) == len(before), "nothing else was added or lost"
     finally:
         ORDER.write_bytes(original)
+
+
+def test_the_demo_systems_of_the_core_keep_the_guids_the_saved_order_names(editor, level):
+    """The two demo systems were defined by the editor and are the core's now (the editor runs no xECS code of its own). Their guids are the ones SystemOrder.config.txt already saves, so
+    the saved order still finds them: they come first, as the file says, and not at the end as a system the file does not know."""
+    saved = [g.upper() for g in _guids(ORDER.read_text())]
+    assert saved[:2] == ["FE5EC75487196B0E", "CD201CFEDF3D5639"], "the example project saves the two demo systems first"
+    listing = level.cmd("ListSystems")
+    names = [line.split("  [")[0] for line in listing.splitlines() if "  [update #" in line]
+    assert names[:2] == ["Tick Logger A", "Tick Logger B"], names
+
+    # a Save writes the guids the systems really have: had they changed, the saved ones would stay as entries of systems that are not registered, and the file would grow
+    original = ORDER.read_bytes()
+    try:
+        assert level.cmd("SaveSystemOrder", allow_disk=True) == "SaveSystemOrder: saved"
+        after = [g.upper() for g in _guids(ORDER.read_text())]
+        assert after[:2] == saved[:2] and len(after) == len(saved), (saved, after)
+    finally:
+        ORDER.write_bytes(original)

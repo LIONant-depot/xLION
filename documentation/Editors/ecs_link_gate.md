@@ -20,8 +20,9 @@ headers still say `dllimport`, so each thing the editor takes from them through 
     cmake -S . -B Build/xLION.vs2022 -DXLION_ECS_LINK_GATE=ON      (once)
     python source/Editors/LevelEditor/smoke/ecs_gate.py link
 
-Today it is ten symbols: `game_mgr::instance::Run`, `Stop`, `SerializeGameState`, `component::mgr::SyncAllLocalBitIDs`, `component::mgr::s_Registry`, `xlioncore::physics::TeleportDynamicBody`, and the
-render calls `xlionrender::Init`, `Draw`, `Pick`, `SetSelectedEntity`. The gate is finished when the list is empty: then the exe does not need to import the core at all.
+Today it is five symbols: `component::mgr::s_Registry` (read by an inline loop of the Level tree) and the render calls `xlionrender::Init`, `Draw`, `Pick`, `SetSelectedEntity`. They were ten: the world's
+life (`Run`, `Stop`, `SerializeGameState`, `TeleportDynamicBody`) and the registration (`SyncAllLocalBitIDs`) went behind the interface (`xlioncore_editor.h`: `xECSEditor`, which the core exports as `XLionCore_CreateEditor` and the
+editor finds with `GetProcAddress`). The two demo systems moved into the core with them, so the editor registers and runs no system of its own. The gate is finished when the list is empty: then the exe does not need to import the core at all.
 
 ## Rule
 
