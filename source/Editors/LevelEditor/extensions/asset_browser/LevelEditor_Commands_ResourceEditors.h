@@ -265,6 +265,59 @@ namespace level_editor::commands
         }
     };
 
+    // LocateResource: the "find in the resource browser" button of a resource reference. The Resources tab of the drawer shows the resource (its folder is current, what hid it is cleared) and
+    // the drawer is open on it.
+    struct locate_resource_cmd : xlevel::commands::level_query_command
+    {
+        locate_resource_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "LocateResource", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Finds a resource in the resource browser of the drawer, as the button of a resource reference does: its folder is shown, the search and the type filter that hid it are cleared, it is selected, and the drawer is open on the Resources tab. Usage: LocateResource -Asset assetguid"; }
+        void RegisterArguments() noexcept override { m_hAsset = m_Parser.addOption("Asset", "Resource guid, 32 hex digits", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto AssetArg = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
+            if (std::holds_alternative<xerr>(AssetArg)) return "LocateResource: bad arguments";
+            const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            if (Guid.empty()) return "LocateResource: not a resource guid";
+            auto& Reference = xresource_editor::g_ReferenceHost;
+            if (!Reference.m_Locate || !Reference.m_Locate(Guid)) return "LocateResource: the resource is not in the browser (it is in the trash, or in no open library)";
+            return "LocateResource: ok";
+        }
+        xcmdline::parser::handle m_hAsset;
+    };
+
+    // GetBrowserState: where the resource browser is and what the drawer shows. SetBrowserSearch types in its search box.
+    struct get_browser_state_cmd : xlevel::commands::level_query_command
+    {
+        get_browser_state_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GetBrowserState", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Says where the resource browser is (folder, selection, history, search and type filter) and whether the drawer is open on it. Usage: GetBrowserState"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto* pHost    = xeditor::host::current();
+            auto* pBrowser = pHost ? pHost->find<xresource_editor::asset_browser>() : nullptr;
+            if (!pBrowser) return "GetBrowserState: no browser";
+            const auto& Drawer = pHost->drawer_for(xeditor::FocusedDrawerViewport()->ID);
+            return std::format("GetBrowserState: ok\nDrawer={}\nDrawerTab={}\n{}", Drawer.m_bOpen ? "open" : "closed", Drawer.m_ActiveTab, pBrowser->DescribeBrowser());
+        }
+    };
+
+    struct set_browser_search_cmd : xlevel::commands::level_query_command
+    {
+        set_browser_search_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "SetBrowserSearch", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Types a text into the search box of the resource browser (an empty text clears it). Usage: SetBrowserSearch [-Text name]"; }
+        void RegisterArguments() noexcept override { m_hText = m_Parser.addOption("Text", "The text to search for", false, 1); }
+        std::string Query() noexcept override
+        {
+            auto* pHost    = xeditor::host::current();
+            auto* pBrowser = pHost ? pHost->find<xresource_editor::asset_browser>() : nullptr;
+            if (!pBrowser) return "SetBrowserSearch: no browser";
+            auto TextArg = m_Parser.getOptionArgAs<std::string>(m_hText, 0);
+            pBrowser->m_SearchString = std::holds_alternative<xerr>(TextArg) ? std::string() : std::get<std::string>(TextArg);
+            return "SetBrowserSearch: ok";
+        }
+        xcmdline::parser::handle m_hText;
+    };
+
     // The guid-addressed way to reach an open editor's own commands (the friendlier way is Name\Command from `list`).
     struct resource_editor_command_cmd : xlevel::commands::level_query_command
     {

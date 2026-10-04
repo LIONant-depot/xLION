@@ -19,6 +19,7 @@ DescribeAsset
 DescribeLevel
 Exit
 ExplainLastKey
+GetBrowserState
 GetIdleTasks
 GetLevelGame
 GetLog
@@ -36,6 +37,7 @@ ListProjectModuleReferences
 ListSceneModules
 ListScenesUsingModule
 ListScriptSourceFiles
+LocateResource
 LogAcknowledge
 LogAttach
 LogAttachments
@@ -102,6 +104,7 @@ SaveAllEditors
 SaveAssets
 SaveKeymapAs
 Say
+SetBrowserSearch
 SetLevelGame
 SetScriptSourceFileContent
 SourceControlCommit

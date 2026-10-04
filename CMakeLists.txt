@@ -470,7 +470,6 @@ set(XLION_COMMON_SOURCES
   "source/Tools/Editor/xeditor_resource_tab.h"
   "source/Tools/Editor/xeditor_text_widget.h"
   "source/Tools/Editor/xeditor_text_widget.cpp"
-  "source/Tools/Editor/xeditor_texture_thumbnails.h"
   "source/Tools/Editor/xeditor_thumbnail.h"
   "source/Tools/Editor/xeditor_thumbnail_cache.h"
   "source/Tools/Editor/xeditor_toolbar.h"
