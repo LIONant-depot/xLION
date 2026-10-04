@@ -52,7 +52,8 @@ def labels(quiet):
 
 
 def test_no_text_no_labels(quiet):
-    assert draw(quiet, 0) == {"Labels": 0, "Glyphs": 0, "Draws": 0, "Dropped": 0}
+    got = draw(quiet, 0)
+    assert (got["Labels"], got["Glyphs"], got["Draws"], got["Dropped"]) == (0, 0, 0, 0) and got["Ready"] == 1, got
 
 
 def test_labels_that_share_a_font_are_one_draw_call(level, labels):
