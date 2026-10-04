@@ -335,7 +335,7 @@ def test_a_module_exports_as_a_cmake_file_that_a_project_without_the_editor_can_
     values = cmake_values(fragment, "SOCCERGAME", tmp_path)
     assert values.get("APPLY") == "yes", "the file defines soccergame_apply(target)"
     sources, headers = values["SOURCES"].split(";"), values["HEADERS"].split(";")
-    assert [Path(p).name for p in sources] == ["soccer_game.cpp"] and len(headers) == 8
+    assert [Path(p).name for p in sources] == ["soccer_game.cpp"] and len(headers) == 7
     assert all(Path(p).is_file() for p in sources + headers), "every path in the file is a real file"
     assert Path(values["PROJECT_ROOT"]).resolve() == PROJECT.resolve(), "it finds the project root from where it is"
     assert all(Path(p).name in values["PCH_HEADERS"] for p in headers)

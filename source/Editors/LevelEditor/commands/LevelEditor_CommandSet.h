@@ -30,6 +30,7 @@ namespace level_editor
         xlevel::commands::describe_text_query_cmd           CmdDescribeText;
         xlevel::commands::describe_text_draw_query_cmd      CmdDescribeTextDraw;
         xlevel::commands::pick_ray_query_cmd                CmdPickRay;
+        xlevel::commands::get_world_pose_query_cmd          CmdGetWorldPose;
         xscene::commands::snapshot_edit_cmd                 CmdSnapshotEdit;
         xscene::commands::translate_cmd                     CmdTranslate;
         xscene::commands::rotate_cmd                        CmdRotate;
@@ -110,6 +111,7 @@ namespace level_editor
         , CmdDescribeText(Level, pEditor)
         , CmdDescribeTextDraw(Level, pEditor)
         , CmdPickRay(Level, pEditor)
+        , CmdGetWorldPose(Level, pEditor)
         , CmdSnapshotEdit(Level, pScene)
         , CmdTranslate(Level, pScene)
         , CmdRotate(Level, pScene)
