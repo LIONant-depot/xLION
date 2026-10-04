@@ -194,11 +194,14 @@ namespace xeditor
         {
             if (auto* pHost = host::current()) SyncToHost(*pHost);
             DropClosed();
-            for (auto& E : m_List)
+            // An editor may open another one while it renders (the Level editor opening the editor of a module): m_List grows, and a reference into it (or an iterator) is gone. The editors themselves
+            // are on the heap and nobody drops one during the frame, so a pointer to the editor stays good, and an editor that was added is rendered in this same frame.
+            for (std::size_t i = 0; i < m_List.size(); ++i)
             {
-                const bool bWasOpen = E->m_bOpen;
-                E->Render();
-                if (bWasOpen && !E->m_bOpen && E->HasPendingChanges()) { E->m_bOpen = true; E->RequestClose(); }          // the window's close button: not before the question
+                resource_editor* pEditor = m_List[i].get();
+                const bool bWasOpen = pEditor->m_bOpen;
+                pEditor->Render();
+                if (bWasOpen && !pEditor->m_bOpen && pEditor->HasPendingChanges()) { pEditor->m_bOpen = true; pEditor->RequestClose(); }          // the window's close button: not before the question
             }
             RenderCloseQuestions();
         }
