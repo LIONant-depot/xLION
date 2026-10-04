@@ -60,6 +60,7 @@ namespace level_editor
         xlevel::commands::describe_entity_query_cmd         CmdDescribeEntity;
         xlevel::commands::list_component_types_query_cmd    CmdListComponentTypes;
         xlevel::commands::list_systems_query_cmd            CmdListSystems;
+        xlevel::commands::list_event_handlers_query_cmd     CmdListEventHandlers;
         xlevel::commands::set_system_parent_cmd             CmdSetSystemParent;
         xlevel::commands::save_system_order_cmd             CmdSaveSystemOrder;
         xlevel::commands::game_module_status_cmd            CmdGameModuleStatus;
@@ -141,6 +142,7 @@ namespace level_editor
         , CmdDescribeEntity(Level, pEditor)
         , CmdListComponentTypes(Level, pEditor)
         , CmdListSystems(Level, pEditor)
+        , CmdListEventHandlers(Level, pEditor)
         , CmdSetSystemParent(Level, pEditor)
         , CmdSaveSystemOrder(Level, pEditor)
         , CmdGameModuleStatus(Level, pEditor)
