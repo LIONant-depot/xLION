@@ -28,6 +28,23 @@ def test_a_system_can_be_shown_in_the_file_it_is_defined_in(editor, game_level):
     assert "soccer_ball_system.h" in editor.cmd(f"{MODULE_NAME}\\ListOpenFiles")
 
 
+def test_a_system_can_be_opened_in_the_visual_studio_of_the_game_project(editor, game_level):
+    """The System Registry's right-click menu: "Open in Visual Studio" (the solution of the scripts) or in the module editor. -DryRun says which Visual Studio it would use, and starts nothing."""
+    reply = editor.cmd(f"OpenTypeSource -Guid {SOCCER_BALL_SYSTEM} -System true -In VisualStudio -DryRun true")
+    assert re.fullmatch(r"OpenTypeSource: would (open .*soccer_ball_system\.h in the Visual Studio that has .*Script\.sln open \(process \d+\)"
+                        r"|start Visual Studio on .*Script\.sln and open .*soccer_ball_system\.h in it)", reply), reply
+
+
+def test_the_module_is_still_the_default_place_to_open_a_system(editor, game_level):
+    reply = editor.cmd(f"OpenTypeSource -Guid {SOCCER_BALL_SYSTEM} -System true -In Module")
+    assert reply.startswith("OpenTypeSource: ok") and "File=soccer_ball_system.h" in reply, reply
+
+
+def test_a_place_that_is_not_known_is_refused(editor, game_level):
+    assert "-In is Module or VisualStudio" in editor.cmd(f"OpenTypeSource -Guid {SOCCER_BALL_SYSTEM} -System true -In Notepad")
+    assert "has no file" not in editor.cmd(f"OpenTypeSource -Guid {TRANSFORM} -In VisualStudio -DryRun true"), "an engine type is answered before the place matters"
+
+
 def test_an_engine_component_has_no_module_to_open(editor):
     reply = editor.cmd(f"OpenTypeSource -Guid {TRANSFORM}")
     assert "built in" in reply and "no module defines it" in reply, reply

@@ -91,15 +91,27 @@ namespace level_editor::commands
     }
     inline const bool g_TypeSourceOpener = (xscene::g_OpenTypeSource = &OpenTypeSource, true);
 
+    // The same file in the Visual Studio of the active Level's game project (see xlevel_visual_studio.h).
+    inline std::string OpenTypeSourceInVisualStudio(const xscene::type_source& Source, bool bDryRun) noexcept
+    {
+        auto* pLevel = xlevel::FindLevelContext();
+        if (!pLevel) return "no Level is open";
+        if (Source.m_Path.empty()) return "the type has no file";
+        return xlevel::RequestOpenFileInVisualStudio(*pLevel, std::filesystem::path(Source.m_Path), bDryRun);
+    }
+    inline const bool g_TypeSourceVisualStudioOpener = (xscene::g_OpenTypeSourceInVisualStudio = &OpenTypeSourceInVisualStudio, true);
+
     // OpenTypeSource -Guid hex16 [-System true]: the same, by the guid of the component (or of the system, with -System true): what the AI and the tests use instead of the mouse.
     struct open_type_source_cmd : xlevel::commands::level_query_command
     {
         open_type_source_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "OpenTypeSource", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Shows the file a component (or, with -System true, a system) is defined in: the module's editor opens at it. Usage: OpenTypeSource -Guid hexguid [-System true]"; }
+        const char* getCommandHelp() const noexcept override { return "Shows the file a component (or, with -System true, a system) is defined in: the module's editor opens at it, or with -In VisualStudio the Visual Studio of the Level's game project (-DryRun true only says what it would do). Usage: OpenTypeSource -Guid hexguid [-System true] [-In Module|VisualStudio] [-DryRun true]"; }
         void RegisterArguments() noexcept override
         {
             m_hGuid   = m_Parser.addOption("Guid",   "The guid of the component or the system, 16 hex digits", true, 1);
             m_hSystem = m_Parser.addOption("System", "true: it is a system", false, 1);
+            m_hIn     = m_Parser.addOption("In",     "Module (default): the module's editor; VisualStudio: the Visual Studio of the game project", false, 1);
+            m_hDryRun = m_Parser.addOption("DryRun", "true: only say what opening in Visual Studio would do", false, 1);
         }
         std::string Query() noexcept override
         {
@@ -112,10 +124,19 @@ namespace level_editor::commands
             const auto Source = LevelContext().Display().SourceOf(bSystem, Guid);
             if (!Source.m_bKnown)   return "OpenTypeSource: nothing is known about where types come from (is Game.dll loaded, and recent enough?)";
             if (Source.m_bBuiltIn)  return std::format("OpenTypeSource: {:016X} is built in (the engine's or the editor's own): no module defines it", Guid);
+            auto InArg = m_Parser.getOptionArgAs<std::string>(m_hIn, 0);
+            const std::string In = std::holds_alternative<xerr>(InArg) ? std::string("Module") : std::get<std::string>(InArg);
+            if (In == "VisualStudio")
+            {
+                auto DryArg = m_Parser.getOptionArgAs<std::string>(m_hDryRun, 0);
+                const bool bDryRun = !std::holds_alternative<xerr>(DryArg) && (std::get<std::string>(DryArg) == "true" || std::get<std::string>(DryArg) == "1");
+                return "OpenTypeSource: " + OpenTypeSourceInVisualStudio(Source, bDryRun);
+            }
+            if (In != "Module") return "OpenTypeSource: -In is Module or VisualStudio";
             if (!OpenTypeSource(Source)) return "OpenTypeSource: the type has no file";
             return std::format("OpenTypeSource: ok\nModule={}\nFile={}\nPath={}", Source.m_ModuleName, Source.m_File, Source.m_Path);
         }
-        xcmdline::parser::handle m_hGuid, m_hSystem;
+        xcmdline::parser::handle m_hGuid, m_hSystem, m_hIn, m_hDryRun;
     };
 
     struct open_resource_editor_cmd : xlevel::commands::level_query_command
