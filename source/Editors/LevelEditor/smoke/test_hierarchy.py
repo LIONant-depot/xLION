@@ -79,15 +79,40 @@ def test_the_scale_of_the_parent_is_not_taken_unless_asked(lv):
     c = node(lv, "7E7E0002", parent=p, position=(1, 0, 0))
     w = c.world(lambda w: w["Child"] == 1 and near(w["Position"], (4, 0, 0)))
     assert near(w["Position"], (4, 0, 0)) and near(w["Scale"], (1, 1, 1)), f"the scale of a parent is its size, not its child's: {w}"
-    c.set("Parent", "Parent/FollowScale", "true")
+    for axis in "XYZ":
+        c.set("Parent", f"Parent/FollowScale/{axis}", "true")
     w = c.world(lambda w: near(w["Position"], (5, 0, 0)))
     assert near(w["Position"], (5, 0, 0)) and near(w["Scale"], (2, 2, 2)), w
+
+
+def test_the_scale_can_be_followed_axis_by_axis(lv):
+    p = node(lv, "7E7E0001", position=(0, 0, 0))
+    p.set("Transform", "Transform/Scale/X", 2); p.set("Transform", "Transform/Scale/Y", 3); p.set("Transform", "Transform/Scale/Z", 4)
+    c = node(lv, "7E7E0002", parent=p, position=(1, 1, 1))
+    c.set("Parent", "Parent/FollowScale/Y", "true")                      # only y: the child is 3 times as tall, and its offset along y is 3 times as long
+    w = c.world(lambda w: near(w["Scale"], (1, 3, 1)))
+    assert near(w["Scale"], (1, 3, 1)) and near(w["Position"], (1, 3, 1)), w
+
+
+def test_a_child_can_follow_only_the_heading_of_its_parent(lv):
+    p = node(lv, "7E7E0001", position=(0, 0, 0))
+    c = node(lv, "7E7E0002", parent=p, position=(1, 0, 0))
+    p.set("Transform", "Transform/RotationDegrees/Z", 30)                # the parent rolls: its whole rotation lifts the offset (1,0,0) to y = sin 30
+    w = c.world(lambda w: abs(w["Position"][1] - 0.5) < 0.01)
+    assert abs(w["Position"][1] - 0.5) < 1e-2, f"the whole rotation is followed by default: {w}"
+    c.set("Parent", "Parent/FollowRotation", "false")
+    c.set("Parent", "Parent/FollowHeading", "true")
+    w = c.world(lambda w: abs(w["Position"][1]) < 0.01)
+    assert near(w["Position"], (1, 0, 0), 1e-2), f"the roll is not the child's, and there is no turn around the vertical axis to take: {w}"
+    p.set("Transform", "Transform/RotationDegrees/Y", 90)                # now the parent also turns around the vertical axis: that part is followed
+    w = c.world(lambda w: abs(w["Position"][0]) < 0.05)
+    assert abs(w["Position"][0]) < 5e-2 and abs(abs(w["Position"][2]) - 1) < 5e-2 and abs(w["Position"][1]) < 5e-2, f"turned a quarter turn around the vertical axis, level: {w}"
 
 
 def test_an_axis_that_does_not_follow_is_a_world_value(lv):
     p = node(lv, "7E7E0001", position=(3, 5, 4))
     s = node(lv, "7E7E0002", parent=p, position=(0, 0.5, 0))
-    s.set("Parent", "Parent/FollowY", "false")
+    s.set("Parent", "Parent/FollowPosition/Y", "false")
     w = s.world(lambda w: w["Child"] == 1 and near(w["Position"], (3, 0.5, 4)))
     assert near(w["Position"], (3, 0.5, 4)), f"x and z follow, y is its own, in the world (a shadow stays on the ground): {w}"
     p.set("Transform", "Transform/Position/Y", 9)                        # the parent jumps
@@ -125,7 +150,7 @@ def test_a_child_survives_a_save_and_a_reload(lv):
     try:
         p = node(lv, "7E7E0A01", position=(6, 0, 0))
         c = node(lv, "7E7E0A02", parent=p, position=(0, 2, 0))
-        c.set("Parent", "Parent/FollowY", "false")
+        c.set("Parent", "Parent/FollowPosition/Y", "false")
         c.set("Parent", "Parent/FollowRotation", "false")
         reply = lv.ed.cmd("Save", allow_disk=True)
         assert "rror" not in reply, reply
@@ -134,11 +159,35 @@ def test_a_child_survives_a_save_and_a_reload(lv):
         lv.ed.wait_for("GetPlayState", r"Building=false", timeout=240)
         w = c.world(lambda w: w["Child"] == 1 and near(w["Position"], (6, 2, 0)))
         assert w["Child"] == 1 and near(w["Position"], (6, 2, 0)), w
-        assert lv.cmd(f"GetProperty -Scene {lv.scene} -Id {c.entity} -Component Parent -Path Parent/FollowY") == "false"
+        assert lv.cmd(f"GetProperty -Scene {lv.scene} -Id {c.entity} -Component Parent -Path Parent/FollowPosition/Y") == "false"
         assert lv.cmd(f"GetProperty -Scene {lv.scene} -Id {c.entity} -Component Parent -Path Parent/FollowRotation") == "false"
-        assert lv.cmd(f"GetProperty -Scene {lv.scene} -Id {c.entity} -Component Parent -Path Parent/FollowX") == "true"
+        assert lv.cmd(f"GetProperty -Scene {lv.scene} -Id {c.entity} -Component Parent -Path Parent/FollowPosition/X") == "true"
     finally:
         lv.ed.cmd("Close -Save 0")
         shutil.rmtree(scene_dir, ignore_errors=True)
         shutil.copytree(backup, scene_dir)
         shutil.rmtree(backup.parent, ignore_errors=True)
+
+
+def test_every_level_of_the_project_opens_and_is_drawn(editor):
+    """Opening a level while it is still being built (its entities and their children are still being resolved) must not take the draw down: the transform system only follows children that are alive."""
+    for guid, name in editor.levels():
+        editor.cmd("Close -Save 0")
+        reply = editor.cmd(f"OpenLevel -Level {guid} -Save 0")
+        assert reply.startswith("Opened Level"), (name, reply)
+        editor.wait_for("GetPlayState", r"Building=false", timeout=240)
+        time.sleep(1.5)                                     # frames are drawn while it settles
+        assert editor.alive(), f"the editor is still there after {name} was opened and drawn"
+        assert "PlayState=Stopped" in editor.cmd("GetPlayState"), name
+    editor.cmd("Close -Save 0")
+
+
+def test_the_hierarchy_components_are_shown_on_the_entities(lv):
+    """A component is a type that systems query on: the person must see every one an entity has - Parent on a child, Children on a parent (read only: the hierarchy is made by creating entities)."""
+    p = node(lv, "7E7E0001", position=(1, 0, 0))
+    c = node(lv, "7E7E0002", parent=p)
+    names_of = lambda e: re.findall(r"\[\w{16}\] (\w+)", lv.describe(e))
+    assert "Children" in names_of(p.entity), names_of(p.entity)
+    assert "Parent" in names_of(c.entity), names_of(c.entity)
+    assert "Parent" not in names_of(p.entity) and "Children" not in names_of(c.entity)
+    assert "Parent/FollowRotation = true" in lv.describe(c.entity), "its switches are listed with its other properties"

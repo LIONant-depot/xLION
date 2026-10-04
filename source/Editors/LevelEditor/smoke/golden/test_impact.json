@@ -19,7 +19,7 @@
     ["plugins/xscene.plugin/source/Editor/xscene_commands_(entity|property|component|scene)", ["test_command_helpers.py", "test_entities.py", "test_components.py", "test_undo_redo.py", "test_folders.py", "test_prefabs.py"]],
     ["plugins/xscene.plugin/", ["test_entities.py", "test_components.py", "test_undo_redo.py", "test_prefabs.py", "test_folders.py"]],
     ["plugins/xscript_module.plugin/|plugins/xgame.plugin/", ["test_script_modules.py", "test_script_module_editor.py", "test_script_module_compiler.py", "test_game_compiler.py", "test_game_resource.py", "test_module_dependencies.py"]],
-    ["3849E1DE2402B1A5\\.desc/source_db/", ["test_soccer_goals.py", "test_game_compiler.py", "test_script_module_editor.py", "test_physics_events.py"]],
+    ["3849E1DE2402B1A5\\.desc/source_db/", ["test_soccer_goals.py", "test_soccer_referee.py", "test_game_compiler.py", "test_script_module_editor.py", "test_physics_events.py"]],
     ["dependencies/xLIONCore/src/physics|dependencies/xLIONCore/src/demo", ["test_physics_events.py", "test_soccer_goals.py", "test_physics_contact_events.py", "test_play.py", "test_play_more.py", "test_components.py", "test_system_order.py"]],
     ["dependencies/xLIONCore/", ["test_engine_copies.py", "test_entities.py", "test_play.py", "test_system_order.py", "test_ecs_gate.py"]],
     ["dependencies/xLIONRender/", ["test_engine_copies.py", "test_play.py"]],

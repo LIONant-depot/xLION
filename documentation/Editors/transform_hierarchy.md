@@ -16,20 +16,23 @@ An entity can be the child of another: it has a `parent` component (the entity i
 
 ## What a child takes from its parent: `Follow`
 
-The `parent` component has five switches, all on its Inspector:
+The `parent` component has switches, all on its Inspector (`FollowPosition` and `FollowScale` are one row of three checkboxes each, X Y Z, like the physics Constraints):
 
-| FollowX / FollowY / FollowZ | the child takes that axis of its parent's position; off: its own value for that axis is a **world** value |
+| FollowPosition X / Y / Z | the child takes that axis of its parent's position; off: its own value for that axis is a **world** value |
 |---|---|
 | FollowRotation | the child turns with its parent and its offset turns with it; off: its own rotation is a world rotation |
-| FollowScale | the child is scaled by its parent (offset included); off (the default): its own scale is its world scale |
+| FollowHeading | only when FollowRotation is off: the child takes the turn of its parent around the vertical axis (where it faces), not its lean or roll |
+| FollowScale X / Y / Z | the child is scaled by that axis of its parent's scale (its offset along it too); off (the default): its own scale is its world scale |
+
+A rotation has no X, Y and Z to switch off one by one (rotations do not combine axis by axis, and Euler angles depend on an order and jump at some angles), so it is followed whole, only by its heading (the swing-twist split around the vertical axis), or not at all.
 
 By default everything follows except the scale: in this engine the scale of an entity is also its size (a Primitive is as big as its Scale), and a name tag over a player must not be squashed by the player.
 
-Examples (Soccer): a **name tag** is a child of the player at `(0, 1.45, 0)` with FollowRotation off (it floats straight up when the player leans); a **shadow** is a child at `(0, 0.012, 0)` with FollowY and FollowRotation off (it stays on the ground when the player jumps, and flat).
+Examples (Soccer): a **name tag** is a child of the player at `(0, 1.45, 0)` with FollowRotation off (it floats straight up when the player leans); a **shadow** is a child at `(0, 0.012, 0)` with FollowPosition Y and FollowRotation off (it stays on the ground when the player jumps, and flat).
 
 ## Commands
 
 - `CreateEntity -Parent id` makes a child. `GetWorldPose -Scene s -Id e` says `Child=0|1`, and the world Position, Rotation, Scale.
-- `SetProperty ... -Component Parent -Path Parent/FollowY -After false`.
+- `SetProperty ... -Component Parent -Path Parent/FollowPosition/Y -After false`.
 
 Tests: `smoke/test_hierarchy.py`.
