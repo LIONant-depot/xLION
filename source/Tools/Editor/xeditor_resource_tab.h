@@ -64,6 +64,7 @@ namespace xeditor
 
         ImGuiWindow* Window = ImGui::GetCurrentWindow();
         if (!Window || !Window->DockNode) return;
+        if (Window->DockNode->IsHiddenTabBar() || Window->DockNode->IsNoTabBar()) return;     // the tab bar is collapsed (a single tab): no tab is drawn, so there is no tab icon either
         ImGuiTabBar* TabBar = Window->DockNode->TabBar;
         if (!TabBar) return;
 
