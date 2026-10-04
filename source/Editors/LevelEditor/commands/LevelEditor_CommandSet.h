@@ -160,6 +160,7 @@ namespace level_editor
         level_editor::commands::open_type_source_cmd              CmdOpenTypeSource;
         level_editor::commands::resource_editor_command_cmd       CmdResourceEditorCommand;
         level_editor::commands::close_resource_editor_cmd         CmdCloseResourceEditor;
+        level_editor::commands::save_all_editors_cmd              CmdSaveAllEditors;
         level_editor::commands::capture_window_cmd                CmdCaptureWindow;
         level_editor::commands::say_query_cmd                     CmdSay;
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
@@ -248,6 +249,7 @@ namespace level_editor
         , CmdOpenTypeSource(Workspace, pEditor)
         , CmdResourceEditorCommand(Workspace, pEditor)
         , CmdCloseResourceEditor(Workspace, pEditor)
+        , CmdSaveAllEditors(Workspace, pEditor)
         , CmdCaptureWindow(Workspace, pEditor)
         , CmdSay(Workspace, pEditor)
         , CmdGetLog(Workspace, pEditor)
@@ -342,6 +344,7 @@ namespace level_editor
             CmdOpenTypeSource.m_pDataBase = pEditor;
             CmdResourceEditorCommand.m_pDataBase = pEditor;
             CmdCloseResourceEditor.m_pDataBase = pEditor;
+            CmdSaveAllEditors.m_pDataBase = pEditor;
             CmdCaptureWindow.m_pDataBase = pEditor;
             CmdSay.m_pDataBase = pEditor;
             CmdGetLog.m_pDataBase = pEditor;

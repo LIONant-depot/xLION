@@ -12,6 +12,7 @@
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "source/Tools/Editor/xeditor_compile_logs.h"
+#include "source/Tools/Editor/xeditor_resource_editor.h"
 #include "dependencies/xlog/editor/xlog_diagnostics.h"
 #include "dependencies/xeditor/include/xeditor/open_ref.h"
 #include "imgui.h"
@@ -53,7 +54,56 @@ namespace xeditor
         void (*m_OnSave)(void* pUser)    = nullptr;
         void (*m_OnCompile)(void* pUser) = nullptr;
         void* m_pUser                    = nullptr;
+
+        // The editor the bar belongs to: with it the bar starts with the editor menu (the icon of the resource's type and a down arrow, one button) that has Save, Save All and Close.
+        resource_editor* m_pEditor       = nullptr;
+        xgpu::device*    m_pDevice       = nullptr;     // for the icon
+        xresource::type_guid m_IconType  = {};          // the type whose icon it is, when the document does not say (the Level editor)
     };
+
+    // The editor menu: one button, the icon of the resource type and a down arrow. Save saves this editor, Save All saves every open editor that has something pending, Close closes this one
+    // (asking first when it has changes that are not saved).
+    inline void RenderEditorMenu(toolbar_model& Model) noexcept
+    {
+        const auto& Style     = ImGui::GetStyle();
+        constexpr const char* Arrow = "\xEE\x9C\x8D";                                      // Segoe MDL2 ChevronDown
+        const float  IconSize = ImGui::GetFrameHeight() - 2.0f;                            // as big as the button allows: a pixel of the button around it
+        const float  Gap      = 4.0f;
+        const ImVec2 Size(Style.FramePadding.x + IconSize + Gap + ImGui::CalcTextSize(Arrow).x + Style.FramePadding.x, 0.0f);
+
+        const bool bPressed = ImGui::Button("###EditorMenu", Size);
+        const ImVec2 Min = ImGui::GetItemRectMin(), Max = ImGui::GetItemRectMax();
+        if (Model.m_pDevice)
+        {
+            xresource_editor::EnsureIconAtlasTexture(xresource_editor::g_LibMgr.m_AssetPluginsDB, *Model.m_pDevice);
+            const auto Icon = xresource_editor::g_LibMgr.m_AssetPluginsDB.getIconRef(Model.m_IconType.m_Value ? Model.m_IconType : Model.m_pEditor->getDocument().getGuid().m_Type, 0);
+            if (Icon.isValid())
+            {
+                const ImVec2 At(Min.x + Style.FramePadding.x, Min.y + (Max.y - Min.y - IconSize) * 0.5f);
+                ImGui::GetWindowDrawList()->AddImage((ImTextureRef)(void*)Icon.m_pTexture, At, ImVec2(At.x + IconSize, At.y + IconSize), ImVec2(Icon.m_U0, Icon.m_V0), ImVec2(Icon.m_U1, Icon.m_V1));
+            }
+        }
+        ImGui::GetWindowDrawList()->AddText(ImVec2(Min.x + Style.FramePadding.x + IconSize + Gap, Min.y + Style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), Arrow);
+        if (ImGui::IsItemHovered()) xeditor::hint::Text("The editor's menu: Save, Save All, Close");
+
+        if (bPressed)
+        {
+            ImGui::SetNextWindowPos(ImVec2(Min.x, Max.y));
+            ImGui::OpenPopup("###EditorMenuPopup");
+        }
+        if (ImGui::BeginPopup("###EditorMenuPopup"))
+        {
+            auto* pEditors = host::current() ? host::current()->find<open_resource_editors>() : nullptr;
+            if (ImGui::MenuItem("Save", nullptr, false, Model.m_bDirty && Model.m_OnSave != nullptr)) Model.m_OnSave(Model.m_pUser);
+            if (ImGui::MenuItem("Save All", nullptr, false, pEditors != nullptr)) pEditors->SaveAll();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Close")) Model.m_pEditor->RequestClose();
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine(0, 8);
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine(0, 8);
+    }
 
     // Requires the host window to have been begun with ImGuiWindowFlags_MenuBar.
     // Undo/Redo/Save stay left; Compile + Feedback are centered by default (LevelEditor Play/Stop pattern).
@@ -63,6 +113,8 @@ namespace xeditor
             return;
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 2));
+
+        if (Model.m_pEditor) RenderEditorMenu(Model);
 
         if (Model.m_pUndo)
         {

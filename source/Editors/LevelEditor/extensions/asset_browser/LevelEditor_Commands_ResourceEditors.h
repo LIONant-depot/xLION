@@ -175,11 +175,20 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hFile;
     };
 
+    // CloseResourceEditor: the editor menu's Close. Without -Save it closes the editor and drops what was not saved (what a script wants); with -Save it does what a person is offered:
+    //   -Save true     saves the changes, then closes (an editor that cannot save stays open and says why)
+    //   -Save false    closes and drops them
+    //   -Save ask      what the menu's Close does: closes at once when nothing is pending, otherwise opens the question (Save / Don't Save / Cancel) and leaves the editor open
+    //   -Save cancel   answers that question with Cancel
     struct close_resource_editor_cmd : xlevel::commands::level_query_command
     {
         close_resource_editor_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "CloseResourceEditor", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Closes the editor of a resource, like its window's close button (unsaved changes are dropped). Usage: CloseResourceEditor -Asset assetguid"; }
-        void RegisterArguments() noexcept override { m_hAsset = m_Parser.addOption("Asset", "Resource guid, 32 hex digits", true, 1); }
+        const char* getCommandHelp() const noexcept override { return "Closes the editor of a resource, like the editor menu's Close. Without -Save the changes that are not saved are dropped; -Save true saves them first, false drops them, ask opens the question a person is asked, cancel answers it with Cancel. Usage: CloseResourceEditor -Asset assetguid [-Save true|false|ask|cancel]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hAsset = m_Parser.addOption("Asset", "Resource guid, 32 hex digits", true, 1);
+            m_hSave  = m_Parser.addOption("Save", "true: save first, false: drop the changes, ask: ask as the menu does, cancel: answer the question with Cancel", false, 1);
+        }
         std::string Query() noexcept override
         {
             auto AssetArg = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
@@ -187,10 +196,52 @@ namespace level_editor::commands
             auto* pEditors = FindResourceEditors();
             auto* pEditor  = pEditors ? pEditors->Find(xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg))) : nullptr;
             if (!pEditor) return "CloseResourceEditor: no open editor for that resource";
-            pEditor->m_bOpen = false;       // the host drops it at the start of the next frame
-            return "";
+
+            std::string Save;
+            if (auto SaveArg = m_Parser.getOptionArgAs<std::string>(m_hSave, 0); !std::holds_alternative<xerr>(SaveArg)) Save = std::get<std::string>(SaveArg);
+
+            if (Save.empty() || Save == "false") { pEditor->m_bAskClose = false; pEditor->m_bOpen = false; return ""; }      // the host drops it at the start of the next frame
+            if (Save == "true")
+            {
+                if (pEditor->HasPendingChanges()) pEditor->SaveChanges();
+                if (pEditor->HasPendingChanges()) return "CloseResourceEditor: the changes could not be saved: the editor stays open";
+                pEditor->m_bAskClose = false; pEditor->m_bOpen = false;
+                return "";
+            }
+            if (Save == "ask")
+            {
+                if (!pEditor->HasPendingChanges()) { pEditor->m_bOpen = false; return ""; }
+                if (pEditor->m_bAskClose) return "CloseResourceEditor: the question is already open";
+                pEditor->RequestClose();
+                return std::format("CloseResourceEditor: asking whether to save the changes of {}", pEditor->DisplayName());
+            }
+            if (Save == "cancel")
+            {
+                const bool bAsking = pEditor->m_bAskClose;
+                pEditor->m_bAskClose = false;
+                return bAsking ? "CloseResourceEditor: cancelled: the editor stays open" : "CloseResourceEditor: there was no question to cancel";
+            }
+            return "CloseResourceEditor: -Save is true, false, ask or cancel";
         }
-        xcmdline::parser::handle m_hAsset;
+        xcmdline::parser::handle m_hAsset, m_hSave;
+    };
+
+    // SaveAllEditors: the editor menu's Save All: every open editor that has something pending is saved, and then the changes of the asset database (renames, moves).
+    struct save_all_editors_cmd : xlevel::commands::level_query_command
+    {
+        save_all_editors_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "SaveAllEditors", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Saves everything that is pending: every open editor with unsaved changes, and the asset database. The editor menu's Save All. Usage: SaveAllEditors"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto* pEditors = FindResourceEditors();
+            if (!pEditors) return "SaveAllEditors: no editors";
+            const auto Saved = pEditors->SaveAll();
+            if (Saved.empty()) return "SaveAllEditors: no editor had anything pending";
+            std::string Names;
+            for (const auto& N : Saved) Names += (Names.empty() ? "" : ", ") + N;
+            return std::format("SaveAllEditors: saved {}: {}", Saved.size(), Names);
+        }
     };
 
     // The guid-addressed way to reach an open editor's own commands (the friendlier way is Name\Command from `list`).

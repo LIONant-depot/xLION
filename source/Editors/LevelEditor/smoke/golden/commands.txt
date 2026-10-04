@@ -98,6 +98,7 @@ RestoreAssetFileFromTrash
 RunAction
 RunSanityCheck
 Save
+SaveAllEditors
 SaveAssets
 SaveKeymapAs
 Say

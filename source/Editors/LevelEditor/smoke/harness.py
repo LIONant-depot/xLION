@@ -47,7 +47,7 @@ _EOF_ERRORS = (109, 233)      # ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED: th
 # Commands that write the developer's own project data. The suite runs against the real example project, so a
 # test must opt in (allow_disk=True) instead of touching disk by accident.
 DISK_WRITERS = frozenset({
-    "Save", "SaveAssets", "CreateAsset", "CreateLibrary", "RenameAsset", "MoveAsset", "DeleteAsset", "RestoreAsset",
+    "Save", "SaveAssets", "SaveAllEditors", "CreateAsset", "CreateLibrary", "RenameAsset", "MoveAsset", "DeleteAsset", "RestoreAsset",
     "RenameAssetFile", "MoveAssetFile", "DeleteAssetFileToTrash", "RestoreAssetFileFromTrash", "CopyAssetFile",
     "AddProjectModuleReference", "RemoveProjectModuleReference", "RegenerateProjectModuleSources", "SetLevelGame",
     "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",

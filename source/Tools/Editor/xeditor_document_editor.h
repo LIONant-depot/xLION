@@ -634,6 +634,8 @@ namespace xeditor
             Bar.m_Subject           = AssetRef(m_Document.m_Guid);
             Bar.m_OnCompile         = &document_editor::ToolbarCompile;
             Bar.m_pUser             = this;
+            Bar.m_pEditor           = this;
+            Bar.m_pDevice           = m_pDevice;
             RenderEditorToolbar(Bar);
         }
 
