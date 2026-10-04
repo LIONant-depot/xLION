@@ -41,7 +41,7 @@ Within a group the first is the most urgent. The italic line after each number s
    nothing to play (or no Level open) cannot be asked for. - `StartGameReload` (`LevelEditor_GameReloadSession.h`).
 9. *(the order of systems is an accident of #include order)* **Control the order of systems** (a priority argument to `XSCRIPT_REGISTER_SYSTEM`). Today the order is the reverse of the order the registrations
    are constructed, which depends on the order of the `#include`s in the module's one `.cpp`.
-13. *(text in the game view)* **Text in the game view** (a `Text` primitive). The soccer scoreboard is two bars that grow, for lack of a way to write a number.
+13. *(text in the game view)* **Text in the game view** (done: the `Text` component, see `text_component.md`; the soccer scoreboard and player names still have to use it).
 11. *(transparency in Primitive (shadows))* **Transparency in `Primitive`** (an `Alpha` property) so a shadow can be a semi-transparent black disc. The soccer shadows use the pitch's green made
     darker, which looks the same only on a flat floor of one color.
 8. *(a module author's guide)* **A module author's guide** (`plugins/xscript_module.plugin/documentation/`). The soccer game is the first script module in the repository. What a module
