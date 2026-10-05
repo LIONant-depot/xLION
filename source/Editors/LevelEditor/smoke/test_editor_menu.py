@@ -12,7 +12,10 @@ import pytest
 
 from harness import REPO
 
-TEXTURE_DESCRIPTOR = REPO / "example.lionprj" / "Descriptors" / "Texture" / "33" / "00" / "189EDF8BF1940033.desc" / "Descriptor.txt"
+def descriptor_of(texture):
+    """The Descriptor.txt of the texture the test opened (which texture it is depends on what the asset tree lists first): Descriptors/Texture/<byte 0>/<byte 1>/<instance>.desc"""
+    instance = texture.guid[:16]
+    return REPO / "example.lionprj" / "Descriptors" / "Texture" / instance[-2:] / instance[-4:-2] / f"{instance}.desc" / "Descriptor.txt"
 
 
 @pytest.fixture
@@ -54,7 +57,7 @@ def test_save_all_saves_every_editor_that_has_something_pending(level, texture):
     assert re.match(r"SaveAll: saved [2-9]: ", reply), reply         # the two editors (and the resource database, when a save of theirs left something in it)
     assert texture.name in reply and level.name in reply, "both are named"
     assert not dirty(editor, level.name) and not dirty(editor, texture.name), "nothing is pending any more"
-    assert "#3F19999A" in TEXTURE_DESCRIPTOR.read_text(), "the texture's change is on disk (0.6)"
+    assert "#3F19999A" in descriptor_of(texture).read_text(), "the texture's change is on disk (0.6)"
 
 
 def test_save_all_with_nothing_pending_says_so(texture):
@@ -65,15 +68,15 @@ def test_close_with_the_changes_saved_saves_them_first(texture):
     change(texture, 0.6)
     assert close(texture, "true") == ""
     assert not is_open(texture.ed, texture.name)
-    assert "#3F19999A" in TEXTURE_DESCRIPTOR.read_text(), "saved, then closed"
+    assert "#3F19999A" in descriptor_of(texture).read_text(), "saved, then closed"
 
 
 def test_close_with_the_changes_dropped_leaves_the_file_alone(texture):
-    before = TEXTURE_DESCRIPTOR.read_bytes()
+    before = descriptor_of(texture).read_bytes()
     change(texture, 0.6)
     assert close(texture, "false") == ""
     assert not is_open(texture.ed, texture.name)
-    assert TEXTURE_DESCRIPTOR.read_bytes() == before, "Don't Save: nothing was written"
+    assert descriptor_of(texture).read_bytes() == before, "Don't Save: nothing was written"
 
 
 def test_close_asks_when_something_is_pending_and_cancel_keeps_the_editor(texture):
