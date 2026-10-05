@@ -171,6 +171,7 @@ namespace level_editor
         level_editor::commands::resource_editor_command_cmd       CmdResourceEditorCommand;
         level_editor::commands::close_resource_editor_cmd         CmdCloseResourceEditor;
         level_editor::commands::save_all_cmd              CmdSaveAll;
+        level_editor::commands::unsaved_cmd               CmdUnsaved;
         level_editor::commands::locate_resource_cmd               CmdLocateResource;
         level_editor::commands::get_browser_state_cmd             CmdGetBrowserState;
         level_editor::commands::set_browser_search_cmd            CmdSetBrowserSearch;
@@ -263,6 +264,7 @@ namespace level_editor
         , CmdResourceEditorCommand(Workspace, pEditor)
         , CmdCloseResourceEditor(Workspace, pEditor)
         , CmdSaveAll(Workspace, pEditor)
+        , CmdUnsaved(Workspace, pEditor)
         , CmdLocateResource(Workspace, pEditor)
         , CmdGetBrowserState(Workspace, pEditor)
         , CmdSetBrowserSearch(Workspace, pEditor)
@@ -361,6 +363,7 @@ namespace level_editor
             CmdResourceEditorCommand.m_pDataBase = pEditor;
             CmdCloseResourceEditor.m_pDataBase = pEditor;
             CmdSaveAll.m_pDataBase = pEditor;
+            CmdUnsaved.m_pDataBase = pEditor;
             CmdLocateResource.m_pDataBase = pEditor;
             CmdGetBrowserState.m_pDataBase = pEditor;
             CmdSetBrowserSearch.m_pDataBase = pEditor;

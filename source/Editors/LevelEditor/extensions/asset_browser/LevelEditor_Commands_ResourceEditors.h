@@ -265,6 +265,27 @@ namespace level_editor::commands
         }
     };
 
+    // Unsaved: what has unsaved work, without saving it - what Save All would save, and what the Save buttons of the editors pulse for. For whoever cannot see the button (a command line, an AI that
+    // drives the editor).
+    struct unsaved_cmd : xlevel::commands::level_query_command
+    {
+        unsaved_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "Unsaved", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Lists what has unsaved work, without saving it: the open editors with changes that are not saved, and the resource database (renames, moves). What SaveAll would save. Usage: Unsaved"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            std::vector<std::string> Names;
+            if (auto* pEditors = FindResourceEditors())
+                for (auto& E : pEditors->m_List)
+                    if (E && E->m_bOpen && E->isLoaded() && E->HasPendingChanges()) Names.push_back(E->DisplayName());
+            if (xresource_editor::g_LibMgr.isReadyToSave()) Names.push_back("Resource database");
+            if (Names.empty()) return "Unsaved: nothing";
+            std::string Joined;
+            for (const auto& N : Names) Joined += (Joined.empty() ? "" : ", ") + N;
+            return std::format("Unsaved: {}: {}", Names.size(), Joined);
+        }
+    };
+
     // LocateResource: the "find in the resource browser" button of a resource reference. The Resources tab of the drawer shows the resource (its folder is current, what hid it is cleared) and
     // the drawer is open on it.
     struct locate_resource_cmd : xlevel::commands::level_query_command

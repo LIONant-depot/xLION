@@ -53,3 +53,27 @@ def test_the_resource_views_own_save_writes_its_renames(level):
         rename(editor, original)
         editor.cmd("SaveAssets", allow_disk=True)
         INFO.write_bytes(original_bytes)                  # the editor writes the whole file again (its own spacing): the project is left as it was
+
+
+def test_unsaved_says_what_has_unsaved_work_without_saving_it(level):
+    """The Save buttons pulse while something is unsaved; `Unsaved` says the same to whoever cannot see them (a command line, an AI): the open editors with changes, and the resource database."""
+    editor = level.ed
+    assert editor.cmd("Unsaved") == "Unsaved: nothing"
+
+    level.new_entity()                                       # a change of the Level (in memory: nothing is saved)
+    reply = editor.cmd("Unsaved")
+    assert reply.startswith("Unsaved: 1: ") and level.name in reply, reply
+    level.cmd("Undo")
+    assert editor.cmd("Unsaved") == "Unsaved: nothing", "undone back to what was saved"
+
+    original, original_bytes = name_on_disk(), INFO.read_bytes()
+    try:
+        rename(editor, "UnsavedTestName")                    # the resource view's own work
+        assert editor.cmd("Unsaved") == "Unsaved: 1: Resource database"
+        assert name_on_disk() == original, "asking does not save"
+        editor.cmd("SaveAll", allow_disk=True)
+        assert editor.cmd("Unsaved") == "Unsaved: nothing"
+    finally:
+        rename(editor, original)
+        editor.cmd("SaveAssets", allow_disk=True)
+        INFO.write_bytes(original_bytes)

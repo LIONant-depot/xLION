@@ -141,8 +141,10 @@ namespace xeditor
 
         {
             if (!Model.m_bDirty) ImGui::BeginDisabled();
+            const int nPulse = Model.m_bDirty ? PushSavePulse() : 0;                // unsaved: it breathes towards green
             if (ImGui::Button((std::string(" ") + save_icon_v + " ").c_str()) && Model.m_OnSave)       // the icon of Save, not the word
                 Model.m_OnSave(Model.m_pUser);
+            if (nPulse) ImGui::PopStyleColor(nPulse);
             if (!Model.m_bDirty) ImGui::EndDisabled();
             if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Save"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor");
         }
