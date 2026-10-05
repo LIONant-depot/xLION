@@ -31,6 +31,9 @@ namespace level_editor
                 ResourceEditors.Open(AssetGuid, LibraryGuid);
             };
 
+        // The Save All of the resource view's menu: the editor's Save All (what the other resource editors' menus do too).
+        AssetBrowser.m_OnSaveAll = [] { (void)xeditor::SaveAllNow(); };
+
         // Per-resource thumbnails (Texture today; any other type that registers a xeditor::thumbnail_renderer
         // going forward) - same dependency-inversion shape as m_OnOpenAsset just above.
         xeditor::g_ThumbnailCache.Init(MainWindow);

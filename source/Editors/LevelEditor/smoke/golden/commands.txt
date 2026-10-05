@@ -100,7 +100,7 @@ RestoreAssetFileFromTrash
 RunAction
 RunSanityCheck
 Save
-SaveAllEditors
+SaveAll
 SaveAssets
 SaveKeymapAs
 Say

@@ -21,6 +21,7 @@ namespace xeditor
         explicit document_actions(resource_editor& Editor) noexcept : m_pEditor(&Editor) {}
 
         void        Save()    noexcept;     const char* WhyNoSave()    const noexcept;
+        void        SaveAll() noexcept;
         void        Undo()    noexcept;     const char* WhyNoUndo()    const noexcept;
         void        Redo()    noexcept;     const char* WhyNoRedo()    const noexcept;
         void        Compile() noexcept;     const char* WhyNoCompile() const noexcept;
@@ -34,6 +35,9 @@ namespace xeditor
             , member_help<"Saves the descriptor. In every resource editor (Texture, Material, Font, Geometry, Skeleton, ...)">
             , ximgui::actions::member_keys<"Ctrl+S", true>
             , member_dynamic_reason<+[](const document_actions& A) noexcept -> const char* { return A.WhyNoSave(); }> >
+        , obj_action<"SaveAll", &document_actions::SaveAll
+            , member_help<"Saves everything in the editor that has unsaved work, whoever owns it: the open editors and the renames and moves of the resource view">
+            , ximgui::actions::member_keys<"Ctrl+Shift+S", true> >
         , obj_action<"Undo", &document_actions::Undo
             , member_help<"Undoes the last change. In every resource editor">
             , ximgui::actions::member_keys<"Ctrl+Z">
@@ -60,6 +64,7 @@ namespace xeditor
         return m_pEditor->getDocument().isDirty() ? nullptr : "no changes to save";
     }
     inline void document_actions::Save() noexcept { (void)m_pEditor->getUndo().Query("Save"); }
+    inline void document_actions::SaveAll() noexcept { (void)SaveAllNow(); }
 
     inline const char* document_actions::WhyNoUndo() const noexcept
     {

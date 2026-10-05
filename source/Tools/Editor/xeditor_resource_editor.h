@@ -134,20 +134,17 @@ namespace xeditor
             }
         }
 
-        // Saves every open editor that has something pending, and then the changes of the asset database that no editor owns (a rename, a move: the SaveAssets command). Returns the
-        // names of the editors it saved (empty: no editor had anything pending).
-        std::vector<std::string> SaveAll() noexcept
+        // This is what the open editors do when Save All fires (host.m_SaveAll, subscribed by the application): every one that has something pending saves it. The Level editors are among them.
+        void SaveAll(save_report& Report) noexcept
         {
-            std::vector<std::string> Saved;
             for (auto& E : m_List)
             {
                 if (!E || !E->m_bOpen || !E->isLoaded() || !E->HasPendingChanges()) continue;
+                const std::string Name = E->DisplayName();
                 E->SaveChanges();
-                Saved.push_back(E->DisplayName());
+                if (E->HasPendingChanges()) Report.Failed(Name, "it still has changes that are not saved");
+                else                        Report.Saved(Name);
             }
-            xproperty::settings::context Context;
-            xresource_editor::g_LibMgr.Save(Context);
-            return Saved;
         }
 
         bool AnyPending() noexcept
@@ -206,6 +203,17 @@ namespace xeditor
             RenderCloseQuestions();
         }
     };
+
+    // Save All, the Save All of every menu and of Ctrl+Shift+S: fires host.m_SaveAll, so everything that keeps unsaved work saves it (the open editors, the asset database, whatever else subscribed).
+    // What could not be saved is told, as a toast, since it is what the person just did.
+    inline save_report SaveAllNow() noexcept
+    {
+        auto* pHost = host::current();
+        if (!pHost) return {};
+        save_report Report = pHost->m_SaveAll.Run();
+        for (const auto& F : Report.m_Failed) NotifyToast("Save All - " + F);
+        return Report;
+    }
 }
 
 #endif // XEDITOR_RESOURCE_EDITOR_H

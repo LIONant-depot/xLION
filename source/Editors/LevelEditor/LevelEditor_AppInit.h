@@ -292,6 +292,10 @@ namespace level_editor
         }
         EditorHost.m_IdleWork.m_OnRun.Register<&xresource_editor::source_control::ScanAllLibrariesWhenIdle>();
 
+        // Save All: the open editors (the Levels among them) save theirs, then the resource database (renames and moves). Anything else that keeps unsaved work subscribes here too.
+        EditorHost.m_SaveAll.m_OnSave.Register<&xeditor::open_resource_editors::SaveAll>(ResourceEditors);
+        EditorHost.m_SaveAll.m_OnSave.Register<&xresource_editor::SaveAssetsOnSaveAll>();
+
         if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
             xeditor::NotifyModal(std::format("LevelEditor: xundo Init failed: {}", Err));
 

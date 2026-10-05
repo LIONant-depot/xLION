@@ -93,9 +93,8 @@ namespace xeditor
         }
         if (ImGui::BeginPopup("###EditorMenuPopup"))
         {
-            auto* pEditors = host::current() ? host::current()->find<open_resource_editors>() : nullptr;
-            if (ImGui::MenuItem("Save", nullptr, false, Model.m_bDirty && Model.m_OnSave != nullptr)) Model.m_OnSave(Model.m_pUser);
-            if (ImGui::MenuItem("Save All", nullptr, false, pEditors != nullptr)) pEditors->SaveAll();
+            if (ImGui::MenuItem((std::string(save_icon_v) + "  Save").c_str(), "Ctrl+S", false, Model.m_bDirty && Model.m_OnSave != nullptr)) Model.m_OnSave(Model.m_pUser);
+            if (ImGui::MenuItem((std::string(save_all_icon_v) + "  Save All").c_str(), "Ctrl+Shift+S")) (void)SaveAllNow();
             ImGui::Separator();
             if (ImGui::MenuItem("Close")) Model.m_pEditor->RequestClose();
             ImGui::EndPopup();
@@ -142,7 +141,7 @@ namespace xeditor
 
         {
             if (!Model.m_bDirty) ImGui::BeginDisabled();
-            if (ImGui::Button(" Save ") && Model.m_OnSave)
+            if (ImGui::Button((std::string(" ") + save_icon_v + " ").c_str()) && Model.m_OnSave)       // the icon of Save, not the word
                 Model.m_OnSave(Model.m_pUser);
             if (!Model.m_bDirty) ImGui::EndDisabled();
             if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Save"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor");

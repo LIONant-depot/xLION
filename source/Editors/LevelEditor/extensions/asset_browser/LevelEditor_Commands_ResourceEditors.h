@@ -247,21 +247,21 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hAsset, m_hSave;
     };
 
-    // SaveAllEditors: the editor menu's Save All: every open editor that has something pending is saved, and then the changes of the asset database (renames, moves).
-    struct save_all_editors_cmd : xlevel::commands::level_query_command
+    // SaveAll: Save All of the menus and of Ctrl+Shift+S. Fires the editor's Save All event: everything that has unsaved work saves it - the open editors (the Levels among them) and the asset database
+    // (the renames and moves of the resource view) - and whatever else subscribed. (The command Save is the local one: the Level's.)
+    struct save_all_cmd : xlevel::commands::level_query_command
     {
-        save_all_editors_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "SaveAllEditors", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Saves everything that is pending: every open editor with unsaved changes, and the asset database. The editor menu's Save All. Usage: SaveAllEditors"; }
+        save_all_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "SaveAll", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Saves everything in the editor that has unsaved work, whoever owns it: the open editors and the changes of the resource view (renames, moves). Usage: SaveAll"; }
         void RegisterArguments() noexcept override {}
         std::string Query() noexcept override
         {
-            auto* pEditors = FindResourceEditors();
-            if (!pEditors) return "SaveAllEditors: no editors";
-            const auto Saved = pEditors->SaveAll();
-            if (Saved.empty()) return "SaveAllEditors: no editor had anything pending";
-            std::string Names;
-            for (const auto& N : Saved) Names += (Names.empty() ? "" : ", ") + N;
-            return std::format("SaveAllEditors: saved {}: {}", Saved.size(), Names);
+            const auto Report = xeditor::SaveAllNow();
+            if (Report.empty()) return "SaveAll: nothing was pending";
+            auto Join = [](const std::vector<std::string>& L) { std::string S; for (const auto& N : L) S += (S.empty() ? "" : ", ") + N; return S; };
+            std::string Out = std::format("SaveAll: saved {}: {}", Report.m_Saved.size(), Join(Report.m_Saved));
+            if (!Report.m_Failed.empty()) Out += std::format("; failed {}: {}", Report.m_Failed.size(), Join(Report.m_Failed));
+            return Out;
         }
     };
 
