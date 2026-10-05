@@ -42,6 +42,11 @@ undo step, and "selected" is the tree's selection with everything under it.
 **Amber says "something is switched off in here".** The header icon takes the amber while anything is disabled (or hidden) in the open scenes, and a row takes the same amber when it is not switched off itself
 but something under it is (so a disabled child inside a collapsed parent is not lost). Red / slashed on a row means that entity itself.
 
+**Folders.** A folder row has the same two toggles and they act on everything inside it: the entities of the folder and of the folders in it, and everything under them. A folder has no tag of its own, so its
+icon says how the inside is: normal when nothing is switched off, amber when some of it is, red / slashed when all of it is. A click gives everything the state the icon is not showing - all off, unless all
+already are, then all back on - as one undo step. An empty folder has no toggle. The rows of a Scene and of the Level have no toggle (a scene or a level is not switched off this way), only the amber when
+something inside is.
+
 ## Limits (today)
 
 - The tags are on the entities themselves, set when the toggle is clicked: an entity added later under a disabled parent is not disabled, and adding a tag by hand touches only that entity.
