@@ -306,6 +306,24 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hAsset;
     };
 
+    // ResourcePath: the whole path of a resource in the resource browser (library, folders, name), what the hint of a resource reference shows.
+    struct resource_path_cmd : xlevel::commands::level_query_command
+    {
+        resource_path_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ResourcePath", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Says the whole path of a resource in the resource browser (library, folders, name), as the hint of a resource reference shows it. Usage: ResourcePath -Asset assetguid"; }
+        void RegisterArguments() noexcept override { m_hAsset = m_Parser.addOption("Asset", "Resource guid, 32 hex digits", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto AssetArg = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
+            if (std::holds_alternative<xerr>(AssetArg)) return "ResourcePath: bad arguments";
+            const auto Guid = xresource_editor::commands::ParseAssetGuid(std::get<std::string>(AssetArg));
+            if (Guid.empty()) return "ResourcePath: not a resource guid";
+            const auto Path = xresource_editor::ResourceFullPath(Guid);
+            return Path.empty() ? "ResourcePath: no open library has that resource" : "ResourcePath: " + Path;
+        }
+        xcmdline::parser::handle m_hAsset;
+    };
+
     // LocateAsset: the "find in the Assets tab" button of an asset reference (the source file of a descriptor). The Assets tab of the drawer shows the file (its folder is current, what hid it is
     // cleared, it is the selection) and the drawer is open on that tab.
     struct locate_asset_cmd : xlevel::commands::level_query_command

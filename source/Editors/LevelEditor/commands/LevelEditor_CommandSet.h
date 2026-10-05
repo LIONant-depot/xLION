@@ -174,6 +174,7 @@ namespace level_editor
         level_editor::commands::unsaved_cmd               CmdUnsaved;
         level_editor::commands::locate_resource_cmd               CmdLocateResource;
         level_editor::commands::locate_asset_cmd                  CmdLocateAsset;
+        level_editor::commands::resource_path_cmd                 CmdResourcePath;
         level_editor::commands::get_browser_state_cmd             CmdGetBrowserState;
         level_editor::commands::set_browser_search_cmd            CmdSetBrowserSearch;
         level_editor::commands::capture_window_cmd                CmdCaptureWindow;
@@ -268,6 +269,7 @@ namespace level_editor
         , CmdUnsaved(Workspace, pEditor)
         , CmdLocateResource(Workspace, pEditor)
         , CmdLocateAsset(Workspace, pEditor)
+        , CmdResourcePath(Workspace, pEditor)
         , CmdGetBrowserState(Workspace, pEditor)
         , CmdSetBrowserSearch(Workspace, pEditor)
         , CmdCaptureWindow(Workspace, pEditor)
@@ -368,6 +370,7 @@ namespace level_editor
             CmdUnsaved.m_pDataBase = pEditor;
             CmdLocateResource.m_pDataBase = pEditor;
             CmdLocateAsset.m_pDataBase = pEditor;
+            CmdResourcePath.m_pDataBase = pEditor;
             CmdGetBrowserState.m_pDataBase = pEditor;
             CmdSetBrowserSearch.m_pDataBase = pEditor;
             CmdCaptureWindow.m_pDataBase = pEditor;

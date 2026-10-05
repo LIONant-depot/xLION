@@ -79,3 +79,20 @@ def test_finding_goes_through_the_history_of_the_browser(editor):
 
     assert locate(editor, other) == "LocateResource: ok"
     assert len(state(editor)["HistoryEntry"]) == before + 1, "finding what is already shown adds nothing"
+
+
+def test_the_hint_of_a_reference_is_the_whole_path_of_the_resource(editor):
+    """The hint of the name of a resource reference shows where the resource is in the resource browser (ResourcePath says the same text): the library, the folders, the name."""
+    type_name, guid, name = assets(editor)[0]
+    reply = editor.cmd(f"ResourcePath -Asset {guid}")
+    assert reply.startswith("ResourcePath: "), reply
+    path = reply[len("ResourcePath: "):]
+    parts = path.split("\\")
+    assert len(parts) >= 2, f"the library and the name at least: {path}"
+    assert parts[-1] == name, f"the path ends with the name of the resource: {path}"
+    assert parts[0] == "example.lionprj", f"and starts with the folder of the library: {path}"
+
+
+def test_the_path_of_a_resource_that_is_not_there_is_refused(editor):
+    assert "no open library has that resource" in editor.cmd(f"ResourcePath -Asset {NOT_A_RESOURCE}")
+    assert "required option" in editor.cmd("ResourcePath")
