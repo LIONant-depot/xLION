@@ -25,6 +25,7 @@
     ["dependencies/xLIONRender/", ["test_engine_copies.py", "test_play.py"]],
     ["dependencies/xLIONRender/src/xlionrender_text|xlionrender_api|xlionrender_system|dependencies/xGPU/|dependencies/xLIONCore/src/resources/|xlevel_commands_text|dependencies/xproperty/source/xcore/my_properties", ["test_text_layout.py", "test_text_render.py"]],
     ["xscene_system_usage|LevelEditor_Panel_SystemRegistry|xlevel_commands_workspace|xlioncore_physics.h|xecs_event|xecs_system_mgr_inline|xecs_game_mgr", ["test_event_handlers.py", "test_system_order.py"]],
+    ["xPropertyImGuiInspector|xlevel_session", ["test_shutdown.py"]],
     ["dependencies/xLIONCore/src/transform/|xlevel_commands_hierarchy|xECSV2/src/xecs_component_others|xECSV2/src/details/xecs_component_others", ["test_hierarchy.py", "test_prefabs.py", "test_entities.py", "test_physics_events.py"]],
     ["dependencies/xECSV2/", ["test_entities.py", "test_prefabs.py", "test_play.py", "test_physics_events.py", "test_physics_contact_events.py", "test_soccer_goals.py", "test_game_module_reload.py", "test_system_order.py", "test_scenes_and_levels.py"]],
     ["dependencies/xeditor/", ["test_actions.py", "test_keyboard_modifiers.py", "test_modal_position.py", "test_logs.py", "test_resource_editors.py"]],
