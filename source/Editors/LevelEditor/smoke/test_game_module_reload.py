@@ -4,6 +4,7 @@ Play is what triggers it. The recompile-check finds the DLL stale (its inputs ar
 restores the open level in a fresh world before entering Play. The level must come back exactly as it was.
 """
 import os
+import re
 import pytest
 from pathlib import Path
 
@@ -12,10 +13,25 @@ from harness import REPO
 GAME_SOURCE = REPO / "plugins" / "xscript_module.plugin" / "source" / "Runtime" / "xscript_game_entry.cpp"
 
 
+def _structure(level) -> dict:
+    """What a reload must not change about the entities of the Level: the components of each, how many children it has, and how each child follows its parent.
+    (The runtime values of the Parent/Children references are left out on purpose: the world is rebuilt, and they are slots of it; so are the builder components, which a world that plays has already used up.)"""
+    out = {}
+    for scene, _ in level.scenes:
+        for entity in level.entities(scene):
+            text = level.cmd(f"DescribeEntity -Scene {scene} -Id {entity}")
+            out[(scene, entity)] = (sorted(n for n, kind in re.findall(r"\[[0-9A-F]{16}\]\s+(\w+)\s+\(([^)]*)\)", text) if "builder" not in kind),
+                                    re.findall(r"Children/Children\[\] = (\d+)", text),
+                                    re.findall(r"Parent/Follow\w+(?:/\w)? = (\w+)", text))
+    return out
+
+
 def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(editor, game_level):
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to rebuild")
     before = {scene: game_level.entities(scene) for scene, _ in game_level.scenes}
+    structure = _structure(game_level)
+    assert any(c[1] for c in structure.values()), "the Soccer Level has entities with children: that is what this test is about"
     reloads_before = editor.log_text().count("[Vn restore]")
 
     os.utime(GAME_SOURCE)                               # looks edited: the module is now older than its source
@@ -26,6 +42,7 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
     assert "Game.dll: rebuild succeeded" in log
     assert log.count("[Vn restore]") == reloads_before + 1, "the world should have been rebuilt exactly once"
     assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
+    assert _structure(game_level) == structure, "no entity lost a component, a child or a way of following its parent in the reload"
     assert game_level.name in [x.name for x in game_level.ed.sessions()], "the Level is still open (an editor of a module may be open beside it)"
     # the reload's bridge file is this process's own (its name carries the process id, so a second editor on the same Level cannot collide with it) and is gone
     # once it has been read
@@ -36,6 +53,7 @@ def test_play_after_a_game_source_change_reloads_the_module_and_keeps_the_level(
     assert editor.cmd("Stop") == "Stop requested"
     editor.wait_play_state("Stopped")
     assert {scene: game_level.entities(scene) for scene, _ in game_level.scenes} == before
+    assert _structure(game_level) == structure
 
 
 def test_a_reload_whose_snapshot_brings_nothing_back_reopens_the_level_instead_of_crashing(editor, game_level):
