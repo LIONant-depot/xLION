@@ -35,3 +35,32 @@ def test_finding_a_file_in_a_folder_makes_that_folder_the_current_one(editor):
 def test_finding_a_file_that_is_not_there_is_refused(editor):
     assert "no open library has that file" in editor.cmd("LocateAsset -Path Assets/not_a_file_of_this_project.png")
     assert "required option" in editor.cmd("LocateAsset")
+
+
+# ---- the menu of a file in the Assets tab: "Find Resource" and "Open Resource" list the resources that point at it ------------------------------------------------------------------------
+
+def dependents(editor, path: str) -> list[tuple[str, str]]:
+    reply = editor.cmd(f"ListAssetDependents -Path {path}")
+    assert reply.startswith("ListAssetDependents: "), reply
+    lines = reply.splitlines()
+    assert int(lines[0].split(": ")[1]) == len(lines) - 1, "the count is the number of lines"
+    return [(m[1], m[2]) for l in lines[1:] if (m := re.match(r"([0-9A-F]{32})  (.*)", l))]
+
+
+def test_a_file_that_resources_point_at_lists_them(editor):
+    """The items of the menu act on these: Find Resource is LocateResource of each one, Open Resource is its editor."""
+    found = dependents(editor, "Assets/SheKnewMe.tga")
+    assert found, "SheKnewMe.tga is the source of a texture of the example project"
+    for guid, path in found:
+        assert path, "each one has its full path in the resource browser"
+        assert editor.cmd(f"LocateResource -Asset {guid}") == "LocateResource: ok", "finding a resource of the menu shows it in the resource browser"
+        assert state(editor)["DrawerTab"] == "0", "and the drawer is open on the Resources tab"
+
+
+def test_a_file_that_no_resource_points_at_lists_nothing(editor):
+    assert editor.cmd("ListAssetDependents -Path Assets/meadow_2_4k---cube.dds").splitlines()[0] == "ListAssetDependents: 0"
+
+
+def test_the_dependents_of_a_file_that_is_not_there_are_refused(editor):
+    assert "no open library has that file" in editor.cmd("ListAssetDependents -Path Assets/not_a_file_of_this_project.png")
+    assert "required option" in editor.cmd("ListAssetDependents")

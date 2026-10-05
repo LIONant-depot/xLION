@@ -324,6 +324,30 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hAsset;
     };
 
+    // ListAssetDependents: the resources that point at a source file, the list behind the "Find Resource" and "Open Resource" items of the menu of a file in the Assets tab: the guid (what
+    // LocateResource and OpenResourceEditor take) and the full path of each in the resource browser.
+    struct list_asset_dependents_cmd : xlevel::commands::level_query_command
+    {
+        list_asset_dependents_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "ListAssetDependents", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Lists the resources that point at a source file, as the Find Resource / Open Resource items of the menu of the file in the Assets tab do: the guid and the full path of each. Usage: ListAssetDependents -Path Assets/Folder/file.png"; }
+        void RegisterArguments() noexcept override { m_hPath = m_Parser.addOption("Path", "The file, relative to its library (Assets/Folder/file.png) or a full path", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto PathArg = m_Parser.getOptionArgAs<std::string>(m_hPath, 0);
+            if (std::holds_alternative<xerr>(PathArg)) return "ListAssetDependents: bad arguments";
+            xresource_editor::library::guid Library{};
+            std::wstring                    LibraryRel;
+            auto& Mgr = xresource_editor::g_LibMgr;
+            if (!Mgr.ResolveAssetFile(std::filesystem::path(std::get<std::string>(PathArg)).wstring(), Library, LibraryRel)) return "ListAssetDependents: no open library has that file";
+            std::size_t Total = 0;
+            const auto  Resources = Mgr.GetDependents(Library, LibraryRel, 1000, Total);
+            std::string Out = std::format("ListAssetDependents: {}\n", Total);
+            for (auto& R : Resources) Out += std::format("{:016X}{:016X}  {}\n", R.m_Guid.m_Instance.m_Value, R.m_Guid.m_Type.m_Value, R.m_Path);
+            return Out;
+        }
+        xcmdline::parser::handle m_hPath;
+    };
+
     // LocateAsset: the "find in the Assets tab" button of an asset reference (the source file of a descriptor). The Assets tab of the drawer shows the file (its folder is current, what hid it is
     // cleared, it is the selection) and the drawer is open on that tab.
     struct locate_asset_cmd : xlevel::commands::level_query_command

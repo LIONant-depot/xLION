@@ -82,15 +82,16 @@ def test_finding_goes_through_the_history_of_the_browser(editor):
 
 
 def test_the_hint_of_a_reference_is_the_whole_path_of_the_resource(editor):
-    """The hint of the name of a resource reference shows where the resource is in the resource browser (ResourcePath says the same text): the library, the folders, the name."""
+    """The hint of the name of a resource reference shows where the resource is in the resource browser (ResourcePath says the same text, the one of the Find Resource and Open Resource items of
+    the menu of an asset): the library, the folders, the name."""
     type_name, guid, name = assets(editor)[0]
     reply = editor.cmd(f"ResourcePath -Asset {guid}")
     assert reply.startswith("ResourcePath: "), reply
     path = reply[len("ResourcePath: "):]
-    parts = path.split("\\")
+    parts = path.split(" > ")
     assert len(parts) >= 2, f"the library and the name at least: {path}"
     assert parts[-1] == name, f"the path ends with the name of the resource: {path}"
-    assert parts[0] == "example.lionprj", f"and starts with the folder of the library: {path}"
+    assert parts[0] == "example", f"and starts with the library: {path}"
 
 
 def test_the_path_of_a_resource_that_is_not_there_is_refused(editor):
