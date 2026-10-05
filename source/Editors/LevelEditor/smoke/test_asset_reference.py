@@ -5,6 +5,7 @@ geometry...) - the name of the file over three actions: open it the way the Asse
 selection - and the drawer is open on that tab. GetBrowserState says where the tab is (AssetsFolder, AssetsSelected).
 """
 import re
+import time
 
 ASSETS_TAB = "1"
 
@@ -64,3 +65,20 @@ def test_a_file_that_no_resource_points_at_lists_nothing(editor):
 def test_the_dependents_of_a_file_that_is_not_there_are_refused(editor):
     assert "no open library has that file" in editor.cmd("ListAssetDependents -Path Assets/not_a_file_of_this_project.png")
     assert "required option" in editor.cmd("ListAssetDependents")
+
+
+def test_the_skeleton_the_skin_and_the_animations_of_a_file_are_its_dependents(editor):
+    """The compilers of a skeleton, a skin and an animation package register their source file as a dependency (the way the texture and the static geometry always did): the file counts them
+    and lists them in the Assets tab. A resource compiled before that has no dependency file until it is compiled again, so each one is compiled here."""
+    source = "Assets/WalkingSkin/Walking.fbx"
+    for type_name in ("Skeleton", "GeomSkin", "AnimPackage"):
+        hit = editor.find_asset(type_name)
+        assert hit, f"the example project has a {type_name} made from {source}"
+        guid, name = hit
+        editor.cmd(f"OpenResourceEditor -Asset {guid}")
+        assert editor.cmd(f"{name}\\Compile", allow_disk=True) == "Compile: saved, compile queued"
+        deadline = time.monotonic() + 120
+        while guid not in [g for g, _ in dependents(editor, source)]:
+            assert time.monotonic() < deadline, f"the {type_name} {name} never became a dependent of {source}"
+            time.sleep(0.5)
+        editor.cmd(f"CloseResourceEditor -Asset {guid}")
