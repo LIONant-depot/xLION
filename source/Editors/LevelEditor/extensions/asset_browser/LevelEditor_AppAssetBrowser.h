@@ -60,5 +60,19 @@ namespace level_editor
                 Drawer.m_ActiveTab = Drawer.m_RequestTab = 0;                       // Resources
                 return true;
             };
+
+        // The asset reference (the source file of a descriptor, xresource_editor::RenderAssetReference) is the twin of that one: opening is what a double click on the file in the Assets tab does
+        // (lock-before-edit included); finding it makes the Assets tab of the drawer show it, and opens the drawer on that tab.
+        auto& AssetReference = xresource_editor::g_AssetReferenceHost;
+        AssetReference.m_Open   = [this](const std::wstring& Path) { return AssetBrowser.OpenAssetFile(Path); };
+        AssetReference.m_Locate = [this](const std::wstring& Path)
+            {
+                if (!AssetBrowser.RevealAssetFile(Path)) return false;
+                xeditor::drawer& Drawer = EditorHost.drawer_for(xeditor::FocusedDrawerViewport()->ID);
+                Drawer.m_bOpen = true;
+                Drawer.m_ActiveTab = Drawer.m_RequestTab = 1;                       // Assets
+                return true;
+            };
+        xresource_editor::InstallAssetFileWidget();
     }
 }

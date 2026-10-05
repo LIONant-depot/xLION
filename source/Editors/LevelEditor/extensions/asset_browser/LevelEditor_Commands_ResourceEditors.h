@@ -306,6 +306,24 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hAsset;
     };
 
+    // LocateAsset: the "find in the Assets tab" button of an asset reference (the source file of a descriptor). The Assets tab of the drawer shows the file (its folder is current, what hid it is
+    // cleared, it is the selection) and the drawer is open on that tab.
+    struct locate_asset_cmd : xlevel::commands::level_query_command
+    {
+        locate_asset_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "LocateAsset", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Finds a source file in the Assets tab of the drawer, as the button of an asset reference does: its folder is shown, the search that hid it is cleared, it is selected, and the drawer is open on the Assets tab. Usage: LocateAsset -Path Assets/Folder/file.png"; }
+        void RegisterArguments() noexcept override { m_hPath = m_Parser.addOption("Path", "The file, relative to its library (Assets/Folder/file.png) or a full path", true, 1); }
+        std::string Query() noexcept override
+        {
+            auto PathArg = m_Parser.getOptionArgAs<std::string>(m_hPath, 0);
+            if (std::holds_alternative<xerr>(PathArg)) return "LocateAsset: bad arguments";
+            auto& Reference = xresource_editor::g_AssetReferenceHost;
+            if (!Reference.m_Locate || !Reference.m_Locate(std::filesystem::path(std::get<std::string>(PathArg)).wstring())) return "LocateAsset: no open library has that file";
+            return "LocateAsset: ok";
+        }
+        xcmdline::parser::handle m_hPath;
+    };
+
     // GetBrowserState: where the resource browser is and what the drawer shows. SetBrowserSearch types in its search box.
     struct get_browser_state_cmd : xlevel::commands::level_query_command
     {
