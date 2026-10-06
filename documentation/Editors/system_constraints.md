@@ -60,4 +60,11 @@ A refused command changes nothing and is not an undo step. Tests: `smoke/test_sy
 ## The time of a fixed step
 
 `game_time::m_FixedInterpolate` (0..1) is how far between the last two fixed states a frame is drawn (`m_FixedAccumulator / m_FixedDeltaTime`; 1 when there is nothing to blend). Drawing a body that the fixed steps move
-by blending its previous and its current pose with it is the planned follow-up (a `render_transform`); gameplay never reads it.
+by blending its previous and its current pose with it is `render_transform`:
+
+- **Opt-in.** A body that carries a `RenderTransform` component (Basics category; Soccer's ball, players and referee do) is drawn between its last two fixed steps; one without it is drawn at the pose of the last step, as before.
+- **Visual only.** The physics keeps the pose before each step (`m_PrevPosition`) and, every frame, writes `m_Position`/`m_Rotation` = blend(previous, current, `m_FixedInterpolate`). The `Transform` is never touched: it is the pose of the last step, the one gameplay reads and writes. Only the render (`DrawnPoseOf` / `WorldOf(T, parent, render_transform*)`, and `PropagateHierarchy` for the children of the body) reads the blended pose; the children of a blended body follow it.
+- **No blend across a jump.** A teleport (`TeleportDynamicBody`), an edit of the Transform of a kinematic body, and the first frame of a body are drawn at the new pose at once; a Transform that is no longer the one the pose was blended towards (an edit while the game is paused, for example) is drawn as it is.
+- **Paused / single step.** A paused game draws the pose of its last frame; one fixed step (`m_FixedInterpolate` = 1) draws exactly the pose of the step.
+
+Tests: `smoke/test_render_transform.py` (the pose drawn lies between the last two steps, the Transform is the last one, a moved body is not blended across the jump).
