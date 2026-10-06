@@ -26,6 +26,7 @@ GetLog
 GetPlayState
 GetProject
 ListActions
+ListAssetDependents
 ListAssets
 ListGestures
 ListKeymaps
@@ -37,6 +38,7 @@ ListProjectModuleReferences
 ListSceneModules
 ListScenesUsingModule
 ListScriptSourceFiles
+LocateAsset
 LocateResource
 LogAcknowledge
 LogAttach
@@ -95,6 +97,7 @@ RenameScriptSourceFile
 RescanScriptModule
 ResetKey
 ResourceEditorCommand
+ResourcePath
 RestoreAsset
 RestoreAssetFileFromTrash
 RunAction

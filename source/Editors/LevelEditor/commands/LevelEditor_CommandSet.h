@@ -62,6 +62,9 @@ namespace level_editor
         xlevel::commands::list_systems_query_cmd            CmdListSystems;
         xlevel::commands::list_event_handlers_query_cmd     CmdListEventHandlers;
         xlevel::commands::set_system_parent_cmd             CmdSetSystemParent;
+        xlevel::commands::unplace_system_cmd                CmdUnplaceSystem;
+        xlevel::commands::move_system_cmd                   CmdMoveSystem;
+        xlevel::commands::set_system_enabled_cmd            CmdSetSystemEnabled;
         xlevel::commands::save_system_order_cmd             CmdSaveSystemOrder;
         xlevel::commands::game_module_status_cmd            CmdGameModuleStatus;
         xlevel::commands::input_state_cmd                   CmdInputState;
@@ -144,6 +147,9 @@ namespace level_editor
         , CmdListSystems(Level, pEditor)
         , CmdListEventHandlers(Level, pEditor)
         , CmdSetSystemParent(Level, pEditor)
+        , CmdUnplaceSystem(Level, pEditor)
+        , CmdMoveSystem(Level, pEditor)
+        , CmdSetSystemEnabled(Level, pEditor)
         , CmdSaveSystemOrder(Level, pEditor)
         , CmdGameModuleStatus(Level, pEditor)
         , CmdInputState(Level, pEditor)
