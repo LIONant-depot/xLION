@@ -97,6 +97,8 @@ namespace level_editor
         xlevel::commands::add_context_scene_cmd             CmdAddContextScene;    // Name\AddContextScene / RemoveContextScene / ListContextScenes: the scenes a Prefab Editor tests its prefab against
         xlevel::commands::remove_context_scene_cmd          CmdRemoveContextScene;
         xlevel::commands::list_context_scenes_query_cmd     CmdListContextScenes;
+        xlevel::commands::edit_in_context_query_cmd         CmdEditInContext;      // Name\EditInContext / DescribeRoles: the prefab of an instance opens as the document, placed at the instance, the Level around it as context (phase 7)
+        xlevel::commands::describe_roles_query_cmd          CmdDescribeRoles;
         xlevel::commands::replace_prefab_document_cmd       CmdReplacePrefabDocument;   // Name\ReplacePrefabDocument: how a save of the prefab from another editor reaches this one (one writer per prefab), one undo step
         level_editor::commands::set_prefab_game_cmd         CmdSetPrefabGame;      // Name\SetPrefabGame: the Game the prefab plays with, undone with this editor's own undo
         level_editor::commands::get_prefab_game_query_cmd   CmdGetPrefabGame;
@@ -116,6 +118,8 @@ namespace level_editor
         , CmdAddContextScene(Level, pEditor)
         , CmdRemoveContextScene(Level, pEditor)
         , CmdListContextScenes(Level, pEditor)
+        , CmdEditInContext(Level, pEditor)
+        , CmdDescribeRoles(Level, pEditor)
         , CmdReplacePrefabDocument(Level, pEditor)
         , CmdSetPrefabGame(Level, pEditor)
         , CmdGetPrefabGame(Level, pEditor)

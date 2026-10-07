@@ -48,8 +48,34 @@ instances in its own Level the same way, and so does its undo. When a Prefab Edi
 brought back to what the file holds. A Level that is playing keeps what it started with; Stop reopens it from the files, with the change. A prefab cannot hold an instance of a prefab that holds it
 (A holds B holds A): `InstantiatePrefab` refuses it.
 
+## Roles: what is the document and what is context
+
+Every scene in an editing session has a role. The **document** (the Level's scenes, or the prefab) is picked, saved and in the undo; a **context** scene is loaded so that it is there to see and to play with, and that
+is all it is. In the viewport (the scene view, when the editor is not playing) the render draws the context first, puts a full screen quad of the viewport's background over it (it fades only where something was drawn:
+the background is left alone), then draws the document over that - full color, tested against the context's depth. Nothing of the context is picked: its entities are not offered to the pick, so a wall of the context in
+front of the prefab does not hide the prefab from a click, and a click on the wall selects nothing. The texts of a context are not drawn. `xlionrender::roles` (`xlionrender_view.h`) is how the host tells the render which
+entities are what (their runtime values, sorted: `DrawRoles`, `PickRoles`); the host knows the scenes, the render does not.
+
+`DescribeRoles` says the roles of the editor it is addressed to: `Document=` and `Context=` (scene guids), `ContextEntities=`, `HiddenEntities=`, `InContext=`, and what the last draw did (`DrawnContext=`,
+`DrawnDocument=` items, `Faded=`). `PickRay` answers with the same roles a click uses.
+
+## Edit in Context
+
+Right-click the root of an instance in a Level's tree and choose **Edit in Context** (or `<Level>\EditInContext -Scene S -Id I`): the instance's prefab opens in its own Prefab Editor as the document, **placed where the
+instance is**, with the Level's scenes around it as context (as the Level is saved: save it first, or the reply says the instance is not in the saved scene yet and it is not hidden). The instance itself - its root, its
+members and what was added under them - is not drawn and not picked in that editor: the prefab is there in its place. The camera looks at it.
+
+* **Save** writes the prefab, and the live update brings every instance of it up to date: the one it was opened from (its own overrides stay), the others, in every open editor.
+* **The placement is not the prefab's.** The root's Transform in context is the instance's place (a state of the editor, not an edit: the document is as clean as it was). A save, and every snapshot of the document, write
+  the root as the prefab holds it; a change made to the root's own Transform while in context is not kept. Open the prefab on its own to change it.
+* **Play is refused** in an editor opened in context (the prefab would play over the Level's own instance): play the Level.
+* The editor works under the **Game of the Level** while it is open (so that the scenes around it load whole: the modules of its entities are there), whatever Game the prefab names; nothing is written into the prefab.
+* Not from inside a prefab (no drill-down yet), and not when the prefab is already open in an editor.
+
 ## What is not done
 
 * The window layout of a Prefab Editor is the Level's (tree, editor, inspector, system registry); there is no preview-only mode yet.
-* Opening a prefab from another prefab (drill-down) and editing in context come with phase 7.
+* Opening a prefab from another prefab (drill-down) is not done: Edit in Context works from a Level.
+* The context is the Level as it is *saved when the editor opens*: it is not kept in step with edits the Level has afterwards (open it again).
+* The fade is a fixed 65% of the viewport's background; the context's texts are left out of the draw.
 * A prefab that is in no Game: its components of a module are not registered, so its entities of that module are not loaded; they are kept (a save writes them back), and the tree does not list them.

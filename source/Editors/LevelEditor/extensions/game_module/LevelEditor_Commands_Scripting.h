@@ -952,10 +952,14 @@ namespace level_editor::commands
             if (!bGiven || !Prefab) return "GetPrefabGame: bad arguments";
             std::error_code Ec;
             if (!std::filesystem::is_directory(std::filesystem::path(xlevel::PrefabFolder(xlevel::ProjectRoot().wstring(), Prefab)), Ec)) return std::format("GetPrefabGame: Prefab {:016X} is not in the project", Prefab);
-            const auto Named = xlevel::GameOfPrefab(Prefab);
+            // The prefab's own setting (its Descriptor.txt), not the Game an editor opened in context works under (xlevel::g_PrefabGameOverride): that one is the Level's, reported as ContextGame.
+            const auto Named = xlevel::ReadPrefabGame(xlevel::ProjectRoot().wstring(), Prefab);
             const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
-            return std::format("GetPrefabGame: ok\nGame={}\nSource={}\nName={}", Named ? module_dependencies::GameAsset(Named) : std::string("(none)"), Named ? "set" : "none"
+            std::string Out = std::format("GetPrefabGame: ok\nGame={}\nSource={}\nName={}", Named ? module_dependencies::GameAsset(Named) : std::string("(none)"), Named ? "set" : "none"
                 , Named ? module_dependencies::Label(Names, Named) : std::string());
+            if (const auto It = xlevel::g_PrefabGameOverride.find(Prefab); It != xlevel::g_PrefabGameOverride.end())
+                Out += std::format("\nContextGame={}", module_dependencies::GameAsset(It->second));
+            return Out;
         }
         xcmdline::parser::handle m_hPrefab;
     };

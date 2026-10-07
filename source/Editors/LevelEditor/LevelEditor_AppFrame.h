@@ -109,6 +109,21 @@ namespace level_editor
             }
         }
 
+        // What a panel asked an editor to do that opens another editor (Edit in Context), now that nothing is drawing.
+        {
+            auto Commands = std::move(xlevel::g_PendingLevelCommands);
+            xlevel::g_PendingLevelCommands.clear();
+            for (auto& Pending : Commands)
+                if (std::find(xlevel::g_LevelContexts.begin(), xlevel::g_LevelContexts.end(), Pending.m_pEditor) != xlevel::g_LevelContexts.end())
+                {
+                    // A query (EditInContext is one): xeditor::Run would look it up among the edit commands and not find it, and RunQuery takes any "X: ..." reply for a failure.
+                    xeditor::LogConsole(Pending.m_Command, xeditor::log_source::User);
+                    auto Reply = Pending.m_pEditor->m_Undo.Query(Pending.m_Command);
+                    if (Reply.find(": ok") == std::string::npos) xeditor::NotifyToast(Reply);
+                    xeditor::LogConsole(std::move(Reply), xeditor::log_source::System);
+                }
+        }
+
         ResourceEditors.DropClosed();
 
         if (IdleLevel) IdleLevel->PumpBeforeFrame();
