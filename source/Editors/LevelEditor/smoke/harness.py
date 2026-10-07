@@ -53,7 +53,7 @@ DISK_WRITERS = frozenset({
     "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",
     "SourceControlCommit", "SourceControlPull", "SourceControlPush", "SourceControlRevert", "SourceControlStage",
     "SourceControlLock", "SourceControlUnlock",
-    "MakePrefab", "MakePrefabVariant", "ApplyOverrides", "UpgradeProject",
+    "MakePrefab", "MakePrefabVariant", "ApplyOverrides", "UpgradeProject", "SetPrefabGame",
     "AddSceneDependency", "RemoveSceneDependency",
     "BindKey", "ResetKey",                       # write Project.config/Keymaps/<user>.keymap.txt
 })

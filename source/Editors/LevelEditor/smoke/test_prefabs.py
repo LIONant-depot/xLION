@@ -255,6 +255,11 @@ def _guid_folder(kind: str, guid: str) -> Path:
 def level_files_restored(level):
     """A test that saves the Level writes its entities where the next test (whose ids are the same 7E57xxxx) would find them: the Level's and its Scenes' folders are put back as they were when the test ends
     (project_guard only does that when the whole run ends)."""
+    yield from restoring_level_files(level)
+
+
+def restoring_level_files(level):
+    """The body of level_files_restored for any Level fixture (the Soccer one, game_level, too)."""
     folders = [_guid_folder("Level", level.guid)] + [_guid_folder("Scene", scene) for scene, _ in level.scenes]
     backup = Path(tempfile.mkdtemp(prefix="xlion_prefabs_"))
     for i, folder in enumerate(folders):

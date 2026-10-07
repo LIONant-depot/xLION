@@ -886,6 +886,116 @@ namespace level_editor::commands
         xcmdline::parser::handle m_hLevel;
     };
 
+    //================================================================================================
+    // SetPrefabGame / GetPrefabGame / DescribePrefab - the Game a prefab plays with in its Prefab Editor (prefabs_plan.md, D2): the prefab's own Descriptor.txt says it (`Game`), and every save of the
+    // prefab keeps it. A prefab made from a Level starts with that Level's Game. Like a Level's, it names none (no scripts, components or systems of any module) until it is given one, and a Game that does
+    // not list a module the prefab needs is refused. Persisted at once and undoable; an editor that has the prefab open runs on the Game it opened with until it is opened again.
+    //================================================================================================
+    struct set_prefab_game_cmd : xlevel::commands::level_command
+    {
+        set_prefab_game_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_command(System, "SetPrefabGame", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Sets the Game a prefab plays with in its Prefab Editor (undoable, persisted immediately); without -Game the prefab names no Game: no scripts, components or systems of any module. A Game that lacks a module the prefab needs is refused. It takes effect when the prefab is opened again. Usage: SetPrefabGame -Prefab hexguid [-Game assetguid]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hPrefab = m_Parser.addOption("Prefab", "Prefab instance guid, 16 hex digits", true, 1);
+            m_hGame   = m_Parser.addOption("Game",   "Game asset guid, 32 hex digits (default: none)", false, 1);
+        }
+
+        std::string Redo() noexcept override
+        {
+            bool bGiven = false;
+            const auto Prefab = module_dependencies::HexArg(m_Parser, m_hPrefab, bGiven);
+            if (!bGiven || !Prefab) return "SetPrefabGame: bad arguments";
+            std::uint64_t Game = 0;
+            if (auto Bad = game_arg::Read(m_Parser, m_hGame, Game); !Bad.empty()) return "SetPrefabGame: " + Bad;
+
+            // What the prefab needs must be in the Game that is to run it
+            const std::wstring Project = xlevel::ProjectRoot().wstring();
+            xlevel::scene_module_needs Needs;
+            xlevel::AddSceneModuleNeeds(Needs, Project, Prefab, /*bTransitive*/ false);
+            const auto Target = Game ? xlevel::ReadGame(Game) : xlevel::project_game{};
+            if (!Game || Target.HasGame())
+                if (const auto Missing = xlevel::MissingModules(Needs, Target.m_Modules); !Missing.empty())
+                    return "SetPrefabGame: refused - the Game does not list what the prefab needs:\n" + xlevel::DescribeMissingModules(Missing);
+
+            if (auto Why = xlevel::WritePrefabGame(Project, Prefab, Game); !Why.empty()) return "SetPrefabGame: " + Why;
+            return {};
+        }
+
+        void BackupCurrenState(xundo::undo_file& File) noexcept override
+        {
+            bool bGiven = false;
+            const auto Prefab = module_dependencies::HexArg(m_Parser, m_hPrefab, bGiven);
+            File.Write(Prefab);
+            File.Write(bGiven ? xlevel::ReadPrefabGame(xlevel::ProjectRoot().wstring(), Prefab) : std::uint64_t{ 0 });
+        }
+
+        void Undo(xundo::undo_file& File) noexcept override
+        {
+            std::uint64_t Prefab = 0, Before = 0;
+            File.Read(Prefab); File.Read(Before);
+            if (Prefab) xlevel::WritePrefabGame(xlevel::ProjectRoot().wstring(), Prefab, Before);
+        }
+
+        xcmdline::parser::handle m_hPrefab, m_hGame;
+    };
+
+    struct get_prefab_game_query_cmd : xlevel::commands::level_query_command
+    {
+        get_prefab_game_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GetPrefabGame", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Says the Game a prefab plays with in its Prefab Editor (none: no scripts, components or systems of any module). Usage: GetPrefabGame -Prefab hexguid"; }
+        void RegisterArguments() noexcept override { m_hPrefab = m_Parser.addOption("Prefab", "Prefab instance guid, 16 hex digits", true, 1); }
+        std::string Query() noexcept override
+        {
+            bool bGiven = false;
+            const auto Prefab = module_dependencies::HexArg(m_Parser, m_hPrefab, bGiven);
+            if (!bGiven || !Prefab) return "GetPrefabGame: bad arguments";
+            std::error_code Ec;
+            if (!std::filesystem::is_directory(std::filesystem::path(xlevel::PrefabFolder(xlevel::ProjectRoot().wstring(), Prefab)), Ec)) return std::format("GetPrefabGame: Prefab {:016X} is not in the project", Prefab);
+            const auto Named = xlevel::GameOfPrefab(Prefab);
+            const auto Names = xlevel::commands::BuildAssetNameMap(xgame::type_guid_v);
+            return std::format("GetPrefabGame: ok\nGame={}\nSource={}\nName={}", Named ? module_dependencies::GameAsset(Named) : std::string("(none)"), Named ? "set" : "none"
+                , Named ? module_dependencies::Label(Names, Named) : std::string());
+        }
+        xcmdline::parser::handle m_hPrefab;
+    };
+
+    // DescribePrefab: what the Inspector shows when the prefab (the top row of a Prefab Editor's tree) is selected: the prefab, the Game it plays with and whether that Game can run it, the root, the
+    // entities, and the scenes it is tested against.
+    struct describe_prefab_query_cmd : xlevel::commands::level_query_command
+    {
+        describe_prefab_query_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "DescribePrefab", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Describes the prefab open in a Prefab Editor the way the Inspector does when the prefab is selected: its Game (and whether it can run the prefab), its root and entities, its context scenes. Usage: DescribePrefab"; }
+        void RegisterArguments() noexcept override {}
+        std::string Query() noexcept override
+        {
+            auto& State = get<xlevel::level_context>().State();
+            if (!State.isPrefabEditor()) return "DescribePrefab: no prefab is open in this editor";
+            std::vector<std::uint64_t> Scenes;
+            for (auto& S : State.m_OpenScenes) Scenes.push_back(S.m_Instance.m_Value);
+            for (auto& S : State.m_ContextScenes) Scenes.push_back(S.m_Instance.m_Value);
+            const auto Status = xlevel::StatusOfPrefabGame(State.m_CurrentPrefab.m_Instance.m_Value, Scenes);
+            std::string Name;
+            xresource_editor::RemapGUIDToString(Name, xlevel::PrefabResourceGuid(State));
+
+            std::string Root = "(none)";
+            std::size_t nEntities = 0;
+            if (auto* pScene = World().m_SceneMgr.Find(State.PrefabScene()))
+            {
+                nEntities = pScene->m_LocalToRuntime.size();
+                for (auto& [Id, Entity] : pScene->m_LocalToRuntime)
+                    if (!pScene->m_InstanceMembers.contains(Id) && !xlioncore::Ecs(World()).ParentOf(Entity)) { Root = xecs::scene::FormatPermanentId(Id); break; }
+            }
+            const auto Names = xlevel::commands::BuildAssetNameMap(xecs::scene::type_guid_v);
+            std::string Contexts;
+            for (const auto& C : State.m_ContextScenes) Contexts += (Contexts.empty() ? "" : ", ") + module_dependencies::Label(Names, C.m_Instance.m_Value);
+            return std::format("DescribePrefab: ok\nPrefab={:016X}\nName={}\nScene={}\nGame={}\nGameName={}\nCanRun={}\nIssue={}\nRoot={}\nEntities={}\nContextScenes={}\nSelected={}\n"
+                , State.m_CurrentPrefab.m_Instance.m_Value, Name, xscene::commands::FormatSceneGuid(State.PrefabScene())
+                , Status.m_bNamed ? module_dependencies::GameAsset(Status.m_Game) : std::string("(none)"), Status.m_Name, Status.m_Issue.empty() ? "true" : "false", Status.m_Issue, Root, nEntities
+                , Contexts.empty() ? std::string("(none)") : Contexts, State.m_bRootSelected ? "true" : "false");
+        }
+    };
+
     // DescribeLevel: what the Inspector shows when the Level is selected in the Level Tree (SelectLevel): the Level, its Game (and whether it can run the scenes), the Game's modules, and what each open scene needs.
     struct describe_level_query_cmd : xlevel::commands::level_query_command
     {

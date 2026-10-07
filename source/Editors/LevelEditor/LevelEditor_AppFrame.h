@@ -10,19 +10,21 @@ namespace level_editor
                 if (auto* pSession = dynamic_cast<xlevel::session*>(E.get())) Fn(*pSession);
     }
 
-    // Opens a Level in its own editor (or brings the one it already has to the front) and builds the OpenLevel command's reply.
+    // Opens a Level (or a Prefab: a Prefab Editor is the same editor with a prefab as its document) in its own editor (or brings the one it already has to the front) and builds the OpenLevel / OpenPrefab command's reply.
     inline std::string app::OpenLevelEditor(xresource::full_guid LevelGuid)
     {
         const std::uint64_t Value = LevelGuid.m_Instance.m_Value;
+        const bool          bPrefab = LevelGuid.m_Type == xecs::prefab::type_guid_v;
+        const char* const   pCommand = bPrefab ? "OpenPrefab" : "OpenLevel";
         if (auto* pOpen = ResourceEditors.Find(LevelGuid); pOpen)
         {
             pOpen->Focus();
-            return std::format("OpenLevel: {:016X} is already open", Value);
+            return std::format("{}: {:016X} is already open", pCommand, Value);
         }
 
 #if defined(XECS_BUILD_SHARED)
         // A Level of a Game that has no DLL yet waits for its first build (a command waits right here; the Level tree's open waits in PumpLevels).
-        if (const auto Game = xlevel::GameOfLevel(Value); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
+        if (const auto Game = xlevel::GameOfDocument(LevelGuid); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
         {
             xlevel::StartFirstBuild(Game);
             xlevel::WaitFirstBuild(Game);
@@ -30,9 +32,10 @@ namespace level_editor
 #endif
         auto* pEditor  = ResourceEditors.Open(LevelGuid, xeditor::open_resource_editors::FindLibraryOf(LevelGuid));
         auto* pSession = dynamic_cast<xlevel::session*>(pEditor);
-        if (pSession == nullptr || pSession->m_State.m_CurrentLevel.empty())
+        if (pSession == nullptr || !pSession->m_State.HasDocument())
         {
             if (pEditor) pEditor->m_bOpen = false;          // it never got a Level: drop it
+            if (bPrefab) return std::format("OpenPrefab: failed to open {:016X} ({})", Value, pSession && !pSession->m_OpenError.empty() ? pSession->m_OpenError : std::string("unknown Prefab guid or load error"));
             return std::format("OpenLevel: failed to open {:016X} (unknown Level guid or load error)", Value);
         }
 
@@ -47,7 +50,8 @@ namespace level_editor
                 if (!xscene::IsComponentInLiveRegistry(*pSession->m_pGameMgr, Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
                     Missing.push_back(Dep);
 
-        std::string Result = std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
+        std::string Result = bPrefab ? std::format("Opened Prefab {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size())
+                                     : std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
         if (!Missing.empty())
         {
             // Each one with the script module its scene was saved with, when it says (the module the Game has to list for the component to be there)
@@ -70,7 +74,7 @@ namespace level_editor
             const std::wstring Project = xlevel::ProjectRoot().wstring();
             xlevel::scene_module_needs Needs;
             for (auto& SceneGuid : pSession->m_State.m_OpenScenes) xlevel::AddSceneModuleNeeds(Needs, Project, SceneGuid.m_Instance.m_Value, /*bTransitive*/ false);
-            const auto Named = xlevel::GameOfLevel(Value);                       // no Game: no module's scripts, components or systems
+            const auto Named = xlevel::GameOfDocument(LevelGuid);                // no Game: no module's scripts, components or systems
             const auto Game  = Named ? xlevel::ReadGame(Named) : xlevel::project_game{};
             if (!Named || Game.HasGame())
                 if (const auto Gaps = xlevel::MissingModules(Needs, Game.m_Modules); !Gaps.empty())
@@ -94,7 +98,7 @@ namespace level_editor
             for (auto& LevelGuid : Pending)
             {
 #if defined(XECS_BUILD_SHARED)
-                if (const auto Game = xlevel::GameOfLevel(LevelGuid.m_Instance.m_Value); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
+                if (const auto Game = xlevel::GameOfDocument(LevelGuid); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
                 {
                     xlevel::StartFirstBuild(Game);
                     xlevel::g_PendingOpenLevels.push_back(LevelGuid);

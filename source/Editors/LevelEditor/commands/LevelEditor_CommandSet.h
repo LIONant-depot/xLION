@@ -94,6 +94,13 @@ namespace level_editor
         xlevel::commands::step_query_cmd                    CmdSessionStep;
         xlevel::commands::stop_query_cmd                    CmdSessionStop;
         xlevel::commands::get_play_state_query_cmd          CmdSessionGetPlayState;
+        xlevel::commands::add_context_scene_cmd             CmdAddContextScene;    // Name\AddContextScene / RemoveContextScene / ListContextScenes: the scenes a Prefab Editor tests its prefab against
+        xlevel::commands::remove_context_scene_cmd          CmdRemoveContextScene;
+        xlevel::commands::list_context_scenes_query_cmd     CmdListContextScenes;
+        xlevel::commands::replace_prefab_document_cmd       CmdReplacePrefabDocument;   // Name\ReplacePrefabDocument: how a save of the prefab from another editor reaches this one (one writer per prefab), one undo step
+        level_editor::commands::set_prefab_game_cmd         CmdSetPrefabGame;      // Name\SetPrefabGame: the Game the prefab plays with, undone with this editor's own undo
+        level_editor::commands::get_prefab_game_query_cmd   CmdGetPrefabGame;
+        level_editor::commands::describe_prefab_query_cmd   CmdDescribePrefab;     // Name\DescribePrefab: what the Inspector shows when the prefab is selected
 
         level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor, xeditor::camera_access Camera) noexcept
         : CmdSetCamera(Level, Camera)
@@ -105,6 +112,13 @@ namespace level_editor
         , CmdSessionStep(Level, pEditor)
         , CmdSessionStop(Level, pEditor)
         , CmdSessionGetPlayState(Level, pEditor)
+        , CmdAddContextScene(Level, pEditor)
+        , CmdRemoveContextScene(Level, pEditor)
+        , CmdListContextScenes(Level, pEditor)
+        , CmdReplacePrefabDocument(Level, pEditor)
+        , CmdSetPrefabGame(Level, pEditor)
+        , CmdGetPrefabGame(Level, pEditor)
+        , CmdDescribePrefab(Level, pEditor)
         , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)
@@ -206,6 +220,7 @@ namespace level_editor
         level_editor::commands::press_keys_query_cmd              CmdPressKeys;
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
+        xlevel::commands::open_prefab_cmd                   CmdOpenPrefab;          // OpenPrefab: a prefab in its own editor (a Prefab Editor)
         xresource_editor::commands::create_library_query_cmd          CmdCreateLibrary;
         xresource_editor::commands::list_legal_reference_libraries_query_cmd CmdListLegalReferenceLibraries;
         xresource_editor::commands::list_libraries_query_cmd          CmdListLibraries;
@@ -240,6 +255,8 @@ namespace level_editor
         level_editor::commands::rescan_script_module_cmd          CmdRescanScriptModule;
         level_editor::commands::set_level_game_cmd                CmdSetLevelGame;
         level_editor::commands::get_level_game_query_cmd          CmdGetLevelGame;
+        level_editor::commands::set_prefab_game_cmd               CmdSetPrefabGame;
+        level_editor::commands::get_prefab_game_query_cmd         CmdGetPrefabGame;
         level_editor::commands::describe_level_query_cmd          CmdDescribeLevel;
         level_editor::commands::probe_engine_set_query_cmd        CmdProbeEngineSet;
         level_editor::commands::get_project_query_cmd             CmdGetProject;
@@ -302,6 +319,7 @@ namespace level_editor
         , CmdPressKeys(Workspace, pEditor)
         , CmdExplainLastKey(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
+        , CmdOpenPrefab(Workspace, pEditor)
         , CmdCreateLibrary(Workspace, pEditor)
         , CmdListLegalReferenceLibraries(Workspace, pEditor)
         , CmdListLibraries(Workspace, pEditor)
@@ -339,6 +357,8 @@ namespace level_editor
         , CmdRescanScriptModule(Workspace, pEditor)
         , CmdSetLevelGame(Workspace, pEditor)
         , CmdGetLevelGame(Workspace, pEditor)
+        , CmdSetPrefabGame(Workspace, pEditor)
+        , CmdGetPrefabGame(Workspace, pEditor)
         , CmdDescribeLevel(Workspace, pEditor)
         , CmdProbeEngineSet(Workspace, pEditor)
         , CmdGetProject(Workspace, pEditor)
@@ -404,6 +424,7 @@ namespace level_editor
             CmdPressKeys.m_pDataBase = pEditor;
             CmdExplainLastKey.m_pDataBase = pEditor;
             CmdOpenLevel.m_pDataBase = pEditor;
+            CmdOpenPrefab.m_pDataBase = pEditor;
             CmdCreateLibrary.m_pDataBase = pEditor;
             CmdListLegalReferenceLibraries.m_pDataBase = pEditor;
             CmdListLibraries.m_pDataBase = pEditor;
@@ -437,6 +458,8 @@ namespace level_editor
             CmdRescanScriptModule.m_pDataBase = pEditor;
             CmdSetLevelGame.m_pDataBase = pEditor;
             CmdGetLevelGame.m_pDataBase = pEditor;
+            CmdSetPrefabGame.m_pDataBase = pEditor;
+            CmdGetPrefabGame.m_pDataBase = pEditor;
             CmdDescribeLevel.m_pDataBase = pEditor;
             CmdProbeEngineSet.m_pDataBase = pEditor;
             CmdGetProject.m_pDataBase = pEditor;

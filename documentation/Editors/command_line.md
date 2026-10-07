@@ -15,7 +15,9 @@ The same text means the same thing typed in the editor's console, sent through t
 | `"C:\my dir\\"` | `C:\my dir\` (backslashes in front of the closing quote are doubled) |
 | `"-5"`, `"-Name"` | a **value** (a quoted word is never an option) |
 
-`Session\Command`: the session is only the first word of the line. A backslash later in the line (a path) is never a session.
+`Session\Command`: the session is only the first word of the line. A backslash later in the line (a path) is never a session. A session whose name has spaces (a Prefab Editor is named after the prefab: `Keeper Red`) is addressed by its whole name: `Keeper Red\SetProperty ...`.
+
+A **Prefab Editor** (`OpenPrefab -Prefab hexguid`, or a double click on a Prefab in the Asset Browser) is a session like a Level's: the commands of the scene editor go to it (`<Prefab name>\CreateEntity -Scene <the prefab's guid> ...`; the document is the scene of the prefab's own guid), and so do `Play`, `Stop`, `Save`, `Undo`, `Close`. What is its own: `DescribePrefab`, `AddContextScene` / `RemoveContextScene` / `ListContextScenes` (the scenes it is tested against), `SetPrefabGame` / `GetPrefabGame` (the Game it plays with), `ReplacePrefabDocument` (how a save of the prefab from another editor reaches it). See [the Prefab Editor](prefab_editor.md).
 
 Numbers, hex ids and names without spaces need no quotes. Text always can have them: `SetProperty -Path "Transform/Position/X" -Value "5.000000" ...`, `LogEmit -Text "first line
 second line"`. A command is complete at the first line break that is not inside quotes.
