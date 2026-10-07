@@ -6,7 +6,7 @@ Scene/*/entity_db that no scene lists any more, and rewrites scene files.
 
 This plugin (loaded by pytest.ini) snapshots Descriptors/ and Project.config/ when the session starts and, when it ends:
   - deletes files that did not exist before and were written during the run (never anything older),
-  - puts back the Scene/, Level/ and Texture/ files the run rewrote (a test that compiles a texture saves its descriptor), byte for byte, from a backup taken at the start.
+  - puts back the Scene/, Level/ and Texture/ files the run rewrote (a test that compiles a texture saves its descriptor; a prefab a test saves), byte for byte, from a backup taken at the start.
 Work in progress the developer had before the run is therefore kept: it is restored to what it was, not to git's version.
 """
 import os
@@ -19,7 +19,7 @@ from harness import REPO
 
 PROJECT = REPO / "example.lionprj"
 WATCHED = [PROJECT / "Descriptors", PROJECT / "Project.config"]
-RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game"
+RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game", PROJECT / "Descriptors" / "Prefab"
               , PROJECT / "Project.config" / "Script.config.txt", PROJECT / "Project.config" / "SystemOrder.config.txt"]   # what a saved level rewrites, and a resource editor's Compile; the Game's module list and which Game the project builds; the saved order of the systems
 
 _state = {}

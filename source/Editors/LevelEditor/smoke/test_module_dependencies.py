@@ -163,7 +163,7 @@ def test_saving_a_scene_does_not_forget_the_entities_that_could_not_be_loaded(ed
         deps = deps.replace(f"[ ComponentDeps : {count} ]", f"[ ComponentDeps : {count + 1} ]").rstrip() + ghost
         deps_file.write_bytes(deps.encode())
         before = (PHYSICS_SCENE / "Descriptor.txt").read_bytes().decode()
-        assert "ActiveEntities[G:0]\"    ;u32    #101" in before
+        assert re.search(r'ActiveEntities\[G:0\]"\s+;u(?:32|64)\s+#101\b', before), before[:600]          # u32 rows in a descriptor from before the ids were widened (prefab plan, phase 2), u64 in one saved since
 
         editor.cmd("Close -Save 0")
         assert editor.cmd(f"OpenLevel -Level {PHYSICS_LEVEL} -Save 0").startswith("Opened Level")
@@ -174,7 +174,8 @@ def test_saving_a_scene_does_not_forget_the_entities_that_could_not_be_loaded(ed
         editor.cmd("Close -Save 0")
 
         after = (PHYSICS_SCENE / "Descriptor.txt").read_bytes().decode()
-        assert re.search(r'ActiveEntities\[\]"\s*;s64\s+15\b', after) and re.search(r'ActiveEntities\[G:\d+\]"\s*;u32\s+#101\b', after), "the entity that did not load is still the scene's"
+        listed = lambda text: int(re.search(r'ActiveEntities\[\]"\s*;s64\s+(\d+)', text)[1])        # (14 since the prefab plan's phase 3: a prefab instance's member has no file of its own)
+        assert listed(after) == listed(before) and re.search(r'ActiveEntities\[G:\d+\]"\s*;u(?:32|64)\s+#101\b', after), "the entity that did not load is still the scene's"
         assert (PHYSICS_SCENE / "entity_db" / "01" / "01" / "00000101.entity").is_file(), "and its file is still there"
         assert "Ghost" in deps_file.read_bytes().decode() or "DEADBEEF00000001" in deps_file.read_bytes().decode(), "ComponentDeps.txt still says what the scene needs"
     finally:

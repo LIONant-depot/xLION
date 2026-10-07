@@ -53,7 +53,7 @@ DISK_WRITERS = frozenset({
     "AddScriptSourceFile", "RemoveScriptSourceFile", "SetScriptSourceFileContent", "RenameScriptSourceFile", "RescanScriptModule",
     "SourceControlCommit", "SourceControlPull", "SourceControlPush", "SourceControlRevert", "SourceControlStage",
     "SourceControlLock", "SourceControlUnlock",
-    "MakePrefab", "MakePrefabVariant", "ApplyOverrides",
+    "MakePrefab", "MakePrefabVariant", "ApplyOverrides", "UpgradeProject",
     "AddSceneDependency", "RemoveSceneDependency",
     "BindKey", "ResetKey",                       # write Project.config/Keymaps/<user>.keymap.txt
 })
@@ -468,7 +468,7 @@ class Editor:
     def entities(self, session: str, scene: str) -> dict[str, str]:
         """{entity id: label} for a scene."""
         return {m[1]: m[2] for l in self.cmd(f"{session}\\ListEntities -Scene {scene}").splitlines()
-                if (m := re.match(r"(\w{8})\s+(.*)", l))}
+                if (m := re.match(r"(\w{16}|\w{8})\s+(.*)", l))}      # an id prints with 8 hex digits, or 16 when it does not fit in 32 bits
 
     def describe(self, session: str, scene: str, entity: str) -> str:
         return self.cmd(f"{session}\\DescribeEntity -Scene {scene} -Id {entity}")

@@ -1,0 +1,41 @@
+
+[ DescriptorVersion ]
+{ Major:d  Minor:d }
+//-------  -------
+     1        0   
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG enum:s >
+
+[ xProperties : 29 ]
+{ Name:s                              Value:?              }
+//----------------------------------  --------------------
+  "Scene/ParentScenes[]"              ;s64    0           
+  "Scene/ExternalRefs[]"              ;s64    0           
+  "Scene/ActiveEntities[]"            ;s64    15          
+  "Scene/ActiveEntities[G:0]"         ;u32    #101        
+  "Scene/ActiveEntities[G:1]"         ;u32    #201        
+  "Scene/ActiveEntities[G:2]"         ;u32    #202        
+  "Scene/ActiveEntities[G:3]"         ;u32    #203        
+  "Scene/ActiveEntities[G:4]"         ;u32    #204        
+  "Scene/ActiveEntities[G:5]"         ;u32    #205        
+  "Scene/ActiveEntities[G:6]"         ;u32    #206        
+  "Scene/ActiveEntities[G:7]"         ;u32    #207        
+  "Scene/ActiveEntities[G:8]"         ;u32    #208        
+  "Scene/ActiveEntities[G:9]"         ;u32    #209        
+  "Scene/ActiveEntities[G:10]"        ;u32    #20A        
+  "Scene/ActiveEntities[G:11]"        ;u32    #20B        
+  "Scene/ActiveEntities[G:12]"        ;u32    #20C        
+  "Scene/ActiveEntities[G:13]"        ;u32    #301        
+  "Scene/ActiveEntities[G:14]"        ;u32    #C2C318DC   
+  "Scene/Folders[]"                   ;s64    1           
+  "Scene/Folders[G:0]/Id"             ;u32    #F60ED8D2   
+  "Scene/Folders[G:0]/Parent"         ;u32    #0          
+  "Scene/Folders[G:0]/Name"           ;string "New Folder"
+  "Scene/Folders[G:0]/Entities[]"     ;s64    1           
+  "Scene/Folders[G:0]/Entities[G:0]"  ;u32    #20A        
+  "Scene/EntityNames[]"               ;s64    2           
+  "Scene/EntityNames[G:0]/Id"         ;u32    #201        
+  "Scene/EntityNames[G:0]/Name"       ;string "Long Pole" 
+  "Scene/EntityNames[G:1]/Id"         ;u32    #20A        
+  "Scene/EntityNames[G:1]/Name"       ;string "Paco"      

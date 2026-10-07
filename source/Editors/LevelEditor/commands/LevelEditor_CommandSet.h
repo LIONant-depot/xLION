@@ -39,6 +39,8 @@ namespace level_editor
         xscene::commands::apply_overrides_cmd               CmdApplyOverrides;
         xscene::commands::revert_hierarchy_overrides_cmd    CmdRevertHierarchyOverrides;
         xscene::commands::revert_all_overrides_cmd          CmdRevertAllOverrides;
+        xscene::commands::list_prefab_overrides_query_cmd   CmdListPrefabOverrides;   // Name\ListPrefabOverrides: an instance's recipe, by member address, orphans marked
+        xscene::commands::remove_orphan_overrides_cmd       CmdRemoveOrphanOverrides;
         xscene::commands::add_component_cmd                 CmdAddComponent;
         xscene::commands::remove_component_cmd              CmdRemoveComponent;
         xscene::commands::create_entity_cmd                 CmdCreateEntity;
@@ -82,6 +84,7 @@ namespace level_editor
         xscene::commands::delete_folder_cmd                 CmdDeleteFolder;
         xscene::commands::make_prefab_cmd                   CmdMakePrefab;
         xscene::commands::make_prefab_variant_cmd           CmdMakePrefabVariant;
+        xscene::commands::upgrade_project_query_cmd         CmdUpgradeProject;     // Name\UpgradeProject: the project's old-format files (prefabs, scenes whose instances are not recipes) converted with this Level's components
         xeditor::camera_cmds::set_cmd                       CmdSetCamera;          // Name\SetCamera / GetCamera: the viewport's camera, placed the way the mouse would
         xeditor::camera_cmds::get_cmd                       CmdGetCamera;
         xlevel::commands::set_time_scale_cmd                CmdSetTimeScale;       // Name\SetTimeScale / GetTimeScale: the speed slider next to Play
@@ -124,6 +127,8 @@ namespace level_editor
         , CmdApplyOverrides(Level, pScene)
         , CmdRevertHierarchyOverrides(Level, pScene)
         , CmdRevertAllOverrides(Level, pScene)
+        , CmdListPrefabOverrides(Level, pScene)
+        , CmdRemoveOrphanOverrides(Level, pScene)
         , CmdAddComponent(Level, pScene)
         , CmdRemoveComponent(Level, pScene)
         , CmdCreateEntity(Level, pScene)
@@ -167,6 +172,7 @@ namespace level_editor
         , CmdDeleteFolder(Level, pScene)
         , CmdMakePrefab(Level, pScene)
         , CmdMakePrefabVariant(Level, pScene)
+        , CmdUpgradeProject(Level, pScene)
         {}
     };
 

@@ -1,0 +1,57 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #7100            3      
+
+[ ComponentTypes : 3 ]
+{ Guid:G            }
+//-----------------
+  #3C561E6CCC1EE63A
+  #5E82749D0629F2FC
+  #663773C47FA1D0BA
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 15 ]
+{ Name:s              Value:?                                        }
+//------------------  ----------------------------------------------
+  "Text/Font"         ;full_guid #5549D8C8E9220001 #3285CB58BB79E1AD
+  "Text/Text"         ;wstring   "BLUE 0"                           
+  "Text/Size"         ;f32       3                                  
+  "Text/Color/X"      ;f32       0.550000012                        
+  "Text/Color/Y"      ;f32       0.75                               
+  "Text/Color/Z"      ;f32       1                                  
+  "Text/Opacity"      ;f32       1                                  
+  "Text/HAlign"       ;enum      "Right"                            
+  "Text/VAnchor"      ;enum      "Middle"                           
+  "Text/WrapWidth"    ;f32       0                                  
+  "Text/LineSpacing"  ;f32       1                                  
+  "Text/Orientation"  ;enum      "Upright Camera"                   
+  "Text/SizeMode"     ;enum      "World"                            
+  "Text/DepthMode"    ;enum      "Depth Tested"                     
+  "Text/Sort"         ;bool      0                                  
+
+[ xProperties : 1 ]
+{ Name:s                   Value:?      }
+//-----------------------  ------------
+  "SoccerScoreLabel/Team"  ;enum "Blue"
+
+[ xProperties : 14 ]
+{ Name:s                         Value:?           }
+//-----------------------------  -----------------
+  "Transform/Position/X"         ;f32  -2.92381978
+  "Transform/Position/Y"         ;f32  4          
+  "Transform/Position/Z"         ;f32  -9         
+  "Transform/Rotation/X"         ;f32  0          
+  "Transform/Rotation/Y"         ;f32  0          
+  "Transform/Rotation/Z"         ;f32  0          
+  "Transform/Rotation/W"         ;f32  1          
+  "Transform/RotationDegrees/X"  ;f32  0          
+  "Transform/RotationDegrees/Y"  ;f32  0          
+  "Transform/RotationDegrees/Z"  ;f32  0          
+  "Transform/Scale/X"            ;f32  1          
+  "Transform/Scale/Y"            ;f32  1          
+  "Transform/Scale/Z"            ;f32  1          
+  "Transform/EditorLockScale"    ;bool 0          

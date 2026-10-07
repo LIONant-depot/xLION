@@ -1,0 +1,34 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #203             2      
+
+[ ComponentTypes : 2 ]
+{ Guid:G            }
+//-----------------
+  #A8027BF64F88F583
+  #117DD63C849E9F05
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 6 ]
+{ Name:s                                                        Value:?                                        }
+//------------------------------------------------------------  ----------------------------------------------
+  "EditorPrafabInstance/Prefab"                                 ;full_guid #7E5700000000B001 #16F179B86A628F9D
+  "EditorPrafabInstance/Components[]"                           ;s64       0                                  
+  "EditorPrafabInstance/ComponentDiffs[]"                       ;s64       1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:0]/ComponentTypeGuid"  ;u64       #117DD63C849E9F05                  
+  "EditorPrafabInstance/ComponentDiffs[G:0]/Added"              ;bool      1                                  
+  "EditorPrafabInstance/HierarchyDiffs[]"                       ;s64       0                                  
+
+[ Children : 1 ]
+{ nChildren:d }
+//-----------
+       1     
+
+[ AllChildren : 1 ]
+{ Entity:G  }
+//---------
+  #C2C318DC

@@ -1,0 +1,281 @@
+
+[ DescriptorVersion ]
+{ Major:d  Minor:d }
+//-------  -------
+     1        0   
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG enum:s >
+
+[ xProperties : 269 ]
+{ Name:s                        Value:?    }
+//----------------------------  ----------
+  "Scene/ParentScenes[]"        ;s64 0    
+  "Scene/ExternalRefs[]"        ;s64 0    
+  "Scene/ActiveEntities[]"      ;s64 72   
+  "Scene/ActiveEntities[G:0]"   ;u32 #1000
+  "Scene/ActiveEntities[G:1]"   ;u32 #1010
+  "Scene/ActiveEntities[G:2]"   ;u32 #1011
+  "Scene/ActiveEntities[G:3]"   ;u32 #1012
+  "Scene/ActiveEntities[G:4]"   ;u32 #1013
+  "Scene/ActiveEntities[G:5]"   ;u32 #1014
+  "Scene/ActiveEntities[G:6]"   ;u32 #1020
+  "Scene/ActiveEntities[G:7]"   ;u32 #1021
+  "Scene/ActiveEntities[G:8]"   ;u32 #1022
+  "Scene/ActiveEntities[G:9]"   ;u32 #1023
+  "Scene/ActiveEntities[G:10]"  ;u32 #1024
+  "Scene/ActiveEntities[G:11]"  ;u32 #1030
+  "Scene/ActiveEntities[G:12]"  ;u32 #1031
+  "Scene/ActiveEntities[G:13]"  ;u32 #1032
+  "Scene/ActiveEntities[G:14]"  ;u32 #1033
+  "Scene/ActiveEntities[G:15]"  ;u32 #1034
+  "Scene/ActiveEntities[G:16]"  ;u32 #1100
+  "Scene/ActiveEntities[G:17]"  ;u32 #1101
+  "Scene/ActiveEntities[G:18]"  ;u32 #1200
+  "Scene/ActiveEntities[G:19]"  ;u32 #1201
+  "Scene/ActiveEntities[G:20]"  ;u32 #1202
+  "Scene/ActiveEntities[G:21]"  ;u32 #1203
+  "Scene/ActiveEntities[G:22]"  ;u32 #1204
+  "Scene/ActiveEntities[G:23]"  ;u32 #1205
+  "Scene/ActiveEntities[G:24]"  ;u32 #1206
+  "Scene/ActiveEntities[G:25]"  ;u32 #1207
+  "Scene/ActiveEntities[G:26]"  ;u32 #1208
+  "Scene/ActiveEntities[G:27]"  ;u32 #1209
+  "Scene/ActiveEntities[G:28]"  ;u32 #1210
+  "Scene/ActiveEntities[G:29]"  ;u32 #1211
+  "Scene/ActiveEntities[G:30]"  ;u32 #1212
+  "Scene/ActiveEntities[G:31]"  ;u32 #1214
+  "Scene/ActiveEntities[G:32]"  ;u32 #1300
+  "Scene/ActiveEntities[G:33]"  ;u32 #1301
+  "Scene/ActiveEntities[G:34]"  ;u32 #2000
+  "Scene/ActiveEntities[G:35]"  ;u32 #2001
+  "Scene/ActiveEntities[G:36]"  ;u32 #2002
+  "Scene/ActiveEntities[G:37]"  ;u32 #2003
+  "Scene/ActiveEntities[G:38]"  ;u32 #2004
+  "Scene/ActiveEntities[G:39]"  ;u32 #3000
+  "Scene/ActiveEntities[G:40]"  ;u32 #3001
+  "Scene/ActiveEntities[G:41]"  ;u32 #3002
+  "Scene/ActiveEntities[G:42]"  ;u32 #3003
+  "Scene/ActiveEntities[G:43]"  ;u32 #3004
+  "Scene/ActiveEntities[G:44]"  ;u32 #4000
+  "Scene/ActiveEntities[G:45]"  ;u32 #5000
+  "Scene/ActiveEntities[G:46]"  ;u32 #7100
+  "Scene/ActiveEntities[G:47]"  ;u32 #7101
+  "Scene/ActiveEntities[G:48]"  ;u32 #7200
+  "Scene/ActiveEntities[G:49]"  ;u32 #7201
+  "Scene/ActiveEntities[G:50]"  ;u32 #7202
+  "Scene/ActiveEntities[G:51]"  ;u32 #7203
+  "Scene/ActiveEntities[G:52]"  ;u32 #7204
+  "Scene/ActiveEntities[G:53]"  ;u32 #7205
+  "Scene/ActiveEntities[G:54]"  ;u32 #7206
+  "Scene/ActiveEntities[G:55]"  ;u32 #7207
+  "Scene/ActiveEntities[G:56]"  ;u32 #7208
+  "Scene/ActiveEntities[G:57]"  ;u32 #7209
+  "Scene/ActiveEntities[G:58]"  ;u32 #720A
+  "Scene/ActiveEntities[G:59]"  ;u32 #720B
+  "Scene/ActiveEntities[G:60]"  ;u32 #8001
+  "Scene/ActiveEntities[G:61]"         ;u32    #8002       
+  "Scene/ActiveEntities[G:62]"         ;u32    #8003       
+  "Scene/ActiveEntities[G:63]"         ;u32    #8004       
+  "Scene/ActiveEntities[G:64]"         ;u32    #8005       
+  "Scene/ActiveEntities[G:65]"         ;u32    #8006       
+  "Scene/ActiveEntities[G:66]"         ;u32    #8007       
+  "Scene/ActiveEntities[G:67]"         ;u32    #8008       
+  "Scene/ActiveEntities[G:68]"         ;u32    #8009       
+  "Scene/ActiveEntities[G:69]"         ;u32    #800A       
+  "Scene/ActiveEntities[G:70]"         ;u32    #800B       
+  "Scene/ActiveEntities[G:71]"         ;u32    #800C       
+  "Scene/Folders[]"                    ;s64    5           
+  "Scene/Folders[G:0]/Id"              ;u32    #F0000001   
+  "Scene/Folders[G:0]/Parent"          ;u32    #0          
+  "Scene/Folders[G:0]/Name"            ;string "Pitch"     
+  "Scene/Folders[G:0]/Entities[]"      ;s64    1           
+  "Scene/Folders[G:0]/Entities[G:0]"   ;u32    #1000       
+  "Scene/Folders[G:1]/Id"              ;u32    #F0000004   
+  "Scene/Folders[G:1]/Parent"          ;u32    #0          
+  "Scene/Folders[G:1]/Name"            ;string "Scoreboard"
+  "Scene/Folders[G:1]/Entities[]"      ;s64    2           
+  "Scene/Folders[G:1]/Entities[G:0]"   ;u32    #1100       
+  "Scene/Folders[G:1]/Entities[G:1]"   ;u32    #1101       
+  "Scene/Folders[G:2]/Id"              ;u32    #F0000005   
+  "Scene/Folders[G:2]/Parent"          ;u32    #0          
+  "Scene/Folders[G:2]/Name"            ;string "Walls"     
+  "Scene/Folders[G:2]/Entities[]"      ;s64    14          
+  "Scene/Folders[G:2]/Entities[G:0]"   ;u32    #1200       
+  "Scene/Folders[G:2]/Entities[G:1]"   ;u32    #1201       
+  "Scene/Folders[G:2]/Entities[G:2]"   ;u32    #1202       
+  "Scene/Folders[G:2]/Entities[G:3]"   ;u32    #1203       
+  "Scene/Folders[G:2]/Entities[G:4]"   ;u32    #1204       
+  "Scene/Folders[G:2]/Entities[G:5]"   ;u32    #1205       
+  "Scene/Folders[G:2]/Entities[G:6]"   ;u32    #1206       
+  "Scene/Folders[G:2]/Entities[G:7]"   ;u32    #1207       
+  "Scene/Folders[G:2]/Entities[G:8]"   ;u32    #1208       
+  "Scene/Folders[G:2]/Entities[G:9]"   ;u32    #1209       
+  "Scene/Folders[G:2]/Entities[G:10]"  ;u32    #1210       
+  "Scene/Folders[G:2]/Entities[G:11]"  ;u32    #1211       
+  "Scene/Folders[G:2]/Entities[G:12]"  ;u32    #1212       
+  "Scene/Folders[G:2]/Entities[G:13]"  ;u32    #1214       
+  "Scene/Folders[G:3]/Id"              ;u32    #F0000003   
+  "Scene/Folders[G:3]/Parent"          ;u32    #F0000001   
+  "Scene/Folders[G:3]/Name"            ;string "Goals"     
+  "Scene/Folders[G:3]/Entities[]"      ;s64    10          
+  "Scene/Folders[G:3]/Entities[G:0]"   ;u32    #1020       
+  "Scene/Folders[G:3]/Entities[G:1]"   ;u32    #1021       
+  "Scene/Folders[G:3]/Entities[G:2]"   ;u32    #1022       
+  "Scene/Folders[G:3]/Entities[G:3]"   ;u32    #1023       
+  "Scene/Folders[G:3]/Entities[G:4]"   ;u32    #1024       
+  "Scene/Folders[G:3]/Entities[G:5]"   ;u32    #1030       
+  "Scene/Folders[G:3]/Entities[G:6]"   ;u32    #1031       
+  "Scene/Folders[G:3]/Entities[G:7]"   ;u32    #1032       
+  "Scene/Folders[G:3]/Entities[G:8]"   ;u32    #1033       
+  "Scene/Folders[G:3]/Entities[G:9]"   ;u32    #1034       
+  "Scene/Folders[G:4]/Id"              ;u32    #F0000002   
+  "Scene/Folders[G:4]/Parent"          ;u32    #F0000001   
+  "Scene/Folders[G:4]/Name"            ;string "Lines"     
+  "Scene/Folders[G:4]/Entities[]"      ;s64    5           
+  "Scene/Folders[G:4]/Entities[G:0]"   ;u32    #1010       
+  "Scene/Folders[G:4]/Entities[G:1]"   ;u32    #1011       
+  "Scene/Folders[G:4]/Entities[G:2]"   ;u32    #1012       
+  "Scene/Folders[G:4]/Entities[G:3]"   ;u32    #1013       
+  "Scene/Folders[G:4]/Entities[G:4]"   ;u32    #1014       
+  "Scene/EntityNames[]"                ;s64    70                   
+  "Scene/EntityNames[G:0]/Id"          ;u32    #1000                
+  "Scene/EntityNames[G:0]/Name"        ;string "Floor"              
+  "Scene/EntityNames[G:1]/Id"          ;u32    #1010                
+  "Scene/EntityNames[G:1]/Name"        ;string "Halfway Line"       
+  "Scene/EntityNames[G:2]/Id"          ;u32    #1011                
+  "Scene/EntityNames[G:2]/Name"        ;string "Touchline Near"     
+  "Scene/EntityNames[G:3]/Id"          ;u32    #1012                
+  "Scene/EntityNames[G:3]/Name"        ;string "Touchline Far"      
+  "Scene/EntityNames[G:4]/Id"          ;u32    #1013                
+  "Scene/EntityNames[G:4]/Name"        ;string "End Line Blue"      
+  "Scene/EntityNames[G:5]/Id"          ;u32    #1014                
+  "Scene/EntityNames[G:5]/Name"        ;string "End Line Red"       
+  "Scene/EntityNames[G:6]/Id"          ;u32    #1020                
+  "Scene/EntityNames[G:6]/Name"        ;string "Goal Blue Post A"   
+  "Scene/EntityNames[G:7]/Id"          ;u32    #1021                
+  "Scene/EntityNames[G:7]/Name"        ;string "Goal Blue Post B"   
+  "Scene/EntityNames[G:8]/Id"          ;u32    #1022                
+  "Scene/EntityNames[G:8]/Name"        ;string "Goal Blue Crossbar" 
+  "Scene/EntityNames[G:9]/Id"          ;u32    #1023                
+  "Scene/EntityNames[G:9]/Name"        ;string "Goal Blue Net Floor"
+  "Scene/EntityNames[G:10]/Id"         ;u32    #1024                
+  "Scene/EntityNames[G:10]/Name"       ;string "Goal Blue Net Back" 
+  "Scene/EntityNames[G:11]/Id"         ;u32    #1030                
+  "Scene/EntityNames[G:11]/Name"       ;string "Goal Red Post A"    
+  "Scene/EntityNames[G:12]/Id"         ;u32    #1031                
+  "Scene/EntityNames[G:12]/Name"       ;string "Goal Red Post B"    
+  "Scene/EntityNames[G:13]/Id"         ;u32    #1032                
+  "Scene/EntityNames[G:13]/Name"       ;string "Goal Red Crossbar"  
+  "Scene/EntityNames[G:14]/Id"         ;u32    #1033                
+  "Scene/EntityNames[G:14]/Name"       ;string "Goal Red Net Floor" 
+  "Scene/EntityNames[G:15]/Id"         ;u32    #1034                
+  "Scene/EntityNames[G:15]/Name"       ;string "Goal Red Net Back"  
+  "Scene/EntityNames[G:16]/Id"         ;u32    #1100                
+  "Scene/EntityNames[G:16]/Name"       ;string "Score Blue"         
+  "Scene/EntityNames[G:17]/Id"         ;u32    #1101                
+  "Scene/EntityNames[G:17]/Name"       ;string "Score Red"          
+  "Scene/EntityNames[G:18]/Id"         ;u32    #1200                
+  "Scene/EntityNames[G:18]/Name"       ;string "Wall Touchline"     
+  "Scene/EntityNames[G:19]/Id"         ;u32    #1201                
+  "Scene/EntityNames[G:19]/Name"       ;string "Wall Touchline"     
+  "Scene/EntityNames[G:20]/Id"         ;u32    #1202                
+  "Scene/EntityNames[G:20]/Name"       ;string "Wall End Line"      
+  "Scene/EntityNames[G:21]/Id"         ;u32    #1203                
+  "Scene/EntityNames[G:21]/Name"       ;string "Wall End Line"      
+  "Scene/EntityNames[G:22]/Id"         ;u32    #1204                
+  "Scene/EntityNames[G:22]/Name"       ;string "Wall End Line"      
+  "Scene/EntityNames[G:23]/Id"         ;u32    #1205                
+  "Scene/EntityNames[G:23]/Name"       ;string "Wall End Line"      
+  "Scene/EntityNames[G:24]/Id"         ;u32    #1206                
+  "Scene/EntityNames[G:24]/Name"       ;string "Net Side"           
+  "Scene/EntityNames[G:25]/Id"         ;u32    #1207                
+  "Scene/EntityNames[G:25]/Name"       ;string "Net Side"           
+  "Scene/EntityNames[G:26]/Id"         ;u32    #1208                
+  "Scene/EntityNames[G:26]/Name"       ;string "Net Side"           
+  "Scene/EntityNames[G:27]/Id"         ;u32    #1209                
+  "Scene/EntityNames[G:27]/Name"       ;string "Net Side"           
+  "Scene/EntityNames[G:28]/Id"         ;u32    #1210                
+  "Scene/EntityNames[G:28]/Name"       ;string "Outer Wall Near"    
+  "Scene/EntityNames[G:29]/Id"         ;u32    #1211                
+  "Scene/EntityNames[G:29]/Name"       ;string "Outer Wall Far"     
+  "Scene/EntityNames[G:30]/Id"         ;u32    #1212                
+  "Scene/EntityNames[G:30]/Name"       ;string "Outer Wall Blue"    
+  "Scene/EntityNames[G:31]/Id"         ;u32    #1214                
+  "Scene/EntityNames[G:31]/Name"       ;string "Ceiling"            
+  "Scene/EntityNames[G:32]/Id"         ;u32    #2000                
+  "Scene/EntityNames[G:32]/Name"       ;string "Blue Keeper"        
+  "Scene/EntityNames[G:33]/Id"         ;u32    #2001                
+  "Scene/EntityNames[G:33]/Name"       ;string "Blue Player 1"      
+  "Scene/EntityNames[G:34]/Id"         ;u32    #2002                
+  "Scene/EntityNames[G:34]/Name"       ;string "Blue Player 2"      
+  "Scene/EntityNames[G:35]/Id"         ;u32    #2003                
+  "Scene/EntityNames[G:35]/Name"       ;string "Blue Player 3"      
+  "Scene/EntityNames[G:36]/Id"         ;u32    #2004                
+  "Scene/EntityNames[G:36]/Name"       ;string "Blue Player 4"      
+  "Scene/EntityNames[G:37]/Id"         ;u32    #3000                
+  "Scene/EntityNames[G:37]/Name"       ;string "Red Keeper"         
+  "Scene/EntityNames[G:38]/Id"         ;u32    #3001                
+  "Scene/EntityNames[G:38]/Name"       ;string "Red Player 1"       
+  "Scene/EntityNames[G:39]/Id"         ;u32    #3002                
+  "Scene/EntityNames[G:39]/Name"       ;string "Red Player 2"       
+  "Scene/EntityNames[G:40]/Id"         ;u32    #3003                
+  "Scene/EntityNames[G:40]/Name"       ;string "Red Player 3"       
+  "Scene/EntityNames[G:41]/Id"         ;u32    #3004                
+  "Scene/EntityNames[G:41]/Name"       ;string "Red Player 4"       
+  "Scene/EntityNames[G:42]/Id"         ;u32    #4000                
+  "Scene/EntityNames[G:42]/Name"       ;string "Referee"            
+  "Scene/EntityNames[G:43]/Id"         ;u32    #5000                
+  "Scene/EntityNames[G:43]/Name"       ;string "Ball"               
+  "Scene/EntityNames[G:44]/Id"         ;u32    #7100                
+  "Scene/EntityNames[G:44]/Name"       ;string "Score Blue Label"   
+  "Scene/EntityNames[G:45]/Id"         ;u32    #7101                
+  "Scene/EntityNames[G:45]/Name"       ;string "Score Red Label"    
+  "Scene/EntityNames[G:46]/Id"         ;u32    #7200                
+  "Scene/EntityNames[G:46]/Name"       ;string "Goal Banner"        
+  "Scene/EntityNames[G:47]/Id"         ;u32    #7201                
+  "Scene/EntityNames[G:47]/Name"       ;string "Name Ana"           
+  "Scene/EntityNames[G:48]/Id"         ;u32    #7202                
+  "Scene/EntityNames[G:48]/Name"       ;string "Name Ben"           
+  "Scene/EntityNames[G:49]/Id"         ;u32    #7203                
+  "Scene/EntityNames[G:49]/Name"       ;string "Name Carl"          
+  "Scene/EntityNames[G:50]/Id"         ;u32    #7204                
+  "Scene/EntityNames[G:50]/Name"       ;string "Name Dina"          
+  "Scene/EntityNames[G:51]/Id"         ;u32    #7205                
+  "Scene/EntityNames[G:51]/Name"       ;string "Name Eli"           
+  "Scene/EntityNames[G:52]/Id"         ;u32    #7206                
+  "Scene/EntityNames[G:52]/Name"       ;string "Name Fay"           
+  "Scene/EntityNames[G:53]/Id"         ;u32    #7207                
+  "Scene/EntityNames[G:53]/Name"       ;string "Name Gus"           
+  "Scene/EntityNames[G:54]/Id"         ;u32    #7208                
+  "Scene/EntityNames[G:54]/Name"       ;string "Name Hana"          
+  "Scene/EntityNames[G:55]/Id"         ;u32    #7209                
+  "Scene/EntityNames[G:55]/Name"       ;string "Name Ivan"          
+  "Scene/EntityNames[G:56]/Id"         ;u32    #720A                
+  "Scene/EntityNames[G:56]/Name"       ;string "Name Jo"            
+  "Scene/EntityNames[G:57]/Id"         ;u32    #720B                
+  "Scene/EntityNames[G:57]/Name"       ;string "Name Referee"       
+  "Scene/EntityNames[G:58]/Id"         ;u32    #8001                
+  "Scene/EntityNames[G:58]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:59]/Id"         ;u32    #8002                
+  "Scene/EntityNames[G:59]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:60]/Id"         ;u32    #8003                
+  "Scene/EntityNames[G:60]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:61]/Id"         ;u32    #8004                
+  "Scene/EntityNames[G:61]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:62]/Id"         ;u32    #8005                
+  "Scene/EntityNames[G:62]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:63]/Id"         ;u32    #8006                
+  "Scene/EntityNames[G:63]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:64]/Id"         ;u32    #8007                
+  "Scene/EntityNames[G:64]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:65]/Id"         ;u32    #8008                
+  "Scene/EntityNames[G:65]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:66]/Id"         ;u32    #8009                
+  "Scene/EntityNames[G:66]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:67]/Id"         ;u32    #800A                
+  "Scene/EntityNames[G:67]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:68]/Id"         ;u32    #800B                
+  "Scene/EntityNames[G:68]/Name"       ;string "Shadow"             
+  "Scene/EntityNames[G:69]/Id"         ;u32    #800C                
+  "Scene/EntityNames[G:69]/Name"       ;string "Shadow"             

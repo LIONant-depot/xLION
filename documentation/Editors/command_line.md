@@ -20,6 +20,8 @@ The same text means the same thing typed in the editor's console, sent through t
 Numbers, hex ids and names without spaces need no quotes. Text always can have them: `SetProperty -Path "Transform/Position/X" -Value "5.000000" ...`, `LogEmit -Text "first line
 second line"`. A command is complete at the first line break that is not inside quotes.
 
+An **entity id** (`-Id`, `-Parent`, `-AfterId`) is 64 bits: written with 8 hex digits when it fits in 32 bits (the ids the editor mints, `7E570001`), with 16 otherwise (`7123456789ABCDEF`); a command takes either, in any case, and fewer digits (`7e5712` is `007E5712`). The top bit is reserved: an id above `7FFFFFFFFFFFFFFF` is refused. `ListEntities`, `ListFolders` and the other listings print them the same way. A folder id (`-Folder`) stays 32 bits. A member of a prefab instance has an id derived from its instance's id and its place in the prefab (16 digits, the same after every reload); `ListPrefabOverrides -Scene -Id` lists an instance's members with their ids and addresses, and what the instance overrides (an override whose member the prefab no longer has is marked ORPHAN: `RemoveOrphanOverrides` takes them away). `InstantiatePrefab ... -Parent hexid` places an instance under an entity.
+
 Programs that build commands use `xeditor::Quote(text)` (C++) or `harness.quote(text)` (the smoke tests): it writes any text as one value, whatever it holds.
 
 ## xeditorcli

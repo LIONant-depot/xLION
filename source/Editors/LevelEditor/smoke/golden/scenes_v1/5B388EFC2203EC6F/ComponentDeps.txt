@@ -1,0 +1,28 @@
+
+[ ComponentDeps : 24 ]
+{ Guid:G             Name:s                    Module:G          }
+//-----------------  ------------------------  -----------------
+                 #0  "Entity"                                 #0
+   #296EEAAEE0EF730  "Primitive"                              #0
+   #54E923B47CD82E8  "SoccerScoreBar"          #3849E1DE2402B1A5
+   #85F88DCAA370B06  "PhysicsColliderBox"                     #0
+   #DC3BCDAB39C3CCF  "SoccerBall"              #3849E1DE2402B1A5
+  #117DD63C849E9F05  "Children"                               #0
+  #26E6D2F586FF9411  "Parent"                                 #0
+  #3C561E6CCC1EE63A  "Text"                                   #0
+  #3DB0BDB9B50EF0F6  "SoccerGoal"              #3849E1DE2402B1A5
+  #3EF27824643D67EA  "PhysicsDynamics"                        #0
+  #4F7643DF807F0C51  "Physics"                                #0
+  #52B341C6318A8906  "SoccerIdentity"          #3849E1DE2402B1A5
+  #588DCE1BC09DCB49  "SoccerReferee"           #3849E1DE2402B1A5
+  #5E82749D0629F2FC  "SoccerScoreLabel"        #3849E1DE2402B1A5
+  #663773C47FA1D0BA  "Transform"                              #0
+  #6EC40BDECA075977  "static"                                 #0
+  #77DF28B87C62ABFF  "PhysicsBodyProperties"                  #0
+  #832D2369F0D07F6C  "SoccerMatch"             #3849E1DE2402B1A5
+  #94F51CC9259E1380  "SoccerBanner"            #3849E1DE2402B1A5
+  #A5EEE30695E37CAB  "PhysicsColliderSphere"                  #0
+  #A8027BF64F88F583  "EditorPrafabInstance"                   #0
+  #B17052371C9F7064  "PhysicsColliderCapsule"                 #0
+  #F1204247F9F99025  "SoccerPlayer"            #3849E1DE2402B1A5
+  #F42E683502B758A5  "RenderTransform"                        #0

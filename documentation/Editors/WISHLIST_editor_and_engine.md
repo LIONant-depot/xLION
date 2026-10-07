@@ -66,6 +66,10 @@ Within a group the first is the most urgent. The italic line after each number s
     few millimetres, or draw the grid with a depth bias.
 20. *(the Runtime folder is unexplained)* **The Level Tree shows a `Runtime (7)` folder next to `Pitch`** once prefabs exist (seven prefabs were made, seven entries). It is not explained
     anywhere; a tooltip saying what it holds (and that it is not part of the scene) would save a question.
+    *Explained 2026-10-07 (prefab plan, phase 0):* it is by design, `xlevel_panel_level_tree.h` ("Runtime" row). It lists every live entity of the editor's world that is in no open Scene:
+    entities spawned while the game runs, the share-entities, and under **Prefabs** the resident prefab templates (every member of every prefab loaded or made in this session carries the
+    exclusive `prefab::tag`; the count is members, not prefabs). Phase 1 of the plan moves the templates out of the scene world, so that sub-folder goes away; the tooltip is still worth adding.
+    *Phase 1 (2026-10-07):* the **Prefabs** sub-folder is gone (the templates are the prefab manager's, `m_PrefabGroups`, and the tree no longer lists or counts them); `Runtime` now holds what the game spawned and the share-entities. The tooltip is still to do.
 29. *(stdout is fully buffered when redirected)* **stdout of the editor is fully buffered when redirected to a file**, so a `printf` without a flush shows up late (it cost an hour here). The editor could switch stdout to line buffering at startup.
 32. *(the smoke run changes the user keymap)* **The smoke run changes `Project.config/Keymaps/user.keymap.txt`** and `project_guard` cannot put it back (it warns). The tests that bind keys should work on a copy, or the guard should snapshot `Project.config/Keymaps`.
 3. *(document CaptureWindow)* **Document `CaptureWindow`** next to the pipe commands (it saves the editor window as png/bmp/tga/jpg). I nearly asked for it as a new feature: there is no

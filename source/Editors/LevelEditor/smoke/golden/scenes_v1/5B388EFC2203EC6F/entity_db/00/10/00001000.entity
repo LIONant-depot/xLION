@@ -1,0 +1,100 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #1000            7      
+
+[ ComponentTypes : 7 ]
+{ Guid:G            }
+//-----------------
+   #296EEAAEE0EF730
+   #85F88DCAA370B06
+  #4F7643DF807F0C51
+  #663773C47FA1D0BA
+  #832D2369F0D07F6C
+  #77DF28B87C62ABFF
+  #6EC40BDECA075977
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 4 ]
+{ Name:s               Value:?           }
+//-------------------  -----------------
+  "Primitive/Shape"    ;enum "Cube"     
+  "Primitive/Color/X"  ;f32  0.180000007
+  "Primitive/Color/Y"  ;f32  0.550000012
+  "Primitive/Color/Z"  ;f32  0.219999999
+
+[ xProperties : 17 ]
+{ Name:s                                         Value:?                        }
+//---------------------------------------------  ------------------------------
+  "PhysicsColliderBox/Boxes[]"                   ;s64       1                  
+  "PhysicsColliderBox/Boxes[G:0]/Center/X"       ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Center/Y"       ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Center/Z"       ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Orientation/X"  ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Orientation/Y"  ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Orientation/Z"  ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Orientation/W"  ;f32       1                  
+  "PhysicsColliderBox/Boxes[G:0]/Rotation/X"     ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Rotation/Y"     ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Rotation/Z"     ;f32       0                  
+  "PhysicsColliderBox/Boxes[G:0]/Size/X"         ;f32       1                  
+  "PhysicsColliderBox/Boxes[G:0]/Size/Y"         ;f32       1                  
+  "PhysicsColliderBox/Boxes[G:0]/Size/Z"         ;f32       1                  
+  "PhysicsColliderBox/Boxes[G:0]/Material"       ;full_guid #0 #6073A709ACB80A3
+  "PhysicsColliderBox/Boxes[G:0]/IsSensor"       ;bool      0                  
+  "PhysicsColliderBox/Boxes[G:0]/ContactEvents"  ;bool      0                  
+
+[ xProperties : 4 ]
+{ Name:s                    Value:? }
+//------------------------  -------
+  "Physics/BodyIndex"       ;f32 0 
+  "Physics/BodyGeneration"  ;f32 0 
+  "Physics/CachedBodyType"  ;f32 2 
+  "Physics/CachedMass"      ;f32 0 
+
+[ xProperties : 14 ]
+{ Name:s                         Value:?             }
+//-----------------------------  -------------------
+  "Transform/Position/X"         ;f32  0            
+  "Transform/Position/Y"         ;f32  -0.0900000036
+  "Transform/Position/Z"         ;f32  0            
+  "Transform/Rotation/X"         ;f32  0            
+  "Transform/Rotation/Y"         ;f32  0            
+  "Transform/Rotation/Z"         ;f32  0            
+  "Transform/Rotation/W"         ;f32  1            
+  "Transform/RotationDegrees/X"  ;f32  0            
+  "Transform/RotationDegrees/Y"  ;f32  0            
+  "Transform/RotationDegrees/Z"  ;f32  0            
+  "Transform/Scale/X"            ;f32  28           
+  "Transform/Scale/Y"            ;f32  0.200000003  
+  "Transform/Scale/Z"            ;f32  18           
+  "Transform/EditorLockScale"    ;bool 0            
+
+[ xProperties : 11 ]
+{ Name:s                       Value:?         }
+//---------------------------  ---------------
+  "SoccerMatch/HalfLength"     ;f32  12       
+  "SoccerMatch/HalfWidth"      ;f32  7        
+  "SoccerMatch/GoalHalfWidth"  ;f32  2        
+  "SoccerMatch/KickoffDelay"   ;f32  2        
+  "SoccerMatch/GoalPause"      ;f32  2.5      
+  "SoccerMatch/Phase"          ;enum "Kickoff"
+  "SoccerMatch/Timer"          ;f32  2        
+  "SoccerMatch/ScoreBlue"      ;s32  0        
+  "SoccerMatch/ScoreRed"       ;s32  0        
+  "SoccerMatch/LastScorer"     ;enum "Blue"   
+  "SoccerMatch/Round"          ;s32  0        
+
+[ xProperties : 7 ]
+{ Name:s                                             Value:?                 }
+//-------------------------------------------------  -----------------------
+  "PhysicsBodyProperties/LinearDamping"              ;f32  0                
+  "PhysicsBodyProperties/AngularDamping"             ;f32  0                
+  "PhysicsBodyProperties/EnableSleep"                ;bool 1                
+  "PhysicsBodyProperties/EnableContinuousCollision"  ;bool 0                
+  "PhysicsBodyProperties/CategoryBits"               ;u64  #FFFFFFFFFFFFFFFF
+  "PhysicsBodyProperties/MaskBits"                   ;u64  #FFFFFFFFFFFFFFFF
+  "PhysicsBodyProperties/GroupIndex"                 ;s32  0                

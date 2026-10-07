@@ -1,0 +1,172 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #2001            7      
+
+[ ComponentTypes : 7 ]
+{ Guid:G            }
+//-----------------
+  #A8027BF64F88F583
+  #3EF27824643D67EA
+  #4F7643DF807F0C51
+  #117DD63C849E9F05
+  #B17052371C9F7064
+  #F42E683502B758A5
+  #77DF28B87C62ABFF
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 74 ]
+{ Name:s                                                                       Value:?                                        }
+//---------------------------------------------------------------------------  ----------------------------------------------
+  "EditorPrafabInstance/Prefab"                                                ;full_guid #68B511D7A4E4CB4D #16F179B86A628F9D
+  "EditorPrafabInstance/Components[]"                                          ;s64       5                                  
+  "EditorPrafabInstance/Components[G:0]/ComponentTypeGuid"                     ;u64       #663773C47FA1D0BA                  
+  "EditorPrafabInstance/Components[G:0]/MemberPath[]"                          ;s64       1                                  
+  "EditorPrafabInstance/Components[G:0]/MemberPath[G:0]"                       ;u32       #0                                 
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[]"                   ;s64       6                                  
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:0]/PropertyName"   ;string    "Transform/Position/X"             
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:0]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:1]/PropertyName"   ;string    "Transform/Position/Y"             
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:1]/PropertyValue"  ;string    "0.012000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:2]/PropertyName"   ;string    "Transform/Position/Z"             
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:2]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:3]/PropertyName"   ;string    "Transform/Scale/X"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:3]/PropertyValue"  ;string    "0.950000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:4]/PropertyName"   ;string    "Transform/Scale/Y"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:4]/PropertyValue"  ;string    "0.020000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:5]/PropertyName"   ;string    "Transform/Scale/Z"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:5]/PropertyValue"  ;string    "0.950000"                         
+  "EditorPrafabInstance/Components[G:1]/ComponentTypeGuid"                     ;u64       #296EEAAEE0EF730                   
+  "EditorPrafabInstance/Components[G:1]/MemberPath[]"                          ;s64       1                                  
+  "EditorPrafabInstance/Components[G:1]/MemberPath[G:0]"                       ;u32       #0                                 
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[]"                   ;s64       4                                  
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:0]/PropertyName"   ;string    "Primitive/Shape"                  
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:0]/PropertyValue"  ;string    "Sphere"                           
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:1]/PropertyName"   ;string    "Primitive/Color/X"                
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:1]/PropertyValue"  ;string    "0.100000"                         
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:2]/PropertyName"   ;string    "Primitive/Color/Y"                
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:2]/PropertyValue"  ;string    "0.300000"                         
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:3]/PropertyName"   ;string    "Primitive/Color/Z"                
+  "EditorPrafabInstance/Components[G:1]/PropertyOverrides[G:3]/PropertyValue"  ;string    "0.120000"                         
+  "EditorPrafabInstance/Components[G:2]/ComponentTypeGuid"                     ;u64       #663773C47FA1D0BA                  
+  "EditorPrafabInstance/Components[G:2]/MemberPath[]"                          ;s64       1                                  
+  "EditorPrafabInstance/Components[G:2]/MemberPath[G:0]"                       ;u32       #1                                 
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[]"                   ;s64       3                                  
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:0]/PropertyName"   ;string    "Transform/Position/X"             
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:0]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:1]/PropertyName"   ;string    "Transform/Position/Y"             
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:1]/PropertyValue"  ;string    "1.450000"                         
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:2]/PropertyName"   ;string    "Transform/Position/Z"             
+  "EditorPrafabInstance/Components[G:2]/PropertyOverrides[G:2]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/Components[G:3]/ComponentTypeGuid"                     ;u64       #663773C47FA1D0BA                  
+  "EditorPrafabInstance/Components[G:3]/MemberPath[]"                          ;s64       0                                  
+  "EditorPrafabInstance/Components[G:3]/PropertyOverrides[]"                   ;s64       2                                  
+  "EditorPrafabInstance/Components[G:3]/PropertyOverrides[G:0]/PropertyName"   ;string    "Transform/Position/X"             
+  "EditorPrafabInstance/Components[G:3]/PropertyOverrides[G:0]/PropertyValue"  ;string    "-8.000000"                        
+  "EditorPrafabInstance/Components[G:3]/PropertyOverrides[G:1]/PropertyName"   ;string    "Transform/Position/Z"             
+  "EditorPrafabInstance/Components[G:3]/PropertyOverrides[G:1]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/Components[G:4]/ComponentTypeGuid"                     ;u64       #F1204247F9F99025                  
+  "EditorPrafabInstance/Components[G:4]/MemberPath[]"                          ;s64       0                                  
+  "EditorPrafabInstance/Components[G:4]/PropertyOverrides[]"                   ;s64       2                                  
+  "EditorPrafabInstance/Components[G:4]/PropertyOverrides[G:0]/PropertyName"   ;string    "SoccerPlayer/Home/X"              
+  "EditorPrafabInstance/Components[G:4]/PropertyOverrides[G:0]/PropertyValue"  ;string    "-8.000000"                        
+  "EditorPrafabInstance/Components[G:4]/PropertyOverrides[G:1]/PropertyName"   ;string    "SoccerPlayer/Home/Z"              
+  "EditorPrafabInstance/Components[G:4]/PropertyOverrides[G:1]/PropertyValue"  ;string    "0.000000"                         
+  "EditorPrafabInstance/ComponentDiffs[]"                                      ;s64       6                                  
+  "EditorPrafabInstance/ComponentDiffs[G:0]/ComponentTypeGuid"                 ;u64       #117DD63C849E9F05                  
+  "EditorPrafabInstance/ComponentDiffs[G:0]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:1]/ComponentTypeGuid"                 ;u64       #3EF27824643D67EA                  
+  "EditorPrafabInstance/ComponentDiffs[G:1]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:2]/ComponentTypeGuid"                 ;u64       #4F7643DF807F0C51                  
+  "EditorPrafabInstance/ComponentDiffs[G:2]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:3]/ComponentTypeGuid"                 ;u64       #B17052371C9F7064                  
+  "EditorPrafabInstance/ComponentDiffs[G:3]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:4]/ComponentTypeGuid"                 ;u64       #F42E683502B758A5                  
+  "EditorPrafabInstance/ComponentDiffs[G:4]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/ComponentDiffs[G:5]/ComponentTypeGuid"                 ;u64       #77DF28B87C62ABFF                  
+  "EditorPrafabInstance/ComponentDiffs[G:5]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/HierarchyDiffs[]"                                      ;s64       2                                  
+  "EditorPrafabInstance/HierarchyDiffs[G:0]/MemberPath[]"                      ;s64       1                                  
+  "EditorPrafabInstance/HierarchyDiffs[G:0]/MemberPath[G:0]"                   ;u32       #0                                 
+  "EditorPrafabInstance/HierarchyDiffs[G:0]/Added"                             ;bool      1                                  
+  "EditorPrafabInstance/HierarchyDiffs[G:1]/MemberPath[]"                      ;s64       1                                  
+  "EditorPrafabInstance/HierarchyDiffs[G:1]/MemberPath[G:0]"                   ;u32       #1                                 
+  "EditorPrafabInstance/HierarchyDiffs[G:1]/Added"                             ;bool      1                                  
+
+[ xProperties : 19 ]
+{ Name:s                                       Value:?  }
+//-------------------------------------------  --------
+  "PhysicsDynamics/LinearVelocity/X"           ;f32  0 
+  "PhysicsDynamics/LinearVelocity/Y"           ;f32  0 
+  "PhysicsDynamics/LinearVelocity/Z"           ;f32  0 
+  "PhysicsDynamics/AngularVelocity/X"          ;f32  0 
+  "PhysicsDynamics/AngularVelocity/Y"          ;f32  0 
+  "PhysicsDynamics/AngularVelocity/Z"          ;f32  0 
+  "PhysicsDynamics/Mass"                       ;f32  75
+  "PhysicsDynamics/Force/X"                    ;f32  0 
+  "PhysicsDynamics/Force/Y"                    ;f32  0 
+  "PhysicsDynamics/Force/Z"                    ;f32  0 
+  "PhysicsDynamics/Torque/X"                   ;f32  0 
+  "PhysicsDynamics/Torque/Y"                   ;f32  0 
+  "PhysicsDynamics/Torque/Z"                   ;f32  0 
+  "PhysicsDynamics/Constraints/Translation/X"  ;bool 0 
+  "PhysicsDynamics/Constraints/Translation/Y"  ;bool 0 
+  "PhysicsDynamics/Constraints/Translation/Z"  ;bool 0 
+  "PhysicsDynamics/Constraints/Rotation/X"     ;bool 1 
+  "PhysicsDynamics/Constraints/Rotation/Y"     ;bool 1 
+  "PhysicsDynamics/Constraints/Rotation/Z"     ;bool 1 
+
+[ xProperties : 4 ]
+{ Name:s                    Value:? }
+//------------------------  -------
+  "Physics/BodyIndex"       ;f32 0 
+  "Physics/BodyGeneration"  ;f32 0 
+  "Physics/CachedBodyType"  ;f32 2 
+  "Physics/CachedMass"      ;f32 0 
+
+[ Children : 1 ]
+{ nChildren:d }
+//-----------
+       2     
+
+[ AllChildren : 2 ]
+{ Entity:G }
+//--------
+   #8002  
+   #7202  
+
+[ xProperties : 16 ]
+{ Name:s                                                Value:?                                      }
+//----------------------------------------------------  --------------------------------------------
+  "PhysicsColliderCapsule/Capsules[]"                   ;s64       1                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Center/X"       ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Center/Y"       ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Center/Z"       ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Orientation/X"  ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Orientation/Y"  ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Orientation/Z"  ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Orientation/W"  ;f32       1                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Rotation/X"     ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Rotation/Y"     ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Rotation/Z"     ;f32       0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/Radius"         ;f32       0.25                             
+  "PhysicsColliderCapsule/Capsules[G:0]/Height"         ;f32       1.27999997                       
+  "PhysicsColliderCapsule/Capsules[G:0]/Material"       ;full_guid #D132D643A138AF1 #6073A709ACB80A3
+  "PhysicsColliderCapsule/Capsules[G:0]/IsSensor"       ;bool      0                                
+  "PhysicsColliderCapsule/Capsules[G:0]/ContactEvents"  ;bool      0                                
+
+[ xProperties : 0 ]
+
+[ xProperties : 7 ]
+{ Name:s                                             Value:?                 }
+//-------------------------------------------------  -----------------------
+  "PhysicsBodyProperties/LinearDamping"              ;f32  0                
+  "PhysicsBodyProperties/AngularDamping"             ;f32  0                
+  "PhysicsBodyProperties/EnableSleep"                ;bool 1                
+  "PhysicsBodyProperties/EnableContinuousCollision"  ;bool 0                
+  "PhysicsBodyProperties/CategoryBits"               ;u64  #FFFFFFFFFFFFFFFF
+  "PhysicsBodyProperties/MaskBits"                   ;u64  #FFFFFFFFFFFFFFFF
+  "PhysicsBodyProperties/GroupIndex"                 ;s32  0                

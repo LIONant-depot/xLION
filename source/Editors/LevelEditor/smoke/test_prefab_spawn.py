@@ -1,0 +1,30 @@
+"""Spawning from the baked plan (documentation/Editors/prefabs_plan.md 3.5, phase 4). No editor: the engine alone.
+
+* test_prefab_spawn_engine_checks: compiles dependencies/xECSV2/smoke_test_prefab_spawn.cpp in Debug (asserts on) and runs it - a batched spawn's
+  members, values and references; CreatePrefabInstance going through it; references in a container; nested recipes in the plan; builder systems
+  run on a spawn (and on the editor's InstantiateInScene); a saved prefab bakes again.
+* test_prefab_spawn_meets_its_targets: the Release benchmark (smoke_test_prefab_bench.cpp --check): batched under 100 ns per entity, no heap
+  allocation per instance but the children lists, nested within 1.5x flat. Fails when spawning slows down by about 2x from what phase 4 measured.
+"""
+import subprocess
+
+import pytest
+
+from prefab_bench import REPO, SRC, build
+
+pytestmark = pytest.mark.no_editor
+
+
+def test_prefab_spawn_engine_checks():
+    exe = build(debug=True, src=REPO / "dependencies" / "xECSV2" / "smoke_test_prefab_spawn.cpp")
+    r = subprocess.run([str(exe)], capture_output=True, text=True, cwd=exe.parent, timeout=300)
+    report = "\n".join(l for l in r.stdout.splitlines() if l.startswith(("STEP", "FAIL", "ALL")) or "CHECK" in l)
+    assert r.returncode == 0 and "ALL CHECKS PASSED" in r.stdout, f"{report}\n--- stderr (asserts) ---\n{r.stderr[-3000:]}"
+    assert "Assertion" not in r.stderr and "assert" not in r.stderr.lower(), r.stderr[-3000:]
+
+
+def test_prefab_spawn_meets_its_targets():
+    exe = build(debug=False, src=SRC)
+    r = subprocess.run([str(exe), "--check"], capture_output=True, text=True, cwd=exe.parent, timeout=300)
+    table = "\n".join(l for l in r.stdout.splitlines() if not l.startswith("[Prefab"))
+    assert r.returncode == 0 and "ALL CHECKS PASSED" in r.stdout, f"{table}\n{r.stderr[-2000:]}"

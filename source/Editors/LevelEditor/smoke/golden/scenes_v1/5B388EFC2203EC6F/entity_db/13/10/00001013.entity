@@ -1,0 +1,40 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #1013            2      
+
+[ ComponentTypes : 2 ]
+{ Guid:G            }
+//-----------------
+   #296EEAAEE0EF730
+  #663773C47FA1D0BA
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 4 ]
+{ Name:s               Value:?           }
+//-------------------  -----------------
+  "Primitive/Shape"    ;enum "Cube"     
+  "Primitive/Color/X"  ;f32  0.949999988
+  "Primitive/Color/Y"  ;f32  0.949999988
+  "Primitive/Color/Z"  ;f32  0.949999988
+
+[ xProperties : 14 ]
+{ Name:s                         Value:?             }
+//-----------------------------  -------------------
+  "Transform/Position/X"         ;f32  -12          
+  "Transform/Position/Y"         ;f32  0.00999999978
+  "Transform/Position/Z"         ;f32  0            
+  "Transform/Rotation/X"         ;f32  0            
+  "Transform/Rotation/Y"         ;f32  0            
+  "Transform/Rotation/Z"         ;f32  0            
+  "Transform/Rotation/W"         ;f32  1            
+  "Transform/RotationDegrees/X"  ;f32  0            
+  "Transform/RotationDegrees/Y"  ;f32  0            
+  "Transform/RotationDegrees/Z"  ;f32  0            
+  "Transform/Scale/X"            ;f32  0.100000001  
+  "Transform/Scale/Y"            ;f32  0.0199999996 
+  "Transform/Scale/Z"            ;f32  14           
+  "Transform/EditorLockScale"    ;bool 0            

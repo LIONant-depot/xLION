@@ -1,0 +1,32 @@
+
+[ EntityInfo ]
+{ PermanentId:g  nComponents:d }
+//-------------  -------------
+      #301             1      
+
+[ ComponentTypes : 1 ]
+{ Guid:G            }
+//-----------------
+  #A8027BF64F88F583
+
+// New Types
+< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG entity:G enum:s >
+
+[ xProperties : 15 ]
+{ Name:s                                                                       Value:?                                        }
+//---------------------------------------------------------------------------  ----------------------------------------------
+  "EditorPrafabInstance/Prefab"                                                ;full_guid #7E5700000000A001 #16F179B86A628F9D
+  "EditorPrafabInstance/Components[]"                                          ;s64       1                                  
+  "EditorPrafabInstance/Components[G:0]/ComponentTypeGuid"                     ;u64       #663773C47FA1D0BA                  
+  "EditorPrafabInstance/Components[G:0]/MemberPath[]"                          ;s64       0                                  
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[]"                   ;s64       4                                  
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:0]/PropertyName"   ;string    "Transform/Position/Y"             
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:0]/PropertyValue"  ;string    "13.000000"                        
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:1]/PropertyName"   ;string    "Transform/Scale/X"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:1]/PropertyValue"  ;string    "1.000000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:2]/PropertyName"   ;string    "Transform/Scale/Y"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:2]/PropertyValue"  ;string    "1.000000"                         
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:3]/PropertyName"   ;string    "Transform/Scale/Z"                
+  "EditorPrafabInstance/Components[G:0]/PropertyOverrides[G:3]/PropertyValue"  ;string    "1.000000"                         
+  "EditorPrafabInstance/ComponentDiffs[]"                                      ;s64       0                                  
+  "EditorPrafabInstance/HierarchyDiffs[]"                                      ;s64       0                                  
