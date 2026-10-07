@@ -101,6 +101,7 @@ namespace level_editor
         level_editor::commands::set_prefab_game_cmd         CmdSetPrefabGame;      // Name\SetPrefabGame: the Game the prefab plays with, undone with this editor's own undo
         level_editor::commands::get_prefab_game_query_cmd   CmdGetPrefabGame;
         level_editor::commands::describe_prefab_query_cmd   CmdDescribePrefab;     // Name\DescribePrefab: what the Inspector shows when the prefab is selected
+        level_editor::commands::describe_level_query_cmd    CmdSessionDescribeLevel;   // Name\DescribeLevel: the same as DescribeLevel, of this Level
 
         level_command_set(xundo::system& Level, xscene::scene_context* pScene, xlevel::level_context* pEditor, xeditor::camera_access Camera) noexcept
         : CmdSetCamera(Level, Camera)
@@ -119,6 +120,7 @@ namespace level_editor
         , CmdSetPrefabGame(Level, pEditor)
         , CmdGetPrefabGame(Level, pEditor)
         , CmdDescribePrefab(Level, pEditor)
+        , CmdSessionDescribeLevel(Level, pEditor)
         , CmdSessionSave(Level, pEditor)
         , CmdSessionClose(Level, pEditor)
         , CmdSelect(Level, pScene)

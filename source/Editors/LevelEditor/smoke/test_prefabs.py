@@ -192,16 +192,18 @@ def test_apply_overrides_carries_components_and_properties_together(level):
     assert _position_x(level, fresh) == 3.0
 
 
-def test_apply_overrides_leaves_other_instances_alone(level):
-    """Apply changes the prefab going forward; instances already placed keep what they have."""
+def test_apply_overrides_reaches_other_instances_and_keeps_their_own_overrides(level):
+    """Apply changes the prefab, and the instances already placed get the change at once (live update, prefabs_plan.md phase 6; until phase 5 they kept what they had):
+    the bystander gains the applied component and keeps its own override."""
     prefab = _make_prefab(level)
     applied, bystander = _instantiate(level, prefab), _instantiate(level, prefab)
     _, name = _addable_component(level, applied)
+    _set_position_x(level, bystander, "3.250000")
     bystander_before = _components(level, bystander)
 
     level.ok(f"ApplyOverrides -Scene {level.scene} -Id {applied}", allow_disk=True)
-    assert _components(level, bystander) == bystander_before
-    assert name not in _components(level, bystander)
+    assert _components(level, bystander) == bystander_before | {name}
+    assert _position_x(level, bystander) == 3.25, "the bystander's own override stays"
 
 
 def test_apply_overrides_twice_is_stable(level):

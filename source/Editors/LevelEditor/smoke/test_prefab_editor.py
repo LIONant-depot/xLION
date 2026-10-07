@@ -14,6 +14,7 @@ Undo, Save ...). What these tests hold:
 """
 import re
 import secrets
+import shutil
 import time
 from pathlib import Path
 
@@ -526,9 +527,17 @@ def test_every_example_prefab_opens_and_saves_back_the_same_entities(game_level,
 
 def test_a_prefab_in_the_old_format_is_refused_until_it_is_converted(level):
     guid, folder = _old_prefab_copy(PREFAB_V1 / next(n for n in _example_prefabs() if n != "66879B27D9D067FB"))
-    reply = level.ed.cmd(f"OpenPrefab -Prefab {guid}", timeout=120)
-    assert "failed to open" in reply and "old format" in reply and "UpgradeProject" in reply, reply
-    assert guid not in [s.guid.lstrip("0") for s in level.ed.sessions()]
+    try:
+        reply = level.ed.cmd(f"OpenPrefab -Prefab {guid}", timeout=120)
+        assert "failed to open" in reply and "old format" in reply and "UpgradeProject" in reply, reply
+        assert guid not in [s.guid.lstrip("0") for s in level.ed.sessions()]
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)              # the copy is no asset: the project guard does not remove it
+        for empty in (folder.parent, folder.parent.parent):
+            try:
+                empty.rmdir()                                    # only when nothing else is in it
+            except OSError:
+                pass
 
 
 # ---- nesting ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

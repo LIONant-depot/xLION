@@ -37,8 +37,16 @@ no part of the prefab (a reference from the prefab to one of its entities is ref
 
 While a prefab is open in a Prefab Editor, that editor is the only thing that writes its file. When another editor saves the prefab - Apply Overrides of an instance in a Level, or the undo of it - the
 prefab is not written: the saved state goes to the Prefab Editor, which takes it as one undo step of its document (`ReplacePrefabDocument`): it shows the change, becomes dirty, and Ctrl+Z takes it back
-before anything is saved. Save writes it. When the Prefab Editor saves, the other editors forget the template they hold of the prefab, so the next instance they place has the change; the instances they
-already placed are updated by the live update of phase 6. A Prefab Editor that is playing does not take a change: Apply writes the file as before.
+before anything is saved. Save writes it. A Prefab Editor that is playing does not take a change: Apply writes the file as before.
+
+## Live update
+
+When a prefab's file changes (its Prefab Editor saves it, or an Apply Overrides writes it), every open editor that is not playing brings its instances of it up to date at once - the instances
+of the prefab and those of every prefab that nests it, in Levels and in other Prefab Editors: each is spawned again from the prefab with its own overrides. Nothing is written and nothing turns dirty;
+the members keep their ids, so a reference to one, the selection and the undo history still find it (a gizmo drag in progress is ended first, as one undo step). Apply Overrides updates the other
+instances in its own Level the same way, and so does its undo. When a Prefab Editor turns down a change another editor handed it (Ctrl+Z of that step, or Close without saving), the other editors are
+brought back to what the file holds. A Level that is playing keeps what it started with; Stop reopens it from the files, with the change. A prefab cannot hold an instance of a prefab that holds it
+(A holds B holds A): `InstantiatePrefab` refuses it.
 
 ## What is not done
 
