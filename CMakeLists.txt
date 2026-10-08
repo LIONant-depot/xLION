@@ -38,13 +38,14 @@ if(NOT WIN32)
     "$<$<COMPILE_LANGUAGE:CXX>:-include${CMAKE_SOURCE_DIR}/source/Platform/xlion_platform_compat_linux.h>"
     "$<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>"
     "$<$<COMPILE_LANGUAGE:CXX>:-fdeclspec>"
-    "$<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing>"
     -fPIC
     -march=x86-64-v3   # AVX2/FMA/F16C: xmath uses those intrinsics unconditionally (MSVC needs no flag for them)
     -ferror-limit=200
     -Wno-unknown-pragmas -Wno-ignored-attributes -Wno-microsoft-template -Wno-microsoft-cast
     -Wno-unused-value -Wno-switch -Wno-deprecated-declarations -Wno-nonportable-include-path
   )
+  # MSVC defines _DEBUG for Debug builds (/MDd); several depots key debug-only members/asserts off it.
+  add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
 endif()
 
 #

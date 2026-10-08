@@ -16,7 +16,7 @@
 #include "dependencies/xeditor/include/xeditor/serialize.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "source/Tools/Editor/xeditor_compile_logs.h"
-#include "source/tools/xgpu_imgui_breach.h"
+#include "source/Tools/xgpu_imgui_breach.h"
 
 #include <atomic>
 #include <charconv>

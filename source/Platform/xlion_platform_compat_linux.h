@@ -174,6 +174,25 @@ inline errno_t mbstowcs_s(size_t* pRet, wchar_t* pDst, size_t DstSize, const cha
     return 0;
 }
 
+// Wide-path CRT file functions: POSIX file names are bytes, the depots' wide paths are converted to UTF-8.
+inline std::string xlion_compat_utf8(const wchar_t* p) { return std::filesystem::path(std::wstring(p ? p : L"")).string(); }
+inline FILE* _wfopen(const wchar_t* pName, const wchar_t* pMode) noexcept
+{
+    try { return std::fopen(xlion_compat_utf8(pName).c_str(), xlion_compat_utf8(pMode).c_str()); } catch (...) { errno = EINVAL; return nullptr; }
+}
+inline errno_t _wfopen_s(FILE** ppF, const wchar_t* pName, const wchar_t* pMode) noexcept
+{
+    *ppF = _wfopen(pName, pMode); return *ppF ? 0 : errno;
+}
+inline errno_t _wcserror_s(wchar_t* pBuf, size_t Size, int ErrNum) noexcept
+{
+    if (!pBuf || !Size) return EINVAL;
+    std::mbstowcs(pBuf, std::strerror(ErrNum), Size - 1); pBuf[Size - 1] = 0; return 0;
+}
+template<size_t N> inline errno_t _wcserror_s(wchar_t (&Buf)[N], int ErrNum) noexcept { return _wcserror_s(Buf, N, ErrNum); }
+inline int _wremove(const wchar_t* p) noexcept { return std::remove(xlion_compat_utf8(p).c_str()); }
+inline int _wrename(const wchar_t* a, const wchar_t* b) noexcept { return std::rename(xlion_compat_utf8(a).c_str(), xlion_compat_utf8(b).c_str()); }
+
 inline int _stricmp(const char* a, const char* b) noexcept { return strcasecmp(a, b); }
 inline int _strnicmp(const char* a, const char* b, size_t n) noexcept { return strncasecmp(a, b, n); }
 inline int _wcsicmp(const wchar_t* a, const wchar_t* b) noexcept { return wcscasecmp(a, b); }
@@ -204,5 +223,67 @@ inline void* _aligned_realloc(void* p, size_t Size, size_t Align) noexcept
 #define _alloca alloca
 
 #define __debugbreak() __builtin_debugtrap()
+
+//------------------------------------------------------------------------------------------------
+// Win32 virtual memory (VirtualAlloc/VirtualFree) on mmap - xECSV2's pools reserve a big address
+// range once and commit pages on demand, exactly the reserve/commit model below.
+//------------------------------------------------------------------------------------------------
+#include <sys/mman.h>
+#ifndef MEM_COMMIT
+#define MEM_COMMIT      0x00001000u
+#define MEM_RESERVE     0x00002000u
+#define MEM_DECOMMIT    0x00004000u
+#define MEM_RELEASE     0x00008000u
+#define PAGE_NOACCESS   0x01u
+#define PAGE_READONLY   0x02u
+#define PAGE_READWRITE  0x04u
+#endif
+namespace xlion_compat
+{
+    struct vmem_registry   // reservation base -> size (munmap needs the size, VirtualFree(MEM_RELEASE) gets 0)
+    {
+        std::mutex                          m_Lock;
+        std::unordered_map<void*, size_t>   m_Sizes;
+        static vmem_registry& get() noexcept { static vmem_registry s; return s; }
+    };
+    inline int ToProt(unsigned Protect) noexcept
+    {
+        return (Protect & PAGE_READWRITE) ? (PROT_READ | PROT_WRITE) : (Protect & PAGE_READONLY) ? PROT_READ : PROT_NONE;
+    }
+}
+inline void* VirtualAlloc(void* pAddress, size_t Size, unsigned AllocationType, unsigned Protect) noexcept
+{
+    if (pAddress == nullptr || (AllocationType & MEM_RESERVE))
+    {
+        // Reserve (optionally commit) a new range
+        const int Prot = (AllocationType & MEM_COMMIT) ? xlion_compat::ToProt(Protect) : PROT_NONE;
+        void* p = mmap(pAddress, Size, Prot, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (p == MAP_FAILED) return nullptr;
+        auto& R = xlion_compat::vmem_registry::get();
+        std::lock_guard Lk(R.m_Lock);
+        R.m_Sizes[p] = Size;
+        return p;
+    }
+    // Commit pages inside an existing reservation
+    return mprotect(pAddress, Size, xlion_compat::ToProt(Protect)) == 0 ? pAddress : nullptr;
+}
+inline int VirtualFree(void* pAddress, size_t Size, unsigned FreeType) noexcept
+{
+    if (FreeType & MEM_RELEASE)
+    {
+        auto& R = xlion_compat::vmem_registry::get();
+        size_t Len = 0;
+        {
+            std::lock_guard Lk(R.m_Lock);
+            auto It = R.m_Sizes.find(pAddress);
+            if (It == R.m_Sizes.end()) return 0;
+            Len = It->second; R.m_Sizes.erase(It);
+        }
+        return munmap(pAddress, Len) == 0;
+    }
+    // MEM_DECOMMIT: give the pages back, keep the address range reserved
+    madvise(pAddress, Size, MADV_DONTNEED);
+    return mprotect(pAddress, Size, PROT_NONE) == 0;
+}
 #endif // __cplusplus
 #endif // !_WIN32
