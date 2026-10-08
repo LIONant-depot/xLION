@@ -46,6 +46,9 @@ if(NOT WIN32)
   )
   # MSVC defines _DEBUG for Debug builds (/MDd); several depots key debug-only members/asserts off it.
   add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
+  # zstd's x86-64 Huffman fast path lives in a .S file the xcompression component does not list; MSVC
+  # builds never use it either, so turn it off and use the C implementation.
+  add_compile_definitions(ZSTD_DISABLE_ASM)
 endif()
 
 #
