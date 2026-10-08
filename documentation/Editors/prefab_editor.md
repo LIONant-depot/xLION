@@ -126,4 +126,8 @@ Registry and the Logs are the Level's; the tab and the toolbar use the Scene's i
 * Opening a prefab from another prefab (drill-down) is not done: Edit in Context works from a Level.
 * The context is the Level as it is *saved when the editor opens*: it is not kept in step with edits the Level has afterwards (open it again).
 * The fade is a fixed 65% of the viewport's background; the context's texts are left out of the draw.
-* A prefab that is in no Game: its components of a module are not registered, so its entities of that module are not loaded; they are kept (a save writes them back), and the tree does not list them.
+* A prefab (or a Scene, or a Level's scene) opened under a Game that lacks one of its modules: the components of that module are not registered, so its entities of that module are not loaded and the tree does not
+  list them. Such a document **is never written**: Save, Close -Save 1, the save-before-close question, Save All and Play refuse it and say why (`... was not saved: N of its entities could not be loaded ...
+  Give it a Game that lists that module, then open it again`), and its files stay byte for byte as they were (the entities that loaded lost their references to the others at load, and a prefab is written
+  whole from what loaded: a write would be lossy). The Game hint of the Inspector says saving is blocked. A prefab document that has no unsaved change is not written either (Save and Play of a clean
+  prefab leave its files alone).

@@ -146,7 +146,8 @@ PHYSICS_SCENE = PROJECT / "Descriptors" / "Scene" / "19" / "07" / "A1B2C3D4E5F60
 
 def test_saving_a_scene_does_not_forget_the_entities_that_could_not_be_loaded(editor):
     """An entity whose component is not registered (the game module that defines it is not loaded, or its file is damaged) fails to load and is left out of the world. A Save used to rebuild
-    the list of the scene's entities from the world, which unlinked it for good, and wrote ComponentDeps.txt without what it needs. Now the scene keeps them."""
+    the list of the scene's entities from the world, which unlinked it for good, and wrote ComponentDeps.txt without what it needs. Now the scene keeps them: since 2026-10-08 a scene that did not load
+    whole is not written at all (the Save says so; see test_scene_editor's test_a_scene_that_did_not_load_whole_is_never_written)."""
     import shutil
     import tempfile
     backup = pathlib.Path(tempfile.mkdtemp(prefix="xlion_scene_backup_")) / "scene"
@@ -170,7 +171,7 @@ def test_saving_a_scene_does_not_forget_the_entities_that_could_not_be_loaded(ed
         editor.wait_for("GetPlayState", r"Building=false", timeout=240)
         assert "00000101" not in editor.entities("MyTestLevel", "A1B2C3D4E5F60719"), "the entity is not in the world"
         reply = editor.cmd("Save", allow_disk=True)
-        assert "rror" not in reply, reply
+        assert "rror" not in reply and "could not be loaded" in reply and "was not saved" in reply, reply
         editor.cmd("Close -Save 0")
 
         after = (PHYSICS_SCENE / "Descriptor.txt").read_bytes().decode()

@@ -551,6 +551,51 @@ def test_a_game_module_reload_keeps_the_prefab_document_and_its_context(editor, 
     assert p.x(p.root()) == 4.0, "what the editor saved after the reload"
 
 
+def test_a_prefab_that_did_not_load_whole_is_never_written(game_level, opened):
+    """The data loss of 2026-10-08: a prefab opened under a Game that lacks its module loads only part of itself (the root, with a Soccer component, fails; its child loads, its parent reference nulled, so
+    it reads as the one root). Every write path used to write that lossy part (Root = the child, the child without its parent, ComponentDeps.txt without the module). Now none writes anything: Save, Close
+    -Save 1 and Save All refuse (Play is refused before it saves: the Game lacks the module), say what is missing and how to fix it, the editor stays unsaved, and every file of the prefab is byte for byte what it was."""
+    lv = game_level
+    prefab, name = _make(lv, children=1, parts=("Transform", "SoccerIdentity"))
+    descriptor = _guid_folder("Prefab", prefab) / "Descriptor.txt"
+    text = descriptor.read_text()
+    assert re.search(r'"Prefab/Game"\s+;full_guid #[0-9A-F]+ ', text), "the prefab names the Game of the Level it was made in"
+    descriptor.write_text(re.sub(r'("Prefab/Game"\s+;full_guid #)[0-9A-F]+', r"\g<1>1234567812345678", text))         # a Game that is not in the project: no module of it loads
+    files = _prefab_files(prefab)
+
+    p = opened(prefab, name)
+    loaded = list(p.entities())
+    assert len(loaded) == 1, f"only the child loaded: {loaded}"
+    assert "saving is blocked" in p.info()["Issue"], p.info()
+    p.set_x(loaded[0], "3.000000")
+    assert p.dirty()
+
+    for line, kept in (("Save", "it stays unsaved"), ("Close -Save 1", "stays open")):
+        reply = p.cmd(line, allow_disk=True)
+        assert "was not saved" in reply and "could not be loaded" in reply and "Give it a Game that lists that module" in reply and kept in reply, reply
+        assert p.name in [s.name for s in lv.ed.sessions()] and p.dirty(), line
+    lv.ed.cmd("SaveAll", allow_disk=True)
+    assert p.dirty() and _prefab_files(prefab) == files, "nothing of the prefab was written"
+    p.close()
+    assert _prefab_files(prefab) == files
+
+
+def test_an_unchanged_prefab_is_not_written_back(game_level, opened):
+    """The example's Player Red opened (it names no Game: the Level's is borrowed) and not changed: Save, Play and Stop write nothing - before, every Play and Save rewrote the whole prefab (its
+    ComponentDeps.txt lost the PrefabTag / RootPrefabComponent rows the template save writes, its Descriptor.txt was reformatted): a clean document is the file."""
+    prefab = "6325BCD600D8F273"
+    files = _prefab_files(prefab)
+    p = opened(prefab, "Player Red")
+    assert len(p.entities()) == 1 and not p.dirty()
+    assert p.cmd("Save", allow_disk=True) == "Saved"
+    assert p.cmd("Play", allow_disk=True).startswith("Play requested")
+    lv = game_level
+    lv.ed.wait_for(f"{p.name}\\GetPlayState", r"PlayState=Playing", timeout=240)
+    p.cmd("Stop -Keep false")
+    lv.ed.wait_for(f"{p.name}\\GetPlayState", r"PlayState=Stopped", timeout=60)
+    assert _prefab_files(prefab) == files, "no file of the prefab was written"
+
+
 @pytest.fixture
 def game_level_files_restored(game_level):
     """The Soccer Level and its Scenes put back as they were when the test ends (a test that saves it writes entities the next test's 7E57xxxx ids would collide with)."""

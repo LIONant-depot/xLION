@@ -165,6 +165,33 @@ def test_a_click_is_no_change_and_a_clean_scene_editor_closes_without_asking(gam
         s.close()
 
 
+def test_a_scene_that_did_not_load_whole_is_never_written(game_level, physics_scene_restored):
+    """A Scene one of whose entities cannot be loaded (a component no module registers: its module is not in the Game) is open in its editor, and another of its entities is changed. Save, Close -Save 1
+    and Save All refuse it - nothing is written (the entities that loaded may have lost their references to the one that did not) - say what is missing and how to fix it, and the editor stays unsaved."""
+    ed = game_level.ed
+    folder = _guid_folder("Scene", PHYSICS)
+    entity = folder / "entity_db" / "01" / "01" / "00000101.entity"
+    text = entity.read_bytes().decode()
+    assert "#296EEAAEE0EF730" in text
+    entity.write_bytes(text.replace("#296EEAAEE0EF730", "#DEADBEEF00000001", 1).encode())
+    files = {str(f.relative_to(folder)): f.read_bytes() for f in sorted(folder.rglob("*")) if f.is_file()}
+    s = _open(ed, PHYSICS, "Physics")
+    try:
+        assert "00000101" not in s.entities(), "that entity did not load"
+        s.ok(f"CreateEntity -Scene {PHYSICS} -Id 7E571237 -Folder 0")
+        assert s.dirty()
+        for line, kept in (("Save", "it stays unsaved"), ("Close -Save 1", "stays open")):
+            reply = s.cmd(line, allow_disk=True)
+            assert "was not saved" in reply and "could not be loaded" in reply and "Give it a Game that lists that module" in reply and kept in reply, reply
+            assert "Physics" in [x.name for x in ed.sessions()] and s.dirty(), line
+        ed.cmd("SaveAll", allow_disk=True)
+        assert s.dirty()
+        now = {str(f.relative_to(folder)): f.read_bytes() for f in sorted(folder.rglob("*")) if f.is_file()}
+        assert now == files, "nothing of the scene was written"
+    finally:
+        s.close()
+
+
 def test_a_scene_that_needs_a_game_opens_under_the_only_game_of_the_project(level):
     """The Level of this test names no Game, and the Pitch needs the module of the Soccer Game: a Scene names none, so its editor works under the Game of the active Level, else the project's only Game, in memory
     (the pitch loads whole, with its 72 entities, and nothing was written into any file)."""
