@@ -5,10 +5,11 @@
 // This directory is put on the include path ONLY for non-Windows builds (see the
 // top-level CMakeLists.txt), so MSVC builds never see it. It lets editor/UI code
 // that includes <windows.h> for cosmetic Win32 calls (monitor queries, cursor
-// position, shell dialogs, ...) compile unchanged on Linux. Every function here is a
-// harmless stub that reports failure; none of it is reached by the headless editor.
-// Anything headless actually needs (dynamic libraries, IPC, processes, file IO)
-// is implemented for real behind #if defined(_WIN32) in the code that uses it.
+// position, shell dialogs, ...) compile unchanged on Linux. The UI functions here are
+// harmless stubs that report failure; none of them is reached by the headless editor.
+// What headless really needs is implemented: dynamic libraries (round 3 below) and the
+// kernel objects - files, directory watching, pipes, processes, jobs - in
+// xlion_win32_kernel.h, included at the end.
 //
 #if defined(_WIN32)
 #error "linux_win32_shim/windows.h must never be used on Windows"
@@ -104,15 +105,13 @@ inline HMONITOR MonitorFromWindow ( HWND, DWORD )                   noexcept { r
 inline BOOL     GetMonitorInfoW   ( HMONITOR, LPMONITORINFO )       noexcept { return FALSE; }
 inline BOOL     GetMonitorInfoA   ( HMONITOR, LPMONITORINFO )       noexcept { return FALSE; }
 #define GetMonitorInfo GetMonitorInfoW
-inline DWORD    GetLastError      ( void )                          noexcept { return 0; }
 inline void     Sleep             ( DWORD ms )                      noexcept { ::usleep(static_cast<useconds_t>(ms) * 1000u); }
-inline BOOL     CloseHandle       ( HANDLE )                        noexcept { return TRUE; }
 inline void     OutputDebugStringA( LPCSTR )                        noexcept {}
 inline void     OutputDebugStringW( LPCWSTR )                       noexcept {}
 #define OutputDebugString OutputDebugStringW
 inline BOOL     IsDebuggerPresent ( void )                          noexcept { return FALSE; }
 // ---------------------------------------------------------------------------------
-// kernel32-style stubs (all report failure; see header comment)
+// kernel32-style types, constants and the stubs that still report failure (the real ones: xlion_win32_kernel.h)
 // ---------------------------------------------------------------------------------
 struct FILETIME   { DWORD dwLowDateTime, dwHighDateTime; };
 struct SYSTEMTIME { WORD wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds; };
@@ -196,16 +195,8 @@ typedef PROCESS_INFORMATION* LPPROCESS_INFORMATION;
 #define CP_UTF8                       65001
 #define CP_ACP                        0
 
-inline HANDLE CreateFileW( LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE ) noexcept { return INVALID_HANDLE_VALUE; }
-inline HANDLE CreateFileA( LPCSTR,  DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE ) noexcept { return INVALID_HANDLE_VALUE; }
 #define CreateFile CreateFileW
-inline BOOL   ReadFile ( HANDLE, LPVOID,  DWORD, LPDWORD n, LPOVERLAPPED ) noexcept { if (n) *n = 0; return FALSE; }
-inline BOOL   WriteFile( HANDLE, LPCVOID, DWORD, LPDWORD n, LPOVERLAPPED ) noexcept { if (n) *n = 0; return FALSE; }
-inline BOOL   FlushFileBuffers( HANDLE ) noexcept { return FALSE; }
-inline BOOL   GetFileTime( HANDLE, LPFILETIME, LPFILETIME, LPFILETIME ) noexcept { return FALSE; }
 inline BOOL   FileTimeToSystemTime( const FILETIME*, LPSYSTEMTIME s ) noexcept { if (s) std::memset(s, 0, sizeof(*s)); return FALSE; }
-inline BOOL   ReadDirectoryChangesW( HANDLE, LPVOID, DWORD, BOOL, DWORD, LPDWORD, LPOVERLAPPED, LPOVERLAPPED_COMPLETION_ROUTINE ) noexcept { return FALSE; }
-inline BOOL   CancelSynchronousIo( HANDLE ) noexcept { return FALSE; }
 inline BOOL   CancelIoEx( HANDLE, LPOVERLAPPED ) noexcept { return FALSE; }
 inline BOOL   CancelIo( HANDLE ) noexcept { return FALSE; }
 inline BOOL   GetOverlappedResult( HANDLE, LPOVERLAPPED, LPDWORD n, BOOL ) noexcept { if (n) *n = 0; return FALSE; }
@@ -214,17 +205,9 @@ inline HANDLE CreateEventA( LPSECURITY_ATTRIBUTES, BOOL, BOOL, LPCSTR ) noexcept
 #define CreateEvent CreateEventW
 inline BOOL   SetEvent( HANDLE ) noexcept { return FALSE; }
 inline BOOL   ResetEvent( HANDLE ) noexcept { return FALSE; }
-inline DWORD  WaitForSingleObject( HANDLE, DWORD ) noexcept { return WAIT_FAILED; }
 inline DWORD  WaitForMultipleObjects( DWORD, const HANDLE*, BOOL, DWORD ) noexcept { return WAIT_FAILED; }
-inline BOOL   CreatePipe( HANDLE* r, HANDLE* w, LPSECURITY_ATTRIBUTES, DWORD ) noexcept { if (r) *r = nullptr; if (w) *w = nullptr; return FALSE; }
-inline BOOL   PeekNamedPipe( HANDLE, LPVOID, DWORD, LPDWORD a, LPDWORD b, LPDWORD c ) noexcept { if (a) *a = 0; if (b) *b = 0; if (c) *c = 0; return FALSE; }
-inline BOOL   SetHandleInformation( HANDLE, DWORD, DWORD ) noexcept { return FALSE; }
 inline BOOL   CreateProcessA( LPCSTR,  LPSTR,  LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCSTR,  LPSTARTUPINFOA, LPPROCESS_INFORMATION pi ) noexcept { if (pi) std::memset(pi, 0, sizeof(*pi)); return FALSE; }
 #define CreateProcess CreateProcessW
-inline BOOL   GetExitCodeProcess( HANDLE, LPDWORD c ) noexcept { if (c) *c = 1; return FALSE; }
-inline BOOL   TerminateProcess( HANDLE, UINT ) noexcept { return FALSE; }
-inline HANDLE OpenProcess( DWORD, BOOL, DWORD ) noexcept { return nullptr; }
-inline DWORD  ResumeThread( HANDLE ) noexcept { return (DWORD)-1; }
 inline HANDLE GetCurrentProcess( void ) noexcept { return reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(-1)); }
 inline HANDLE GetCurrentThread( void ) noexcept { return reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(-2)); }
 inline DWORD  GetCurrentProcessId( void ) noexcept { return static_cast<DWORD>(::getpid()); }
@@ -280,8 +263,6 @@ inline HINSTANCE ShellExecuteA( HWND, LPCSTR,  LPCSTR,  LPCSTR,  LPCSTR,  int ) 
 #define ZeroMemory(p, n) std::memset((p), 0, (n))
 #endif
 // Overloads that accept whatever handle/path type the caller has (std::thread::native_handle(), path::c_str())
-template< typename T > inline BOOL CancelSynchronousIo( T ) noexcept { return FALSE; }
-template< typename C > inline HANDLE CreateFileW( const C*, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE ) noexcept { return INVALID_HANDLE_VALUE; }
 inline BOOL PathMatchSpecW( LPCWSTR, LPCWSTR ) noexcept { return FALSE; }
 inline BOOL IsIconic( HWND ) noexcept { return FALSE; }
 inline HWND FindWindowExW( HWND, HWND, LPCWSTR, LPCWSTR ) noexcept { return nullptr; }
@@ -409,18 +390,11 @@ typedef ULONG*        PULONG;
 #define EXCEPTION_STACK_OVERFLOW        0xC00000FDu
 #define EXCEPTION_EXECUTE_HANDLER       1
 #define EXCEPTION_CONTINUE_SEARCH       0
-// Job objects (child process groups): not available, CreateJobObject fails
+// Job objects (child process groups): xlion_win32_kernel.h
 struct JOBOBJECT_BASIC_LIMIT_INFORMATION { LONGLONG PerProcessUserTimeLimit, PerJobUserTimeLimit; DWORD LimitFlags; SIZE_T MinimumWorkingSetSize, MaximumWorkingSetSize; DWORD ActiveProcessLimit; ULONG_PTR Affinity; DWORD PriorityClass, SchedulingClass; };
 struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION { JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation; ULONGLONG IoInfo[6]; SIZE_T ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed; };
 enum JOBOBJECTINFOCLASS { JobObjectExtendedLimitInformation = 9 };
 #define JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE 0x00002000
-inline HANDLE CreateJobObjectW( LPSECURITY_ATTRIBUTES, LPCWSTR ) noexcept { return nullptr; }
-inline BOOL   SetInformationJobObject( HANDLE, JOBOBJECTINFOCLASS, LPVOID, DWORD ) noexcept { return FALSE; }
-inline BOOL   AssignProcessToJobObject( HANDLE, HANDLE ) noexcept { return FALSE; }
-inline BOOL   TerminateJobObject( HANDLE, UINT ) noexcept { return FALSE; }
-// CreateProcess with whatever string types the caller has (path::c_str() for the directory, ...)
-template< typename A, typename B, typename C >
-inline BOOL CreateProcessW( A, B, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, C, LPSTARTUPINFOW, LPPROCESS_INFORMATION pi ) noexcept { if (pi) std::memset(pi, 0, sizeof(*pi)); return FALSE; }
 // Named pipes: not used on Linux (the command console uses a Unix domain socket instead)
 #define PIPE_ACCESS_INBOUND            0x00000001
 #define PIPE_ACCESS_OUTBOUND           0x00000002
@@ -500,3 +474,8 @@ inline HRESULT CoInitialize( LPVOID ) noexcept { return E_FAIL; }
 inline void    CoUninitialize( void ) noexcept {}
 inline BOOL    PtInRect( const RECT* r, POINT p ) noexcept { return r && p.x >= r->left && p.x < r->right && p.y >= r->top && p.y < r->bottom; }
 inline HRESULT HRESULT_FROM_WIN32( unsigned long x ) noexcept { return (HRESULT)(x) <= 0 ? (HRESULT)(x) : (HRESULT)(((x) & 0x0000FFFF) | (7 << 16) | 0x80000000); }
+
+// ---------------------------------------------------------------------------------
+// the kernel objects headless really uses (files, directory watching, pipes, processes, jobs)
+// ---------------------------------------------------------------------------------
+#include "xlion_win32_kernel.h"
