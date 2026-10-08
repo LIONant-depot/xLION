@@ -106,6 +106,20 @@ Game combo's list) could use it. `xeditor::ReadOnlyTextColor()` (same file) is t
 
 The data of the popup is `DescribePrefabOverrides` (see command_line.md): the same text, one line per item.
 
+## The Scene Editor
+
+A **Scene** opens in an editor of its own, the way a prefab does: a double click on a Scene in the Asset Browser, `OpenResourceEditor` (the editor registered for the Scene type) or `OpenScene -Scene <hexguid>`
+(queued like a Level's open, with the same reply: `Opened Scene <guid>`). It is the Level editor with the Scene as its document (`level_state::m_CurrentScene`, `session::isScene()`): the tree (`Scene Tree`) has the
+scene as its top row, its entities and folders hang from it, there is no Level row and no Scene row of its own, and the commands reach it as `<Name>\Command` like a Level's. Undo, Save, Save All, Play, System
+Registry and the Logs are the Level's; the tab and the toolbar use the Scene's icon.
+
+* **It is not added to any Level.** A Level gets a Scene by dropping it on the Level or `AddScene`; a double click never does that (it used to add the Scene to whatever Level was open).
+* **One writer per Scene.** A Scene that a Level, or another Scene Editor, has open is not opened a second time: that editor is brought to the front, nothing is selected, and the reply (`OpenScene: <guid> is
+  already open in <Level or editor name>`) says where. A Level that wants a Scene another editor has open keeps today's behaviour (read-only there, `edited in <editor>`).
+* **The Game.** A Scene names none, so its editor works, in memory only and until it closes, under the Game of the Level the person is working in (the one it was opened from), else the project's only Game
+  (the same `BorrowAGame` a prefab that names none uses); nothing is written. The Inspector's Scene row says `Works under the Game ... from the Level`; with no Game found the same red hint as a prefab says why.
+* **A click is not a change**, and a clean editor closes without asking; a changed one asks once (the question's id carries the scene's guid).
+
 ## What is not done
 
 * The window layout of a Prefab Editor is the Level's (tree, editor, inspector, system registry); there is no preview-only mode yet.

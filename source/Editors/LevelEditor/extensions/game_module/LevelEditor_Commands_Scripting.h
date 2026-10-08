@@ -1012,11 +1012,12 @@ namespace level_editor::commands
         std::string Query() noexcept override
         {
             auto& State = get<xlevel::level_context>().State();
-            if (State.m_CurrentLevel.empty()) return "DescribeLevel: no Level is open";
+            if (State.m_CurrentLevel.empty() && !State.isPrefabEditor() && !State.isSceneEditor()) return "DescribeLevel: no Level is open";
             // The selected entity (its id) and whether the live handle the editor keeps of it is the entity the scene has under that id now (after a live update of prefab instances it must be).
             const auto* pScene = State.m_SelectedEntityId == xecs::scene::invalid_permanent_id_v ? nullptr : get<xlevel::level_context>().World().m_SceneMgr.Find(State.m_SelectedEntityScene);
             const bool  bLive  = pScene && pScene->m_LocalToRuntime.contains(State.m_SelectedEntityId) && pScene->m_LocalToRuntime.at(State.m_SelectedEntityId).m_Value == State.m_SelectedEntity.m_Value;
-            return xlevel::DescribeLevelView(xlevel::BuildLevelView(State)) + std::format("Selected={}\nSelectedEntity={}\nSelectedEntityLive={}\n", State.m_bRootSelected ? "true" : "false"
+            // A Prefab Editor or a Scene Editor has no Level: only what it selects (DescribePrefab says the rest for a prefab)
+            return (State.m_CurrentLevel.empty() ? std::string("DescribeLevel: ok (no Level: this editor's document is a prefab or a scene)\n") : xlevel::DescribeLevelView(xlevel::BuildLevelView(State))) + std::format("Selected={}\nSelectedEntity={}\nSelectedEntityLive={}\n", State.m_bRootSelected ? "true" : "false"
                 , State.m_SelectedEntityId == xecs::scene::invalid_permanent_id_v ? std::string("none") : xscene::commands::FormatEntityId(State.m_SelectedEntityId), bLive ? "true" : "false");
         }
     };

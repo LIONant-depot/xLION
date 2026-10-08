@@ -229,6 +229,7 @@ namespace level_editor
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
         xlevel::commands::open_prefab_cmd                   CmdOpenPrefab;          // OpenPrefab: a prefab in its own editor (a Prefab Editor)
+        xlevel::commands::open_scene_cmd                    CmdOpenScene;           // OpenScene: a Scene in its own editor (a Scene Editor)
         xresource_editor::commands::create_library_query_cmd          CmdCreateLibrary;
         xresource_editor::commands::list_legal_reference_libraries_query_cmd CmdListLegalReferenceLibraries;
         xresource_editor::commands::list_libraries_query_cmd          CmdListLibraries;
@@ -328,6 +329,7 @@ namespace level_editor
         , CmdExplainLastKey(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
         , CmdOpenPrefab(Workspace, pEditor)
+        , CmdOpenScene(Workspace, pEditor)
         , CmdCreateLibrary(Workspace, pEditor)
         , CmdListLegalReferenceLibraries(Workspace, pEditor)
         , CmdListLibraries(Workspace, pEditor)
@@ -433,6 +435,7 @@ namespace level_editor
             CmdExplainLastKey.m_pDataBase = pEditor;
             CmdOpenLevel.m_pDataBase = pEditor;
             CmdOpenPrefab.m_pDataBase = pEditor;
+            CmdOpenScene.m_pDataBase = pEditor;
             CmdCreateLibrary.m_pDataBase = pEditor;
             CmdListLegalReferenceLibraries.m_pDataBase = pEditor;
             CmdListLibraries.m_pDataBase = pEditor;

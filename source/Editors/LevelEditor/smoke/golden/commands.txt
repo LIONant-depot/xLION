@@ -82,6 +82,7 @@ OpenInVisualStudio
 OpenLevel
 OpenPrefab
 OpenResourceEditor
+OpenScene
 OpenTypeSource
 Pause
 Play

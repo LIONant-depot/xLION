@@ -23,7 +23,7 @@ namespace level_editor
         // here: a new Level editor builds a world, which waits for a clean point of the frame (PumpLevels).
         AssetBrowser.m_OnOpenAsset = [this](xresource_editor::library::guid LibraryGuid, xresource::full_guid AssetGuid)
             {
-                if (AssetGuid.m_Type == xecs::level::type_guid_v || AssetGuid.m_Type == xecs::prefab::type_guid_v)        // a Level, or a Prefab in its own editor (a Prefab Editor)
+                if (AssetGuid.m_Type == xecs::level::type_guid_v || AssetGuid.m_Type == xecs::prefab::type_guid_v || AssetGuid.m_Type == xecs::scene::type_guid_v)        // a Level, or a Prefab in its own editor (a Prefab Editor), or a Scene (a Scene Editor)
                 {
                     xlevel::QueueOpenLevel(AssetGuid);
                     return;

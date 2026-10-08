@@ -15,7 +15,17 @@ namespace level_editor
     {
         const std::uint64_t Value = LevelGuid.m_Instance.m_Value;
         const bool          bPrefab = LevelGuid.m_Type == xecs::prefab::type_guid_v;
-        const char* const   pCommand = bPrefab ? "OpenPrefab" : "OpenLevel";
+        const bool          bScene  = LevelGuid.m_Type == xecs::scene::type_guid_v;
+        const char* const   pCommand = bPrefab ? "OpenPrefab" : bScene ? "OpenScene" : "OpenLevel";
+        // One writer per Scene: a Scene that a Level (or another Scene editor) has open is not opened a second time - that editor is brought to the front, selecting nothing.
+        if (bScene && !ResourceEditors.Find(LevelGuid))
+            if (auto* pHolder = xlevel::EditorHoldingScene(xecs::scene::guid{ .m_Instance = LevelGuid.m_Instance }))
+            {
+                std::string HolderName = "another editor";
+                ForEachLevelSession([&](xlevel::session& S) { if (&S.m_CmdContext == pHolder) { HolderName = S.DisplayName(); S.Focus(); } });
+                return std::format("OpenScene: {:016X} is already open in {}", Value, HolderName);
+            }
+        if (bScene) xlevel::GiveSceneAGameIfNone(Value);            // a Scene names no Game: it works under the Level's (or the project's only one), in memory
         if (bPrefab) xlevel::GivePrefabAGameIfNone(Value);          // a prefab that names no Game works under the Level's (or the project's only one), in memory, before its Game is looked at (the first build waits for it)
         if (auto* pOpen = ResourceEditors.Find(LevelGuid); pOpen)
         {
@@ -36,7 +46,8 @@ namespace level_editor
         if (pSession == nullptr || !pSession->m_State.HasDocument())
         {
             if (pEditor) pEditor->m_bOpen = false;          // it never got a Level: drop it
-            if (bPrefab) xlevel::ErasePrefabGameOverride(Value);
+            if (bPrefab || bScene) xlevel::ErasePrefabGameOverride(Value);
+            if (bScene) return std::format("OpenScene: failed to open {:016X} ({})", Value, pSession && !pSession->m_OpenError.empty() ? pSession->m_OpenError : std::string("unknown Scene guid or load error"));
             if (bPrefab) return std::format("OpenPrefab: failed to open {:016X} ({})", Value, pSession && !pSession->m_OpenError.empty() ? pSession->m_OpenError : std::string("unknown Prefab guid or load error"));
             return std::format("OpenLevel: failed to open {:016X} (unknown Level guid or load error)", Value);
         }
@@ -52,7 +63,8 @@ namespace level_editor
                 if (!xscene::IsComponentInLiveRegistry(*pSession->m_pGameMgr, Dep.m_Guid) && std::find_if(Missing.begin(), Missing.end(), [&](auto& M) noexcept { return M.m_Guid == Dep.m_Guid; }) == Missing.end())
                     Missing.push_back(Dep);
 
-        std::string Result = bPrefab ? std::format("Opened Prefab {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size())
+        std::string Result = bScene  ? std::format("Opened Scene {:016X}", Value)
+                           : bPrefab ? std::format("Opened Prefab {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size())
                                      : std::format("Opened Level {:016X}, {} scene(s) now open", Value, pSession->m_State.m_OpenScenes.size());
         if (!Missing.empty())
         {
@@ -100,6 +112,7 @@ namespace level_editor
             for (auto& LevelGuid : Pending)
             {
                 if (LevelGuid.m_Type == xecs::prefab::type_guid_v) xlevel::GivePrefabAGameIfNone(LevelGuid.m_Instance.m_Value);
+                if (LevelGuid.m_Type == xecs::scene::type_guid_v && !xlevel::EditorHoldingScene(xecs::scene::guid{ .m_Instance = LevelGuid.m_Instance })) xlevel::GiveSceneAGameIfNone(LevelGuid.m_Instance.m_Value);
 #if defined(XECS_BUILD_SHARED)
                 if (const auto Game = xlevel::GameOfDocument(LevelGuid); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
                 {
@@ -203,9 +216,8 @@ namespace level_editor
                 }
                 else if (Guid.m_Type == xecs::scene::type_guid_v)
                 {
-                    // A Scene goes into the Level the user is working on.
-                    if (auto* pCtx = xlevel::g_pActiveLevelContext; pCtx && !pCtx->State().m_CurrentLevel.empty())
-                        xscene::OpenScene(pCtx->World(), pCtx->State(), Guid);
+                    // A Scene opens in an editor of its own (it is added to a Level by dropping it on the Level, or AddScene).
+                    xlevel::QueueOpenLevel(Guid);
                 }
             };
 
