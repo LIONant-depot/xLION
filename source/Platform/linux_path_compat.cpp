@@ -5,7 +5,8 @@
 // "<project>\\Cache\\Resources\\Platforms\\WINDOWS\\..." - backslash separators and a case-insensitive
 // file system ("cache\\plugins" for "Cache/Plugins"). Rewriting every such site (and the data) would be a
 // large, risky change to code shared with the Windows build. Instead, on Linux only, this file interposes
-// the path-taking libc functions inside the executable (it is compiled only into the Linux executables):
+// the path-taking libc functions (it is built as libxlion_pathcompat.so, which the executable and the engine
+// libraries all need - see the root CMakeLists.txt):
 //
 //   1. a path that contains '\\' has it turned into '/' before the call;
 //   2. if the call then fails with ENOENT/ENOTDIR, the path is resolved component by component,
@@ -13,8 +14,9 @@
 //
 // Paths that already work on Linux are passed through untouched (one extra check of the string), so normal
 // POSIX behaviour is unchanged. Set XLION_NO_PATH_COMPAT=1 to switch the translation off.
-// Calls made by std::filesystem / fstream / fopen / the .so files all go through these definitions because
-// the executable exports them (they are referenced by libstdc++/libc at link time).
+// Calls made by std::filesystem / fstream / fopen / the .so files all go through these definitions: the library
+// is in the global scope ahead of libc (the executable needs it), and in the local scope of the engine copies
+// that are dlopen'ed with RTLD_DEEPBIND (xlevel_engine_copies.h - they need it themselves).
 //
 #if !defined(_WIN32)
 #ifndef _GNU_SOURCE

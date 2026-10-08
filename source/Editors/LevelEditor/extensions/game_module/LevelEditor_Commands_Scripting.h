@@ -1101,6 +1101,8 @@ namespace level_editor::commands
             {
                 const auto Imports = xlevel::engine::ImportsOf(xlevel::engine::ReadFile(pSet->m_RenderPath));
                 RenderImport = Imports.empty() ? std::string("?") : Imports.front();
+                // the import that names the core copy (an ELF image needs more than one library; the first one is not always the core)
+                for (const auto& Import : Imports) if (Import.find(std::filesystem::path(pSet->m_Core).stem().string()) != std::string::npos) { RenderImport = Import; break; }
                 auto pRender = xlevel::CreateRenderEditor(pSet->m_Render.c_str());
                 bRender = pRender != nullptr;
                 bChecksum = xlevel::engine::ChecksumIsRight(pSet->m_RenderPath);

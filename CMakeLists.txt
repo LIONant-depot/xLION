@@ -659,8 +659,21 @@ if(NOT WIN32)
   find_package(Vulkan REQUIRED)
   find_package(Threads REQUIRED)
   target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS} atomic)
-  # Windows-style paths (backslashes, case-insensitive names) at the libc boundary - see the file header
-  target_sources(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
+  # Windows-style paths (backslashes, case-insensitive names) at the libc boundary - see the file header. Its own
+  # shared library (libxlion_pathcompat.so, next to the executable), needed by the executable AND by the engine
+  # libraries: the per-Level engine copies (xlevel_engine_copies.h) are dlopen'ed with RTLD_DEEPBIND, so they look
+  # symbols up in their own dependencies before the global scope - only a library they need themselves comes ahead
+  # of libc there. --no-as-needed keeps the DT_NEEDED even where nothing names a symbol of it directly.
+  add_library(xlion_pathcompat SHARED "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
+  target_link_libraries(xlion_pathcompat PRIVATE ${CMAKE_DL_LIBS})
+  foreach(_xlion_lib xLION_Headless xLIONCore xLIONRender)
+    if(TARGET ${_xlion_lib})
+      target_link_libraries(${_xlion_lib} PRIVATE "-Wl,--push-state,--no-as-needed" xlion_pathcompat "-Wl,--pop-state")
+      set_property(TARGET ${_xlion_lib} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+    endif()
+  endforeach()
+  add_custom_command(TARGET xLION_Headless POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xlion_pathcompat>" "$<TARGET_FILE_DIR:xLION_Headless>")
   # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
   set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
   # DLL semantics for the engine .so's: each one binds its own symbols (its own XecsPlugin_* entry points, its own
