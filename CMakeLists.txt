@@ -51,6 +51,10 @@ if(NOT WIN32)
   add_compile_definitions(ZSTD_DISABLE_ASM)
   # Linux port: stub <windows.h> for UI-only Win32 calls (never on the MSVC include path)
   include_directories(AFTER "${CMAKE_SOURCE_DIR}/source/Platform/linux_win32_shim")
+  # Code includes both <windows.h> and <Windows.h>. The repo only holds windows.h (two names differing only in case cannot
+  # be checked out on Windows/NTFS), so the case alias is generated into the build tree here.
+  file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/linux_win32_shim_alias/Windows.h" @ONLY CONTENT "#pragma once\n#include \"${CMAKE_SOURCE_DIR}/source/Platform/linux_win32_shim/windows.h\"\n")
+  include_directories(AFTER "${CMAKE_BINARY_DIR}/linux_win32_shim_alias")
   # MSVC also searches the directories of all open includers; clang does not.
   include_directories(AFTER "${CMAKE_SOURCE_DIR}/dependencies/xGPU/source")
 endif()
