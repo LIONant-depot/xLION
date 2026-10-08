@@ -27,6 +27,15 @@ prefab made from a Level starts with that Level's Game. `SetPrefabGame -Prefab <
 changes it, and refuses a Game that lacks a module the prefab needs; without `-Game` the prefab names none: no scripts, components or systems of any module, as a Level that names none. It takes effect when the
 editor is opened again. The prefabs of the example project name none until they are given one.
 
+**A prefab that names no Game still opens whole** (Edit Alone, a double click in the Asset Browser, `OpenPrefab`, `OpenResourceEditor`): its editor works, in memory only and until it closes, under (1) the
+Game the prefab names; else (2) the Game of the Level (or prefab) the person is working in; else (3) the project's only Game; else none, with the message that says so. Nothing is written into the prefab:
+the Inspector says `(no Game) - using <Game> from the Level. Set a Game to keep this.` in a neutral colour (red only when no Game could be found), `GetPrefabGame` still says `Source=none` and adds
+`Using=` / `UsingFrom=`, and `DescribePrefab` says the Game in use and `GameFrom=`. `SetPrefabGame` keeps it.
+
+**A click is not a change.** A selection is an undo step, but never makes a Level or a prefab "unsaved" (`xlevel::HasUnsavedDocumentChanges` skips `Select`, `SelectLevel`, `ToggleMultiSelect`,
+`ClearSelection`): closing the editors of a Level and its prefab (the close button of the dock closes every tab at once) asks only about what was really edited, once per editor (the question's id carries the
+document's guid).
+
 ## Play, and the scenes brought in to test with
 
 Play works as in a Level: the prefab is saved, the world is rebuilt from what is saved with the builders on (a collider gets its body), and Stop puts the editor back. The prefab plays **by itself**; to test it in a
@@ -71,6 +80,31 @@ members and what was added under them - is not drawn and not picked in that edit
 * **Play is refused** in an editor opened in context (the prefab would play over the Level's own instance): play the Level.
 * The editor works under the **Game of the Level** while it is open (so that the scenes around it load whole: the modules of its entities are there), whatever Game the prefab names; nothing is written into the prefab.
 * Not from inside a prefab (no drill-down yet), and not when the prefab is already open in an editor.
+
+## The prefab of an instance, in the Inspector
+
+For an entity that is part of a prefab instance (the instance's root, or one of its members, nested ones too) the top of the Inspector shows, under Add Component:
+
+* **The prefab row**: the prefab's picture, its name and, under the name, the *edit* and *find in the resource browser* buttons - the two lines of any resource reference of the Inspector, drawn by the same code
+  (`xresource_editor::RenderResourceReferenceRow`) in its read-only form: no picker, no drag and drop, **no clear button**, no label; the reference is never changed from here (nor by command: `SetProperty`,
+  `AddComponent` and `RemoveComponent` refuse the instance component). The edit button opens a menu under it with **Edit In Context** (the Level Tree's item: it queues `EditInContext` for the instance placed in the
+  Level) and **Edit Alone** (opens the prefab in an editor of its own, as a double click in the Asset Browser does). An entry that cannot run is disabled and its hint says why (playing, an instance inside a prefab,
+  the prefab already open in an editor).
+* **`Prefab Overrides (N)`** (greyed with none; it still opens, to say so). The popup opens under the button and lists what the whole instance does differently, grouped by member (the entity selected first,
+  expanded; a click selects that entity; a member of a nested instance shows its address, the ids of each prefab crossed): **Added** components (a revert icon removes it), **Removed** components (struck through;
+  Revert All brings them back), **Modified (n)** components with `Name: prefab's value -> instance's value` per property (a revert icon each), then **Hierarchy** (children the instance removed, entities of the scene
+  added under it), **Orphans** (overrides of a member the prefab no longer has, with *Remove orphan overrides*) and the footer **Revert All**, **Revert Hierarchy** (disabled with no hierarchy change) and **Apply**.
+  *Revert All asks first*: "Revert all overrides of X? N changes will be undone (you can undo this)", Revert / Cancel; the command it runs, `RevertAllOverrides`, is undoable and asks nothing by itself.
+* In the component list of the selected entity, the header of a component the instance **added** is grey-blue (one colour in every theme), and a component with **modified** properties has a thin blue mark at its left.
+  A removed component has no header: it is only in the popup.
+
+**Where a popup opens** is decided in one place, `xeditor::popup::PlaceUnder(anchorMin, anchorMax, assumedSize)` (`dependencies/xeditor/include/xeditor/hint.h`, next to `hint::PlaceAwayFromEdges`; the pure part
+is `PlaceUnderAt`): call it before `ImGui::BeginPopup` with the rectangle of the item the popup belongs to. The popup goes under the item with its left edge on the item's; against the right border its right
+edge goes on the item's right edge (then flush with the border); with no room below it goes above when there is more room there. It stays inside the window it is drawn in (a popup that crosses the window's
+edge becomes a window of the OS of its own, cut at the screen). Used by the prefab row's edit menu, the Prefab Overrides popup and Add Component; the other popups that open under a button (the Systems popup, the
+Game combo's list) could use it. `xeditor::ReadOnlyTextColor()` (same file) is the colour of the value of a read only property (the text colour faded as `ImGui::BeginDisabled` fades it): the prefab's name uses it.
+
+The data of the popup is `DescribePrefabOverrides` (see command_line.md): the same text, one line per item.
 
 ## What is not done
 

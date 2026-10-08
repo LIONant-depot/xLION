@@ -16,6 +16,7 @@ namespace level_editor
         const std::uint64_t Value = LevelGuid.m_Instance.m_Value;
         const bool          bPrefab = LevelGuid.m_Type == xecs::prefab::type_guid_v;
         const char* const   pCommand = bPrefab ? "OpenPrefab" : "OpenLevel";
+        if (bPrefab) xlevel::GivePrefabAGameIfNone(Value);          // a prefab that names no Game works under the Level's (or the project's only one), in memory, before its Game is looked at (the first build waits for it)
         if (auto* pOpen = ResourceEditors.Find(LevelGuid); pOpen)
         {
             pOpen->Focus();
@@ -35,6 +36,7 @@ namespace level_editor
         if (pSession == nullptr || !pSession->m_State.HasDocument())
         {
             if (pEditor) pEditor->m_bOpen = false;          // it never got a Level: drop it
+            if (bPrefab) xlevel::ErasePrefabGameOverride(Value);
             if (bPrefab) return std::format("OpenPrefab: failed to open {:016X} ({})", Value, pSession && !pSession->m_OpenError.empty() ? pSession->m_OpenError : std::string("unknown Prefab guid or load error"));
             return std::format("OpenLevel: failed to open {:016X} (unknown Level guid or load error)", Value);
         }
@@ -97,6 +99,7 @@ namespace level_editor
             xlevel::g_PendingOpenLevels.clear();
             for (auto& LevelGuid : Pending)
             {
+                if (LevelGuid.m_Type == xecs::prefab::type_guid_v) xlevel::GivePrefabAGameIfNone(LevelGuid.m_Instance.m_Value);
 #if defined(XECS_BUILD_SHARED)
                 if (const auto Game = xlevel::GameOfDocument(LevelGuid); xlevel::GameNeedsFirstBuild(Game) || xlevel::FirstBuildRunning(Game))
                 {

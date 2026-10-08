@@ -959,6 +959,9 @@ namespace level_editor::commands
                 , Named ? module_dependencies::Label(Names, Named) : std::string());
             if (const auto It = xlevel::g_PrefabGameOverride.find(Prefab); It != xlevel::g_PrefabGameOverride.end())
                 Out += std::format("\nContextGame={}", module_dependencies::GameAsset(It->second));
+            // The prefab names none: its editor works under another Game, in memory (the Level's, or the project's only one); SetPrefabGame keeps it
+            if (const auto From = xlevel::g_PrefabGameFrom.find(Prefab); From != xlevel::g_PrefabGameFrom.end() && xlevel::g_PrefabGameOverride.contains(Prefab))
+                Out += std::format("\nUsing={}\nUsingFrom={}", module_dependencies::GameAsset(xlevel::g_PrefabGameOverride.at(Prefab)), From->second);
             return Out;
         }
         xcmdline::parser::handle m_hPrefab;
@@ -993,9 +996,9 @@ namespace level_editor::commands
             const auto Names = xlevel::commands::BuildAssetNameMap(xecs::scene::type_guid_v);
             std::string Contexts;
             for (const auto& C : State.m_ContextScenes) Contexts += (Contexts.empty() ? "" : ", ") + module_dependencies::Label(Names, C.m_Instance.m_Value);
-            return std::format("DescribePrefab: ok\nPrefab={:016X}\nName={}\nScene={}\nGame={}\nGameName={}\nCanRun={}\nIssue={}\nRoot={}\nEntities={}\nContextScenes={}\nSelected={}\n"
+            return std::format("DescribePrefab: ok\nPrefab={:016X}\nName={}\nScene={}\nGame={}\nGameName={}\nGameFrom={}\nCanRun={}\nIssue={}\nRoot={}\nEntities={}\nContextScenes={}\nSelected={}\n"
                 , State.m_CurrentPrefab.m_Instance.m_Value, Name, xscene::commands::FormatSceneGuid(State.PrefabScene())
-                , Status.m_bNamed ? module_dependencies::GameAsset(Status.m_Game) : std::string("(none)"), Status.m_Name, Status.m_Issue.empty() ? "true" : "false", Status.m_Issue, Root, nEntities
+                , Status.m_Game ? module_dependencies::GameAsset(Status.m_Game) : std::string("(none)"), Status.m_Name, Status.m_UsingFrom.empty() ? std::string(Status.m_bNamed ? "the prefab" : "none") : Status.m_UsingFrom, Status.m_Issue.empty() ? "true" : "false", Status.m_Issue, Root, nEntities
                 , Contexts.empty() ? std::string("(none)") : Contexts, State.m_bRootSelected ? "true" : "false");
         }
     };

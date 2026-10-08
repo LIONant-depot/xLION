@@ -234,6 +234,52 @@ def test_a_prefab_cannot_hold_itself_or_folders(level, opened):
     assert "no folders" in p.cmd(f"CreateFolder -Scene {p.guid} -Id 00000042 -Parent 0 -Name Nope")
 
 
+def test_a_prefab_opens_with_its_root_selected_and_that_is_no_change(level, opened):
+    """The root of the prefab is the selection from the start (the Inspector shows it, the tree row is lit, the gizmo is on it, the viewport turns the camera to a new selection): set once the document is loaded,
+    not an undo step and no change (the editor is clean, there is nothing to undo)."""
+    prefab, name = _make(level, children=1)
+    p = opened(prefab, name)
+    root = p.root()
+    level.ed.wait_for(f"{p.name}\\DescribeLevel", rf"SelectedEntity=\S*{root}\b", timeout=30)
+    assert re.search(r"SelectedEntityLive=(1|true)", p.cmd("DescribeLevel"), re.I), p.cmd("DescribeLevel")
+    assert not p.dirty()
+    assert "nothing" in p.cmd("Undo").lower(), "the selection is not an undo step"
+    child = next(e for e in p.entities() if e != root)
+    p.ok(f"Select -Scene {p.guid} -Id {child}")
+    level.ed.wait_for(f"{p.name}\\DescribeLevel", rf"SelectedEntity=\S*{child}\b", timeout=30)
+    time.sleep(0.5)
+    assert re.search(rf"SelectedEntity=\S*{child}\b", p.cmd("DescribeLevel")), "a selection the person made is not taken back"
+
+
+def test_a_click_is_not_an_unsaved_change_so_closing_the_editors_asks_nothing(level, opened, level_files_restored):
+    """Quitting with a Prefab Editor open (the dock's close button closes every editor tab at once) asked "Save changes?" for a Level whose person had only clicked an entity to Edit its prefab: a selection
+    is an undo step, and the Level counted as changed. A selection never makes a document unsaved (the Prefab Editor's either), a real edit does, and Undo of it with a click in between is clean again."""
+    prefab, name = _make(level)
+    p = opened(prefab, name)
+    assert "rror" not in level.cmd("Save", allow_disk=True)
+    assert not level.dirty()
+    entity = next(iter(level.entities()))
+    level.ok(f"Select -Scene {level.scene} -Id {entity}")
+    assert not level.dirty(), "a click in the Level changes nothing of the document"
+    level.ok(f"DeleteEntity -Scene {level.scene} -Id {level.new_entity()}")
+    assert level.dirty(), "a real edit does"
+    level.cmd("Undo")
+    level.cmd("Undo")
+    assert not level.dirty(), "undone back to what was saved, with a click in between: clean again"
+
+    root = p.root()
+    p.ok(f"Select -Scene {p.guid} -Id {root}")
+    assert not p.dirty(), "a click in the Prefab Editor changes nothing of the prefab"
+    p.set_x(root, "3.000000")
+    assert p.dirty()
+    p.ok(f"Select -Scene {p.guid} -Id {root}")
+    p.cmd("Undo")                                                      # the click
+    p.cmd("Undo")                                                      # the edit
+    assert not p.dirty(), "undone back to what was saved, with a click in between: clean"
+    assert "unsaved" not in p.cmd("Close").lower(), "a Prefab Editor that was only clicked closes without asking"
+    assert p.name not in [s.name for s in level.ed.sessions()]
+
+
 def test_closing_a_dirty_prefab_editor_asks_and_discarding_leaves_the_file(level, opened):
     prefab, name = _make(level)
     p = opened(prefab, name)
@@ -421,6 +467,27 @@ def test_an_apply_the_editor_cannot_take_as_a_step_is_written_to_the_file(level,
 
 
 # ---- the Game a prefab plays with --------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def test_a_prefab_that_names_no_game_opens_under_the_game_of_the_level_in_memory(game_level, opened):
+    """The example prefabs name no Game: opened (Edit Alone, a double click, OpenPrefab) they used to open empty - none of the components of the Soccer module loaded. Now the editor works under the Game of the
+    Level it was opened from, in memory only (the prefab file is not written; SetPrefabGame keeps it): GetPrefabGame says Source=none and what is used and from where, DescribePrefab says the Game in use and
+    that it can run the prefab, the entities load, and closing the editor forgets it."""
+    lv = game_level
+    ed = lv.ed
+    level_game = re.search(r"^Game=(\S+)", ed.cmd(f"GetLevelGame -Level {lv.guid}"), re.M)[1]
+    prefab = "6325BCD600D8F273"
+    assert "Source=none" in ed.cmd(f"GetPrefabGame -Prefab {prefab}"), "the example prefab names no Game (this test comes before the one that gives every example prefab one)"
+    before = _entity_files(prefab)
+    p = opened(prefab, "Player Red")
+    assert len(p.entities()) >= 1, "the entities of the prefab load: the Level's Game provides their modules"
+    got = ed.cmd(f"GetPrefabGame -Prefab {prefab}")
+    assert "Source=none" in got and f"Using={level_game}" in got and "UsingFrom=the Level" in got, got
+    described = p.cmd("DescribePrefab")
+    assert f"Game={level_game}" in described and "GameFrom=the Level" in described and "CanRun=true" in described, described
+    assert _entity_files(prefab) == before and re.search(r"^Game=\(none\)", got, re.M), "nothing was written into the prefab"
+    p.close()
+    assert "Using=" not in ed.cmd(f"GetPrefabGame -Prefab {prefab}"), "the Game in use is forgotten when its editor closes"
+
 
 def test_a_prefab_made_in_a_level_plays_with_the_game_of_that_level(game_level):
     """The Soccer level names a Game: a prefab made from it names the same one (D2), SetPrefabGame changes it (undoable), and a Game that lacks what the prefab needs is refused."""

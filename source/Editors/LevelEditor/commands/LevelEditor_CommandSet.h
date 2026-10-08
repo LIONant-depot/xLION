@@ -41,6 +41,7 @@ namespace level_editor
         xscene::commands::revert_all_overrides_cmd          CmdRevertAllOverrides;
         xscene::commands::list_prefab_overrides_query_cmd   CmdListPrefabOverrides;   // Name\ListPrefabOverrides: an instance's recipe, by member address, orphans marked
         xscene::commands::remove_orphan_overrides_cmd       CmdRemoveOrphanOverrides;
+        xscene::commands::describe_prefab_overrides_query_cmd CmdDescribePrefabOverrides;   // Name\DescribePrefabOverrides: what the Prefab Overrides popup shows, as text
         xscene::commands::add_component_cmd                 CmdAddComponent;
         xscene::commands::remove_component_cmd              CmdRemoveComponent;
         xscene::commands::create_entity_cmd                 CmdCreateEntity;
@@ -149,6 +150,7 @@ namespace level_editor
         , CmdRevertAllOverrides(Level, pScene)
         , CmdListPrefabOverrides(Level, pScene)
         , CmdRemoveOrphanOverrides(Level, pScene)
+        , CmdDescribePrefabOverrides(Level, pScene)
         , CmdAddComponent(Level, pScene)
         , CmdRemoveComponent(Level, pScene)
         , CmdCreateEntity(Level, pScene)
