@@ -666,6 +666,7 @@ if(NOT WIN32)
   # of libc there. --no-as-needed keeps the DT_NEEDED even where nothing names a symbol of it directly.
   add_library(xlion_pathcompat SHARED "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
   target_link_libraries(xlion_pathcompat PRIVATE ${CMAKE_DL_LIBS})
+  cmake_policy(SET CMP0079 NEW)   # xLIONCore/xLIONRender are defined in their own directories (FetchContent)
   foreach(_xlion_lib xLION_Headless xLIONCore xLIONRender)
     if(TARGET ${_xlion_lib})
       target_link_libraries(${_xlion_lib} PRIVATE "-Wl,--push-state,--no-as-needed" xlion_pathcompat "-Wl,--pop-state")
