@@ -25,13 +25,9 @@ namespace level_editor
 
             ForEachLevelSession([](xlevel::session& S)
             {
-#if defined(_WIN32)
-                if (S.m_State.m_PlayState == xlevel::level_state::play_state::Playing) S.m_pEcs->RunSystems();
-#else
-                // Linux port: Run() = advance game_time, then run the systems. RunSystems() alone never moves the clock, so the physics
-                // takes 0 fixed steps (no [Physics] ticks). Kept to non-Windows so MSVC behavior is unchanged - likely wanted there too.
+                // Run() = advance the game clock, then run the systems - the same call the graphical editor's session makes
+                // (xlevel_session.h). RunSystems() alone never moves the clock, so fixed-step systems (physics) took 0 steps.
                 if (S.m_State.m_PlayState == xlevel::level_state::play_state::Playing) S.m_pEcs->Run();
-#endif
             });
 
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
