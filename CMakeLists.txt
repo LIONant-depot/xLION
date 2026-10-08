@@ -28,35 +28,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(xcmake_tools)
 include(${CMAKE_BINARY_DIR}/_deps/xcmake_tools/Common.cmake)
 
-# Linux port (clang): applies to every target added below, dependencies included, and never to MSVC.
-#  - -fms-extensions/-fdeclspec: accept the MSVC syntax the depots use (__declspec(noinline), ...);
-#    dllexport/dllimport are no-ops on ELF, where every symbol is exported by default anyway.
-#  - the force-included compat header supplies the MSVC secure-CRT names and the std headers MSVC's STL
-#    pulls in transitively (see source/Platform/xlion_platform_compat_linux.h).
+# Linux port (clang): applies to every target added below, dependencies included, and never to MSVC - the clang flags,
+# the force-included MSVC compat header and the <windows.h> shim. The same file is used by the plugins' asset compilers
+# (see the xlion_compilers target below).
 if(NOT WIN32)
-  add_compile_options(
-    "$<$<COMPILE_LANGUAGE:CXX>:-include${CMAKE_SOURCE_DIR}/source/Platform/xlion_platform_compat_linux.h>"
-    "$<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>"
-    "$<$<COMPILE_LANGUAGE:CXX>:-fdeclspec>"
-    -fPIC
-    -march=x86-64-v3   # AVX2/FMA/F16C: xmath uses those intrinsics unconditionally (MSVC needs no flag for them)
-    -ferror-limit=200
-    -Wno-unknown-pragmas -Wno-ignored-attributes -Wno-microsoft-template -Wno-microsoft-cast
-    -Wno-unused-value -Wno-switch -Wno-deprecated-declarations -Wno-nonportable-include-path -Wno-invalid-constexpr -fbracket-depth=2048
-  )
-  # MSVC defines _DEBUG for Debug builds (/MDd); several depots key debug-only members/asserts off it.
-  add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
-  # zstd's x86-64 Huffman fast path lives in a .S file the xcompression component does not list; MSVC
-  # builds never use it either, so turn it off and use the C implementation.
-  add_compile_definitions(ZSTD_DISABLE_ASM)
-  # Linux port: stub <windows.h> for UI-only Win32 calls (never on the MSVC include path)
-  include_directories(AFTER "${CMAKE_SOURCE_DIR}/source/Platform/linux_win32_shim")
-  # Code includes both <windows.h> and <Windows.h>. The repo only holds windows.h (two names differing only in case cannot
-  # be checked out on Windows/NTFS), so the case alias is generated into the build tree here.
-  file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/linux_win32_shim_alias/Windows.h" @ONLY CONTENT "#pragma once\n#include \"${CMAKE_SOURCE_DIR}/source/Platform/linux_win32_shim/windows.h\"\n")
-  include_directories(AFTER "${CMAKE_BINARY_DIR}/linux_win32_shim_alias")
-  # MSVC also searches the directories of all open includers; clang does not.
-  include_directories(AFTER "${CMAKE_SOURCE_DIR}/dependencies/xGPU/source")
+  include("${CMAKE_SOURCE_DIR}/source/Platform/xlion_linux_flags.cmake")
 endif()
 
 #
@@ -691,6 +667,52 @@ if(NOT WIN32)
     if(TARGET ${_xlion_lib})
       target_link_options(${_xlion_lib} PRIVATE "LINKER:-Bsymbolic")
     endif()
+  endforeach()
+endif()
+
+# Linux port: the plugins' asset compilers (texture, geoms, skeleton, anim package, materials, font, script module, game),
+# built natively from each plugin's own CMakeLists.txt - the same file the Windows build (build/CreateProject.bat) uses -
+# with source/Platform/xlion_linux_asset_compiler.cmake injected as the project include (clang flags, offline
+# dependencies from Cache/dependencies, libxlion_pathcompat.so). Each lands in
+#   <plugin>/Build/<name>_compiler.linux/Release/<name>_compiler
+# next to the Windows <name>_compiler.vs2022/Release/<name>_compiler.exe; the resource pipeline (xresource_pipeline_v2,
+# xresource_editor_plugin_mgr.h) runs that native one on Linux. `ninja xlion_compilers` builds them all (one after the
+# other: the first one that needs assimp builds it into Cache/dependencies/assimp/BINARIES/Linux); not part of `ninja`.
+if(NOT WIN32)
+  include(ExternalProject)
+  set(XLION_COMPILER_PLUGINS xtexture xgeom_static xgeom_skin xgeom xskeleton xanim_package xmaterial xmaterial_instance xfont xscript_module xgame)
+  add_custom_target(xlion_compilers)
+  set(_xlion_prev_compiler "")
+  foreach(_xlion_c ${XLION_COMPILER_PLUGINS})
+    set(_xlion_pdir "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${_xlion_c}.plugin")
+    if(NOT EXISTS "${_xlion_pdir}/CMakeLists.txt")
+      continue()
+    endif()
+    # <plugin>/dependencies -> Cache/dependencies (the Windows build makes the same link as a junction)
+    if(NOT EXISTS "${_xlion_pdir}/dependencies")
+      file(CREATE_LINK "../../dependencies" "${_xlion_pdir}/dependencies" SYMBOLIC)
+    endif()
+    ExternalProject_Add(${_xlion_c}_compiler_linux
+      SOURCE_DIR        "${_xlion_pdir}"
+      BINARY_DIR        "${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/Release"
+      PREFIX            "${CMAKE_BINARY_DIR}/compilers/${_xlion_c}"
+      CMAKE_GENERATOR   Ninja
+      CMAKE_ARGS        -DCMAKE_BUILD_TYPE=Release
+                        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+                        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                        -DCMAKE_PROJECT_INCLUDE=${CMAKE_SOURCE_DIR}/source/Platform/xlion_linux_asset_compiler.cmake
+                        -DXLION_XCMAKE_TOOLS_DIR=${CMAKE_BINARY_DIR}/_deps/xcmake_tools
+                        -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+      DOWNLOAD_COMMAND  ""
+      UPDATE_COMMAND    ""
+      INSTALL_COMMAND   ""
+      BUILD_ALWAYS      ON
+      EXCLUDE_FROM_ALL  ON
+      USES_TERMINAL_BUILD ON
+      DEPENDS           ${_xlion_prev_compiler}
+    )
+    add_dependencies(xlion_compilers ${_xlion_c}_compiler_linux)
+    set(_xlion_prev_compiler ${_xlion_c}_compiler_linux)
   endforeach()
 endif()
 

@@ -8,7 +8,8 @@
 //      _aligned_malloc, errno_t, ...), with the same semantics (always NUL terminated, truncating).
 // Proper per-depot fixes can replace entries here over time; keep this file the only place they live.
 #pragma once
-#if !defined(_WIN32)
+// XLION_NO_PLATFORM_COMPAT: third-party sources that bring their own Linux CRT shims (crunch) opt out per file.
+#if !defined(_WIN32) && !defined(XLION_NO_PLATFORM_COMPAT)
 
 #ifdef __cplusplus
 #include <cstddef>
@@ -340,5 +341,17 @@ inline errno_t getenv_s( std::size_t* pLen, char* pBuf, std::size_t Size, const 
 
 // array-size overloads of the secure CRT (MSVC provides these as templates)
 template< std::size_t N > inline errno_t wcsncpy_s(wchar_t (&Dst)[N], const wchar_t* pSrc, std::size_t Count) noexcept { return wcsncpy_s(Dst, N, pSrc, Count); }
+
+// printf family "secure" variants (the depots never pass %s buffers to these, so the plain functions are exact)
+#define fprintf_s  fprintf
+#define printf_s   printf
+#define vfprintf_s vfprintf
+#define vprintf_s  vprintf
+#define fwprintf_s fwprintf
+#define wprintf_s  wprintf
+#define _strdup    strdup
+#define _wcsdup    wcsdup
+#define _fseeki64  fseeko
+#define _ftelli64  ftello
 
 #endif // !_WIN32
