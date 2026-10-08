@@ -196,7 +196,6 @@ typedef PROCESS_INFORMATION* LPPROCESS_INFORMATION;
 #define CP_ACP                        0
 
 #define CreateFile CreateFileW
-inline BOOL   FileTimeToSystemTime( const FILETIME*, LPSYSTEMTIME s ) noexcept { if (s) std::memset(s, 0, sizeof(*s)); return FALSE; }
 inline BOOL   CancelIoEx( HANDLE, LPOVERLAPPED ) noexcept { return FALSE; }
 inline BOOL   CancelIo( HANDLE ) noexcept { return FALSE; }
 inline BOOL   GetOverlappedResult( HANDLE, LPOVERLAPPED, LPDWORD n, BOOL ) noexcept { if (n) *n = 0; return FALSE; }

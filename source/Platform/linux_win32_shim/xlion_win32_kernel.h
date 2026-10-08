@@ -28,6 +28,7 @@
 #include <climits>
 #include <cstddef>
 #include <cstring>
+#include <ctime>
 #include <deque>
 #include <filesystem>
 #include <mutex>
@@ -721,6 +722,25 @@ inline BOOL GetFileTime( HANDLE h, LPFILETIME pCreation, LPFILETIME pAccess, LPF
         p->dwHighDateTime = static_cast<DWORD>(v >> 32);
     };
     Set(pCreation, St.st_ctim); Set(pAccess, St.st_atim); Set(pWrite, St.st_mtim);
+    return TRUE;
+}
+
+// UTC, like on Windows (100 ns ticks since 1601-01-01)
+inline BOOL FileTimeToSystemTime( const FILETIME* pTime, LPSYSTEMTIME pSystem ) noexcept
+{
+    if (!pTime || !pSystem) return xlion_win32_shim::kernel::Fail(ERROR_INVALID_PARAMETER);
+    const std::uint64_t Ticks = (static_cast<std::uint64_t>(pTime->dwHighDateTime) << 32) | pTime->dwLowDateTime;
+    const time_t        Secs  = static_cast<time_t>(static_cast<std::int64_t>(Ticks / 10000000ull) - 11644473600ll);
+    std::tm T{};
+    if (!::gmtime_r(&Secs, &T)) return xlion_win32_shim::kernel::Fail(ERROR_INVALID_PARAMETER);
+    pSystem->wYear         = static_cast<WORD>(T.tm_year + 1900);
+    pSystem->wMonth        = static_cast<WORD>(T.tm_mon + 1);
+    pSystem->wDayOfWeek    = static_cast<WORD>(T.tm_wday);
+    pSystem->wDay          = static_cast<WORD>(T.tm_mday);
+    pSystem->wHour         = static_cast<WORD>(T.tm_hour);
+    pSystem->wMinute       = static_cast<WORD>(T.tm_min);
+    pSystem->wSecond       = static_cast<WORD>(T.tm_sec);
+    pSystem->wMilliseconds = static_cast<WORD>((Ticks % 10000000ull) / 10000ull);
     return TRUE;
 }
 
