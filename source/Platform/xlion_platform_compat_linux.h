@@ -70,6 +70,19 @@
 #include <malloc.h>
 #include <sys/stat.h>
 
+#ifdef __cplusplus
+// libstdc++ 13 does not declare the float-suffixed <cmath> functions in std:: (the standard and MSVC do).
+#if defined(__GLIBCXX__)
+namespace std
+{
+    using ::sqrtf; using ::sinf; using ::cosf; using ::tanf; using ::asinf; using ::acosf; using ::atanf;
+    using ::atan2f; using ::fabsf; using ::fmodf; using ::powf; using ::expf; using ::logf; using ::log2f;
+    using ::log10f; using ::floorf; using ::ceilf; using ::roundf; using ::truncf; using ::hypotf;
+    using ::copysignf; using ::fminf; using ::fmaxf; using ::exp2f; using ::cbrtf; using ::sinhf; using ::coshf; using ::tanhf;
+}
+#endif
+#endif
+
 #ifndef _TRUNCATE
 #define _TRUNCATE ((size_t)-1)
 #endif
