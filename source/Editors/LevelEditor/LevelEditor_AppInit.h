@@ -14,7 +14,11 @@ namespace level_editor
         {
             const std::wstring Arg = pArgv[i];
             if (Arg == L"--project" || Arg == L"-project" || Arg == L"/project") { if (i + 1 < Argc) Asked = pArgv[++i]; }
+#if defined(_WIN32)
             else if (!Arg.empty() && Arg[0] != L'-' && Arg[0] != L'/' && Asked.empty()) Asked = Arg;
+#else
+            else if (!Arg.empty() && Arg[0] != L'-' && Asked.empty()) Asked = Arg;     // Linux port: a leading '/' is an absolute path, not a switch
+#endif
         }
         if (pArgv) LocalFree(pArgv);
         if (Asked.empty())

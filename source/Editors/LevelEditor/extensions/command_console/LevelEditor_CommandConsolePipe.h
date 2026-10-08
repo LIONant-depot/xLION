@@ -11,6 +11,9 @@
 
 
 #include "dependencies/xeditor/include/xeditor/host.h"
+#if !defined(_WIN32)
+#include "source/Platform/xlion_console_socket_posix.h"
+#endif
 
 
 
@@ -374,6 +377,7 @@ namespace level_editor
 
 
 
+#if defined(_WIN32)
     // Reads one command from a connected pipe: the text up to the first line break that is NOT inside quotes (a quoted value may hold line breaks, so a client sends the whole
     // command and the line break that ends it). A command that ends inside a quote and sends no more for two seconds is handed over as it is (the parser says what is wrong
     // with it) instead of keeping the client waiting; one that grows past 4 MB is cut there. The command console pipe below reads through this.
@@ -577,6 +581,69 @@ namespace level_editor
 
 
 
+
+#else
+
+    //------------------------------------------------------------------------------------------------
+    // Linux port: the same server over a Unix domain socket (source/Platform/xlion_console_socket_posix.h).
+    // Same framing as the pipe: one command per connection, up to the first line break outside quotes;
+    // the reply is written and the connection closed.
+    //------------------------------------------------------------------------------------------------
+    inline std::string ReadRequest(int Fd) noexcept
+    {
+        constexpr std::size_t kMaxRequest = 4u << 20;
+        std::string Request;
+        char        Buf[4096];
+        for (;;)
+        {
+            if (Request.size() >= kMaxRequest) break;
+            const auto n = xlion::console_socket::ReadSome(Fd, Buf, sizeof(Buf));
+            if (n <= 0) break;
+            Request.append(Buf, static_cast<std::size_t>(n));
+            if (Request.find('\n') == std::string::npos) continue;
+            bool bOpen = false;
+            xcmdline::parser::Tokenize(Request, &bOpen);
+            if (!bOpen) break;
+            if (!xlion::console_socket::HasData(Fd, 2000)) break;     // ends inside a quote and nothing more came
+        }
+        return Request;
+    }
+
+    inline void CommandConsolePipeThreadMain(command_console_pipe_bridge& Bridge) noexcept
+    {
+        const std::string Path = xlion::console_socket::Path();
+        int ListenFd = -1;
+        for (;;)
+        {
+            if (ListenFd < 0)
+            {
+                ListenFd = xlion::console_socket::Listen(Path);
+                if (ListenFd < 0) { std::this_thread::sleep_for(std::chrono::seconds(1)); continue; }
+            }
+
+            const int Fd = ::accept(ListenFd, nullptr, nullptr);
+            if (Fd < 0) { if (errno != EINTR) { ::close(ListenFd); ListenFd = -1; } continue; }
+
+            std::string Request = ReadRequest(Fd);
+            while (!Request.empty() && (Request.back() == '\n' || Request.back() == '\r')) Request.pop_back();
+
+            std::string Response;
+            if (!Request.empty())
+            {
+                std::unique_lock<std::mutex> Lock(Bridge.m_Mutex);
+                Bridge.m_Request      = Request;
+                Bridge.m_bHasRequest  = true;
+                Bridge.m_bHasResponse = false;
+                Bridge.m_Cond.notify_all();
+                Bridge.m_Cond.wait(Lock, [&] { return Bridge.m_bHasResponse; });
+                Response = Bridge.m_Response;
+            }
+            xlion::console_socket::WriteAll(Fd, Response.data(), Response.size());
+            ::shutdown(Fd, SHUT_RDWR);
+            ::close(Fd);
+        }
+    }
+#endif
 
     // Called once per frame from the main loop (LevelEditor_Main.cpp), grouped with
 

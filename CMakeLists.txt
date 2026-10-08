@@ -655,6 +655,8 @@ if(NOT WIN32)
   find_package(Vulkan REQUIRED)
   find_package(Threads REQUIRED)
   target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS} atomic)
+  # Windows-style paths (backslashes, case-insensitive names) at the libc boundary - see the file header
+  target_sources(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
   # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
   set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
 endif()
@@ -676,6 +678,7 @@ endif()
 # from. Zero dependency on Vulkan/ImGui/xproperty/etc, so it stays its own fast-building tool.
 add_executable(xeditorcli "source/Tools/Editor/xeditorcli.cpp")
 set_target_properties(xeditorcli PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+target_include_directories(xeditorcli PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # The ECS link gate (see documentation/Editors/ecs_link_gate.md): the headless editor built exactly like
 # xLION_Headless but linked WITHOUT LIONCore.dll and LIONRender.dll. The headers still say dllimport

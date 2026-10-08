@@ -11,6 +11,7 @@
 //      xeditorcli LogAttach -Path "C:\captures\crash 1.dmp" -Event 12
 //
 // The pipe is \\.\pipe\xEditor_Console, or the one in the XEDITOR_PIPE environment variable (the editor started with a pipe of its own, as the tests do).
+#if defined(_WIN32)
 #include <windows.h>
 #include <iostream>
 #include <string>
@@ -88,3 +89,63 @@ int main()
     std::cout << Response;
     return 0;
 }
+#else
+// Linux port: the same client over the Unix domain socket the editor listens on
+// (source/Platform/xlion_console_socket_posix.h). The shell has already split the command line, so it is
+// rebuilt with the editor's rules: an argument with spaces, tabs, line breaks or quotes (or an empty one)
+// is quoted, and a quote inside it is escaped with a backslash.
+#include "source/Platform/xlion_console_socket_posix.h"
+#include <iostream>
+#include <string>
+
+int main(int argc, char** argv)
+{
+    std::string Command;
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string A = argv[i];
+        if (!Command.empty()) Command += ' ';
+        if (A.empty() || A.find_first_of(" \t\r\n\"") != std::string::npos)
+        {
+            Command += '"';
+            for (char c : A) { if (c == '"') Command += '\\'; Command += c; }
+            Command += '"';
+        }
+        else Command += A;
+    }
+    if (Command.empty())
+    {
+        std::cerr << "Usage: xeditorcli <command line>      (XEDITOR_PIPE names another socket; default " << xlion::console_socket::Path() << ")\n";
+        return 1;
+    }
+
+    const std::string Path = xlion::console_socket::Path();
+    int Fd = -1;
+    for (int Attempt = 0; Attempt < 5 && Fd < 0; ++Attempt)     // the server takes one client at a time
+    {
+        Fd = xlion::console_socket::Connect(Path);
+        if (Fd < 0 && errno != ECONNREFUSED && errno != EAGAIN) break;
+        if (Fd < 0) ::usleep(200 * 1000);
+    }
+    if (Fd < 0)
+    {
+        std::cerr << "Could not connect to '" << Path << "' (" << std::strerror(errno) << ")\n";
+        return 2;
+    }
+
+    Command += '\n';
+    xlion::console_socket::WriteAll(Fd, Command.data(), Command.size());
+
+    std::string Response;
+    char Buf[4096];
+    for (;;)
+    {
+        const auto n = xlion::console_socket::ReadSome(Fd, Buf, sizeof(Buf));
+        if (n <= 0) break;
+        Response.append(Buf, static_cast<std::size_t>(n));
+    }
+    ::close(Fd);
+    std::cout << Response;
+    return 0;
+}
+#endif
