@@ -659,6 +659,14 @@ if(NOT WIN32)
   target_sources(xLION_Headless PRIVATE "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
   # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
   set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  # DLL semantics for the engine .so's: each one binds its own symbols (its own XecsPlugin_* entry points, its own
+  # self-registration lists, its own inline statics), the way each .dll does on Windows. Without it, ELF interposition
+  # makes LIONCore call LIONRender's XecsPlugin_RegisterSystems (no physics systems) and merges both registration lists.
+  foreach(_xlion_lib xLIONCore xLIONRender)
+    if(TARGET ${_xlion_lib})
+      target_link_options(${_xlion_lib} PRIVATE "LINKER:-Bsymbolic")
+    endif()
+  endforeach()
 endif()
 
 # Shared 3D editor-viewport scaffolding (camera + grid) - the graphical target only; headless renders nothing.
