@@ -7,7 +7,9 @@
 
 #include "xeditor_text_widget.h"
 
+#ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
+#endif
 #include "imgui.h"
 
 template<class InputIt1, class InputIt2, class BinaryPredicate>

@@ -75,7 +75,18 @@ namespace level_editor
                 xeditor::diagnostics::Log("startup: the project asked for cannot be opened: %s", Why.c_str());
                 std::fprintf(stderr, "xLION: %s\n", Why.c_str());
                 // A person gets a box (there is no console); a script (XEDITOR_NO_ASSERT_DIALOG, what the tests set) or the headless build only gets the line on stderr and the exit code.
-                if (!bHeadless && !std::getenv("XEDITOR_NO_ASSERT_DIALOG")) MessageBoxW(nullptr, xstrtool::To(Why).c_str(), L"xLION - cannot open the project", MB_OK | MB_ICONERROR);
+                const bool bNoDialog = []() noexcept
+                {
+#if defined(_MSC_VER)
+                    char* p = nullptr; std::size_t n = 0;                          // _dupenv_s: MSVC's checked getenv (C4996)
+                    const bool b = _dupenv_s(&p, &n, "XEDITOR_NO_ASSERT_DIALOG") == 0 && p != nullptr;
+                    std::free(p);
+                    return b;
+#else
+                    return std::getenv("XEDITOR_NO_ASSERT_DIALOG") != nullptr;
+#endif
+                }();
+                if (!bHeadless && !bNoDialog) MessageBoxW(nullptr, xstrtool::To(Why).c_str(), L"xLION - cannot open the project", MB_OK | MB_ICONERROR);
                 xeditor::diagnostics::RemoveCrtReportHook();
                 xeditor::diagnostics::RemoveTerminateHandler();
                 xeditor::diagnostics::Stop();
