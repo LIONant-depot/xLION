@@ -193,7 +193,9 @@ int remove(const char* pPath)                                     { static const
 int chdir(const char* pPath)                                      { static const auto s_real = Real<int (*)(const char*)>("chdir");  XLION_PATH_CALL(int, -1, s_real(pPath)) }
 int truncate(const char* pPath, off_t L)                          { static const auto s_real = Real<int (*)(const char*, off_t)>("truncate"); XLION_PATH_CALL(int, -1, s_real(pPath, L)) }
 int chmod(const char* pPath, mode_t M)                            { static const auto s_real = Real<int (*)(const char*, mode_t)>("chmod"); XLION_PATH_CALL(int, -1, s_real(pPath, M)) }
-int utimensat(int Fd, const char* pPath, const struct timespec t[2], int Fl) { static const auto s_real = Real<int (*)(int, const char*, const struct timespec*, int)>("utimensat"); if (!pPath || !AtCwd(Fd, pPath)) return s_real(Fd, pPath, t, Fl); XLION_PATH_CALL(int, -1, s_real(Fd, pPath, t, Fl)) }
+// glibc declares utimensat's path nonnull, but the kernel takes NULL (it then works on Fd itself, as futimens does), so the test stays - out of line, where the compiler cannot drop it
+[[gnu::noinline]] static bool IsNullPath(const char* p) noexcept { return p == nullptr; }
+int utimensat(int Fd, const char* pPath, const struct timespec t[2], int Fl) { static const auto s_real = Real<int (*)(int, const char*, const struct timespec*, int)>("utimensat"); if (IsNullPath(pPath) || !AtCwd(Fd, pPath)) return s_real(Fd, pPath, t, Fl); XLION_PATH_CALL(int, -1, s_real(Fd, pPath, t, Fl)) }
 ssize_t readlink(const char* pPath, char* b, size_t n)            { static const auto s_real = Real<ssize_t (*)(const char*, char*, size_t)>("readlink"); XLION_PATH_CALL(ssize_t, -1, s_real(pPath, b, n)) }
 char* realpath(const char* pPath, char* pOut)                     { static const auto s_real = Real<char* (*)(const char*, char*)>("realpath"); XLION_PATH_CALL(char*, nullptr, s_real(pPath, pOut)) }
 
