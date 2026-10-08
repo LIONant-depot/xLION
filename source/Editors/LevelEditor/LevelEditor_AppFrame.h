@@ -251,6 +251,20 @@ namespace level_editor
 
         xgpu::tools::imgui::Render();
 
+#if defined(XLION_LINUX_GUI)
+        // Linux: ImGui's mouse cursor on the X windows - the main one and every detached viewport (Win32 takes the
+        // window class cursor; X keeps one per window). Viewports[0]'s handle is the breach itself, not a window.
+        {
+            unsigned long Windows[32];
+            int           Count = 0;
+            Windows[Count++] = static_cast<unsigned long>(MainWindow.getSystemWindowHandle());
+            const auto& Viewports = ImGui::GetPlatformIO().Viewports;
+            for (int i = 1; i < Viewports.Size && Count < 32; ++i)
+                if (Viewports[i]->PlatformHandle) Windows[Count++] = static_cast<unsigned long>(static_cast<xgpu::window*>(Viewports[i]->PlatformHandle)->getSystemWindowHandle());
+            xlion::linux_gui::SetCursor(ImGui::GetMouseCursor(), Windows, Count);
+        }
+#endif
+
         g_WindowCapture.BeforeFlip(MainWindow);
         MainWindow.PageFlip();
         g_WindowCapture.AfterFlip();

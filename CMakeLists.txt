@@ -651,14 +651,19 @@ find_package(OpenMP REQUIRED)
 target_link_libraries(${TARGET_PROJECT} PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(xLION_Headless PRIVATE OpenMP::OpenMP_CXX)
 
-# Linux port: only the headless editor is supported off Windows - the graphical target still configures
-# (shared CMake below references it) but is never part of "all". Headless still compiles xGPU's Vulkan
-# backend in (never initialized there), so it links the Vulkan loader; dlopen/threads for the platform layer.
+# Linux port: both editors build off Windows. The graphical one (xLION) opens its windows through xGPU's X11
+# backend (Xlib + VK_KHR_xlib_surface; also WSLg/XWayland), opted in with XGPU_SYSTEM_XLIB on that target only -
+# xLION_Headless stays on xGPU's null backend (no libX11 dependency, no display needed). Both link the Vulkan
+# loader (headless compiles xGPU's Vulkan backend in, never initialized there); dlopen/threads for the platform layer.
 if(NOT WIN32)
-  set_target_properties(${TARGET_PROJECT} PROPERTIES EXCLUDE_FROM_ALL TRUE)
   find_package(Vulkan REQUIRED)
   find_package(Threads REQUIRED)
+  find_package(X11 REQUIRED)
   target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS} atomic)
+  target_compile_definitions(${TARGET_PROJECT} PRIVATE XGPU_SYSTEM_XLIB XLION_LINUX_GUI)
+  # The desktop services Win32 gives the Windows build (clipboard, cursors, monitors, dialogs, ShellExecute) - see the file
+  target_sources(${TARGET_PROJECT} PRIVATE "source/Platform/xlion_linux_gui.cpp" "source/Platform/xlion_linux_gui.h")
+  target_link_libraries(${TARGET_PROJECT} PRIVATE Vulkan::Vulkan X11::X11 Threads::Threads ${CMAKE_DL_LIBS} atomic)
   # Windows-style paths (backslashes, case-insensitive names) at the libc boundary - see the file header. Its own
   # shared library (libxlion_pathcompat.so, next to the executable), needed by the executable AND by the engine
   # libraries: the per-Level engine copies (xlevel_engine_copies.h) are dlopen'ed with RTLD_DEEPBIND, so they look
@@ -667,16 +672,18 @@ if(NOT WIN32)
   add_library(xlion_pathcompat SHARED "${CMAKE_SOURCE_DIR}/source/Platform/linux_path_compat.cpp")
   target_link_libraries(xlion_pathcompat PRIVATE ${CMAKE_DL_LIBS})
   cmake_policy(SET CMP0079 NEW)   # xLIONCore/xLIONRender are defined in their own directories (FetchContent)
-  foreach(_xlion_lib xLION_Headless xLIONCore xLIONRender)
+  foreach(_xlion_lib ${TARGET_PROJECT} xLION_Headless xLIONCore xLIONRender)
     if(TARGET ${_xlion_lib})
       target_link_libraries(${_xlion_lib} PRIVATE "-Wl,--push-state,--no-as-needed" xlion_pathcompat "-Wl,--pop-state")
       set_property(TARGET ${_xlion_lib} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
     endif()
   endforeach()
-  add_custom_command(TARGET xLION_Headless POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xlion_pathcompat>" "$<TARGET_FILE_DIR:xLION_Headless>")
-  # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
-  set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  foreach(_xlion_exe ${TARGET_PROJECT} xLION_Headless)
+    add_custom_command(TARGET ${_xlion_exe} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xlion_pathcompat>" "$<TARGET_FILE_DIR:${_xlion_exe}>")
+    # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
+    set_target_properties(${_xlion_exe} PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+  endforeach()
   # DLL semantics for the engine .so's: each one binds its own symbols (its own XecsPlugin_* entry points, its own
   # self-registration lists, its own inline statics), the way each .dll does on Windows. Without it, ELF interposition
   # makes LIONCore call LIONRender's XecsPlugin_RegisterSystems (no physics systems) and merges both registration lists.

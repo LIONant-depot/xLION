@@ -11,6 +11,9 @@
 // failure, so whatever the real cause is, it's sensitive to more than just "is xGPU.h already
 // visible" - not fully understood, just empirically pinned down.
 #include "dependencies/xGPU/source/Tools/xgpu_imgui_breach.cpp"
+#if defined(XLION_LINUX_GUI)
+    #include "source/Platform/xlion_linux_gui.h"      // Linux graphical editor: X11 clipboard, cursors, desktop dialogs
+#endif
 
 #include "source/Editors/LevelEditor/LevelEditor_MaterialGraphCompat.h"
 #include "source/Editors/LevelEditor/LevelEditor_App.h"

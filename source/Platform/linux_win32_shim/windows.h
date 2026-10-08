@@ -6,7 +6,9 @@
 // top-level CMakeLists.txt), so MSVC builds never see it. It lets editor/UI code
 // that includes <windows.h> for cosmetic Win32 calls (monitor queries, cursor
 // position, shell dialogs, ...) compile unchanged on Linux. The UI functions here are
-// harmless stubs that report failure; none of them is reached by the headless editor.
+// harmless stubs that report failure; none of them is reached by the headless editor. The graphical editor
+// (xLION) links ../xlion_linux_gui.cpp, and the desktop ones (monitors, pointer, message box, file dialogs,
+// ShellExecute) then really work on X11 - see the block at GetCursorPos.
 // What headless really needs is implemented: dynamic libraries (round 3 below) and the
 // kernel objects - files, directory watching, pipes, processes, jobs - in
 // xlion_win32_kernel.h, included at the end.
@@ -99,11 +101,90 @@ typedef MONITORINFO* LPMONITORINFO;
 #define MONITOR_DEFAULTTOPRIMARY  0x00000001
 #define MONITOR_DEFAULTTONEAREST  0x00000002
 
-inline BOOL     GetCursorPos      ( LPPOINT p )                     noexcept { if (p) { p->x = p->y = 0; } return FALSE; }
-inline HMONITOR MonitorFromPoint  ( POINT, DWORD )                  noexcept { return nullptr; }
-inline HMONITOR MonitorFromWindow ( HWND, DWORD )                   noexcept { return nullptr; }
-inline BOOL     GetMonitorInfoW   ( HMONITOR, LPMONITORINFO )       noexcept { return FALSE; }
-inline BOOL     GetMonitorInfoA   ( HMONITOR, LPMONITORINFO )       noexcept { return FALSE; }
+// ---------------------------------------------------------------------------------
+// The desktop (monitors, pointer, message box, file dialogs, ShellExecute) goes to the graphical editor's X11 layer
+// (../xlion_linux_gui.h) when it is linked in - only xLION links it; its entry points are weak, so everywhere else
+// (xLION_Headless, the engine libraries) they are null and these functions fail the way they always did.
+// HMONITOR is the 1-based index of the monitor in xlion_gui_EnumMonitors' list.
+// ---------------------------------------------------------------------------------
+#include "../xlion_linux_gui.h"
+#include <string>
+namespace xlion_win32_shim
+{
+    // UTF-32 wchar_t (Linux) -> UTF-8
+    inline std::string ToUtf8( const wchar_t* p )
+    {
+        std::string S;
+        if (!p) return S;
+        for (; *p; ++p)
+        {
+            const auto c = static_cast<std::uint32_t>(*p);
+            if      (c < 0x80)    S += static_cast<char>(c);
+            else if (c < 0x800)   { S += static_cast<char>(0xC0 | (c >> 6));  S += static_cast<char>(0x80 | (c & 0x3F)); }
+            else if (c < 0x10000) { S += static_cast<char>(0xE0 | (c >> 12)); S += static_cast<char>(0x80 | ((c >> 6) & 0x3F)); S += static_cast<char>(0x80 | (c & 0x3F)); }
+            else                  { S += static_cast<char>(0xF0 | (c >> 18)); S += static_cast<char>(0x80 | ((c >> 12) & 0x3F)); S += static_cast<char>(0x80 | ((c >> 6) & 0x3F)); S += static_cast<char>(0x80 | (c & 0x3F)); }
+        }
+        return S;
+    }
+    inline std::string ToUtf8( const char* p )   { return p ? std::string(p) : std::string{}; }
+    inline std::string ToUtf8( std::nullptr_t )  { return {}; }
+    inline std::wstring FromUtf8( const std::string& S )
+    {
+        std::wstring W;
+        for (std::size_t i = 0; i < S.size();)
+        {
+            const auto c = static_cast<unsigned char>(S[i]);
+            std::uint32_t u = c; int n = 0;
+            if      (c >= 0xF0) { u = c & 0x07; n = 3; }
+            else if (c >= 0xE0) { u = c & 0x0F; n = 2; }
+            else if (c >= 0xC0) { u = c & 0x1F; n = 1; }
+            ++i;
+            for (; n > 0 && i < S.size(); --n, ++i) u = (u << 6) | (static_cast<unsigned char>(S[i]) & 0x3F);
+            W += static_cast<wchar_t>(u);
+        }
+        return W;
+    }
+    // The monitors now (index 0 = primary); empty without the graphical layer or a display
+    inline int Monitors( xlion_gui_monitor* pOut, int Max ) noexcept { return xlion_gui_EnumMonitors ? xlion_gui_EnumMonitors(pOut, Max) : 0; }
+}
+inline BOOL     GetCursorPos      ( LPPOINT p )                     noexcept
+{
+    int x = 0, y = 0;
+    if (p && xlion_gui_GetCursorPos && xlion_gui_GetCursorPos(&x, &y)) { p->x = x; p->y = y; return TRUE; }
+    if (p) { p->x = p->y = 0; }
+    return FALSE;
+}
+inline HMONITOR MonitorFromPoint  ( POINT At, DWORD Flags )         noexcept
+{
+    xlion_gui_monitor M[16];
+    const int n = xlion_win32_shim::Monitors(M, 16);
+    if (n <= 0) return nullptr;
+    int Best = -1; long long BestDist = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const long long dx = At.x < M[i].m_X ? M[i].m_X - At.x : (At.x >= M[i].m_X + M[i].m_W ? At.x - (M[i].m_X + M[i].m_W - 1) : 0);
+        const long long dy = At.y < M[i].m_Y ? M[i].m_Y - At.y : (At.y >= M[i].m_Y + M[i].m_H ? At.y - (M[i].m_Y + M[i].m_H - 1) : 0);
+        const long long d  = dx * dx + dy * dy;
+        if (d == 0) return reinterpret_cast<HMONITOR>(static_cast<std::intptr_t>(i + 1));
+        if (Best < 0 || d < BestDist) { Best = i; BestDist = d; }
+    }
+    if (Flags == MONITOR_DEFAULTTONULL)    return nullptr;
+    if (Flags == MONITOR_DEFAULTTOPRIMARY) return reinterpret_cast<HMONITOR>(static_cast<std::intptr_t>(1));
+    return reinterpret_cast<HMONITOR>(static_cast<std::intptr_t>(Best + 1));
+}
+inline HMONITOR MonitorFromWindow ( HWND, DWORD )                   noexcept { xlion_gui_monitor M[1]; return xlion_win32_shim::Monitors(M, 1) > 0 ? reinterpret_cast<HMONITOR>(static_cast<std::intptr_t>(1)) : nullptr; }
+inline BOOL     GetMonitorInfoW   ( HMONITOR h, LPMONITORINFO p )   noexcept
+{
+    xlion_gui_monitor M[16];
+    const int n = xlion_win32_shim::Monitors(M, 16);
+    const auto i = static_cast<int>(reinterpret_cast<std::intptr_t>(h)) - 1;
+    if (!p || i < 0 || i >= n) return FALSE;
+    p->rcMonitor = RECT{ M[i].m_X, M[i].m_Y, M[i].m_X + M[i].m_W, M[i].m_Y + M[i].m_H };
+    p->rcWork    = RECT{ M[i].m_WorkX, M[i].m_WorkY, M[i].m_WorkX + M[i].m_WorkW, M[i].m_WorkY + M[i].m_WorkH };
+    p->dwFlags   = M[i].m_bPrimary ? 1u /*MONITORINFOF_PRIMARY*/ : 0u;
+    return TRUE;
+}
+inline BOOL     GetMonitorInfoA   ( HMONITOR h, LPMONITORINFO p )   noexcept { return GetMonitorInfoW(h, p); }
 #define GetMonitorInfo GetMonitorInfoW
 inline void     Sleep             ( DWORD ms )                      noexcept { ::usleep(static_cast<useconds_t>(ms) * 1000u); }
 inline void     OutputDebugStringA( LPCSTR )                        noexcept {}
@@ -237,7 +318,14 @@ inline int    WideCharToMultiByte( UINT, DWORD, LPCWSTR, int, LPSTR, int, LPCSTR
 #define MB_ICONERROR    0x00000010L
 #define MB_ICONWARNING  0x00000030L
 #define MB_YESNO        0x00000004L
+#define MB_OKCANCEL     0x00000001L
+#define MB_YESNOCANCEL  0x00000003L
+#define MB_ICONQUESTION 0x00000020L
+#define MB_ICONINFORMATION 0x00000040L
+#define IDOK            1
+#define IDCANCEL        2
 #define IDYES           6
+#define IDNO            7
 #define WM_CLOSE        0x0010
 #define WM_QUIT         0x0012
 inline BOOL     ShowWindow( HWND, int ) noexcept { return FALSE; }
@@ -249,11 +337,20 @@ inline BOOL     GetWindowRect( HWND, LPRECT r ) noexcept { if (r) std::memset(r,
 inline int      GetWindowTextLengthW( HWND ) noexcept { return 0; }
 inline DWORD    GetWindowThreadProcessId( HWND, LPDWORD p ) noexcept { if (p) *p = 0; return 0; }
 inline BOOL     PostMessageW( HWND, UINT, WPARAM, LPARAM ) noexcept { return FALSE; }
-inline int      MessageBoxW( HWND, LPCWSTR, LPCWSTR, UINT ) noexcept { return 0; }
-inline int      MessageBoxA( HWND, LPCSTR, LPCSTR, UINT ) noexcept { return 0; }
+inline int      MessageBoxA( HWND, LPCSTR pText, LPCSTR pCaption, UINT Type ) noexcept { return xlion_gui_MessageBox ? xlion_gui_MessageBox(pText, pCaption, Type) : 0; }
+inline int      MessageBoxW( HWND, LPCWSTR pText, LPCWSTR pCaption, UINT Type ) noexcept
+{
+    if (!xlion_gui_MessageBox) return 0;
+    return xlion_gui_MessageBox(xlion_win32_shim::ToUtf8(pText).c_str(), xlion_win32_shim::ToUtf8(pCaption).c_str(), Type);
+}
 #define MessageBox MessageBoxW
 inline BOOL     SetCursorPos( int, int ) noexcept { return FALSE; }
-inline HINSTANCE ShellExecuteA( HWND, LPCSTR,  LPCSTR,  LPCSTR,  LPCSTR,  int ) noexcept { return nullptr; }
+// ShellExecute "open"/"explore"/"edit": the desktop's default application (> 32 = started, as on Windows; 2 = not)
+inline HINSTANCE ShellExecuteA( HWND, LPCSTR, LPCSTR pFile, LPCSTR pParams, LPCSTR pDir, int ) noexcept
+{
+    const bool bOk = xlion_gui_ShellOpen && xlion_gui_ShellOpen(pFile, pParams, pDir);
+    return reinterpret_cast<HINSTANCE>(static_cast<std::intptr_t>(bOk ? 42 : 2));
+}
 #define ShellExecute ShellExecuteW
 // ---------------------------------------------------------------------------------
 // round 2 (linux-headless port)
@@ -267,14 +364,50 @@ inline BOOL IsIconic( HWND ) noexcept { return FALSE; }
 inline HWND FindWindowExW( HWND, HWND, LPCWSTR, LPCWSTR ) noexcept { return nullptr; }
 #define FindWindowEx FindWindowExW
 typedef BOOL (*MONITORENUMPROC)(HMONITOR, HDC, LPRECT, LPARAM);
-inline BOOL EnumDisplayMonitors( HDC, const RECT*, MONITORENUMPROC, LPARAM ) noexcept { return FALSE; }
+inline BOOL EnumDisplayMonitors( HDC, const RECT*, MONITORENUMPROC pProc, LPARAM Param ) noexcept
+{
+    xlion_gui_monitor M[16];
+    const int n = xlion_win32_shim::Monitors(M, 16);
+    if (n <= 0 || !pProc) return FALSE;
+    for (int i = 0; i < n; ++i)
+    {
+        RECT R{ M[i].m_X, M[i].m_Y, M[i].m_X + M[i].m_W, M[i].m_Y + M[i].m_H };
+        if (!pProc(reinterpret_cast<HMONITOR>(static_cast<std::intptr_t>(i + 1)), nullptr, &R, Param)) break;
+    }
+    return TRUE;
+}
 struct OPENFILENAMEW { DWORD lStructSize; HWND hwndOwner; HINSTANCE hInstance; LPCWSTR lpstrFilter; LPWSTR lpstrCustomFilter; DWORD nMaxCustFilter; DWORD nFilterIndex; LPWSTR lpstrFile; DWORD nMaxFile; LPWSTR lpstrFileTitle; DWORD nMaxFileTitle; LPCWSTR lpstrInitialDir; LPCWSTR lpstrTitle; DWORD Flags; WORD nFileOffset; WORD nFileExtension; LPCWSTR lpstrDefExt; LPARAM lCustData; void* lpfnHook; LPCWSTR lpTemplateName; void* pvReserved; DWORD dwReserved; DWORD FlagsEx; };
 #define OFN_PATHMUSTEXIST   0x00000800
 #define OFN_FILEMUSTEXIST   0x00001000
 #define OFN_OVERWRITEPROMPT 0x00000002
 #define OFN_NOCHANGEDIR     0x00000008
-inline BOOL GetOpenFileNameW( OPENFILENAMEW* ) noexcept { return FALSE; }
-inline BOOL GetSaveFileNameW( OPENFILENAMEW* ) noexcept { return FALSE; }
+// The open/save dialogs of the desktop (zenity/kdialog through ../xlion_linux_gui.h); FALSE = cancelled or none available
+inline BOOL ShimFileDialog( OPENFILENAMEW* p, int Mode ) noexcept
+{
+    if (!p || !p->lpstrFile || p->nMaxFile == 0 || !xlion_gui_FileDialog) return FALSE;
+    std::string Filter;                                                     // "Name\0Spec\0...\0\0" -> UTF-8, same layout
+    if (const wchar_t* f = p->lpstrFilter)
+    {
+        while (*f) { const std::wstring Part = f; Filter += xlion_win32_shim::ToUtf8(Part.c_str()); Filter += '\0'; f += Part.size() + 1; }
+    }
+    Filter += '\0';
+    std::string Initial = xlion_win32_shim::ToUtf8(p->lpstrFile);          // a file name already in the buffer is the suggestion
+    if (const std::string Dir = xlion_win32_shim::ToUtf8(p->lpstrInitialDir); !Dir.empty())
+        Initial = Initial.empty() ? Dir + "/" : (Initial.find('/') == std::string::npos && Initial.find('\\') == std::string::npos ? Dir + "/" + Initial : Initial);
+    char Out[4096] = {};
+    if (!xlion_gui_FileDialog(Mode, p->lpstrTitle ? xlion_win32_shim::ToUtf8(p->lpstrTitle).c_str() : nullptr, Initial.c_str(),
+                              p->lpstrFilter ? Filter.data() : nullptr, Out, static_cast<int>(sizeof(Out)))) return FALSE;
+    const std::wstring W = xlion_win32_shim::FromUtf8(Out);
+    if (W.size() + 1 > p->nMaxFile) return FALSE;
+    std::wmemcpy(p->lpstrFile, W.c_str(), W.size() + 1);
+    const auto Slash = W.find_last_of(L'/');
+    const auto Dot   = W.find_last_of(L'.');
+    p->nFileOffset    = static_cast<WORD>(Slash == std::wstring::npos ? 0 : Slash + 1);
+    p->nFileExtension = static_cast<WORD>((Dot == std::wstring::npos || (Slash != std::wstring::npos && Dot < Slash)) ? W.size() : Dot + 1);
+    return TRUE;
+}
+inline BOOL GetOpenFileNameW( OPENFILENAMEW* p ) noexcept { return ShimFileDialog(p, 0); }
+inline BOOL GetSaveFileNameW( OPENFILENAMEW* p ) noexcept { return ShimFileDialog(p, 1); }
 // ---------------------------------------------------------------------------------
 // round 3: dynamic libraries - a REAL implementation on top of dlopen/dlsym/dlclose.
 // Module names keep their Windows spelling at the call sites ("LIONCore.dll"); here
@@ -421,12 +554,20 @@ inline BOOL   SetNamedPipeHandleState( HANDLE, LPDWORD, LPDWORD, LPDWORD ) noexc
 #define OFN_HIDEREADONLY    0x00000004
 #define OFN_ENABLESIZING    0x00800000
 template< typename A, typename B, typename C, typename D, typename E >
-inline HINSTANCE ShellExecuteW( HWND, A, B, C, D, E ) noexcept { return nullptr; }
+inline HINSTANCE ShellExecuteW( HWND, A, B pFile, C pParams, D pDir, E ) noexcept
+{
+    const bool bOk = xlion_gui_ShellOpen && xlion_gui_ShellOpen(xlion_win32_shim::ToUtf8(pFile).c_str(), xlion_win32_shim::ToUtf8(pParams).c_str(), xlion_win32_shim::ToUtf8(pDir).c_str());
+    return reinterpret_cast<HINSTANCE>(static_cast<std::intptr_t>(bOk ? 42 : 2));
+}
 struct OPENASINFO { LPCWSTR pcszFile; LPCWSTR pcszClass; int oaifInFlags; };
 #define OAIF_ALLOW_REGISTRATION 0x00000001
 #define OAIF_REGISTER_EXT       0x00000002
 #define OAIF_EXEC               0x00000004
-inline HRESULT SHOpenWithDialog( HWND, const OPENASINFO* ) noexcept { return E_FAIL; }
+// No "Open with" chooser on Linux desktops in general: the file goes to its default application
+inline HRESULT SHOpenWithDialog( HWND, const OPENASINFO* p ) noexcept
+{
+    return (p && xlion_gui_ShellOpen && xlion_gui_ShellOpen(xlion_win32_shim::ToUtf8(p->pcszFile).c_str(), nullptr, nullptr)) ? S_OK : E_FAIL;
+}
 // CommandLineToArgvW: the real arguments of this process (from /proc/self/cmdline); the string passed in is
 // ignored (GetCommandLineW has nothing to give on Linux). One block, freed with LocalFree like on Windows.
 inline LPWSTR* CommandLineToArgvW( LPCWSTR, int* pArgc ) noexcept

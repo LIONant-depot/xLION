@@ -136,6 +136,9 @@ namespace level_editor
             ResourceEditors.m_pDevice = &Device;
             xgpu::tools::imgui::CreateInstance(MainWindow);
             xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance complete");
+#if defined(XLION_LINUX_GUI)
+            xlion::linux_gui::Install(static_cast<unsigned long>(MainWindow.getSystemWindowHandle()), "xLION");   // X11 clipboard for ImGui, the window title
+#endif
 
             xeditor::diagnostics::Log("startup: applying LevelEditor theme begin");
             level_editor::theme::ApplyUnityInspiredTheme();
@@ -395,6 +398,9 @@ namespace level_editor
         if (!bHeadless)
         {
             xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown begin");
+#if defined(XLION_LINUX_GUI)
+            xlion::linux_gui::Shutdown();
+#endif
             xgpu::tools::imgui::Shutdown();
             xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown complete");
         }
