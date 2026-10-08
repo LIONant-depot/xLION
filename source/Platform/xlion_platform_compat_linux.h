@@ -299,4 +299,46 @@ inline int VirtualFree(void* pAddress, size_t Size, unsigned FreeType) noexcept
     return mprotect(pAddress, Size, PROT_NONE) == 0;
 }
 #endif // __cplusplus
+// strerror_s (MSVC CRT) on top of the thread-safe GNU strerror_r
+inline errno_t strerror_s( char* pBuf, std::size_t Size, int Err ) noexcept
+{
+    if (!pBuf || !Size) return EINVAL;
+    const char* p = ::strerror_r(Err, pBuf, Size);
+    if (p != pBuf) { std::strncpy(pBuf, p, Size - 1); pBuf[Size - 1] = 0; }
+    return 0;
+}
+template< std::size_t N > inline errno_t strerror_s( char (&Buf)[N], int Err ) noexcept { return strerror_s(Buf, N, Err); }
+
+// _wdupenv_s / getenv_s / _popen / _pclose
+inline errno_t _wdupenv_s( wchar_t** ppValue, std::size_t* pLen, const wchar_t* pName ) noexcept
+{
+    if (!ppValue) return EINVAL;
+    *ppValue = nullptr; if (pLen) *pLen = 0;
+    const char* p = std::getenv(std::filesystem::path(pName).string().c_str());
+    if (!p) return 0;
+    const std::wstring W = std::filesystem::path(p).wstring();
+    *ppValue = static_cast<wchar_t*>(std::malloc((W.size() + 1) * sizeof(wchar_t)));
+    if (!*ppValue) return ENOMEM;
+    std::wmemcpy(*ppValue, W.c_str(), W.size() + 1);
+    if (pLen) *pLen = W.size() + 1;
+    return 0;
+}
+inline errno_t getenv_s( std::size_t* pLen, char* pBuf, std::size_t Size, const char* pName ) noexcept
+{
+    if (pLen) *pLen = 0;
+    if (pBuf && Size) pBuf[0] = 0;
+    const char* p = std::getenv(pName);
+    if (!p) return 0;
+    const std::size_t n = std::strlen(p) + 1;
+    if (pLen) *pLen = n;
+    if (!pBuf || Size < n) return pBuf ? ERANGE : 0;
+    std::memcpy(pBuf, p, n);
+    return 0;
+}
+#define _popen  popen
+#define _pclose pclose
+
+// array-size overloads of the secure CRT (MSVC provides these as templates)
+template< std::size_t N > inline errno_t wcsncpy_s(wchar_t (&Dst)[N], const wchar_t* pSrc, std::size_t Count) noexcept { return wcsncpy_s(Dst, N, pSrc, Count); }
+
 #endif // !_WIN32

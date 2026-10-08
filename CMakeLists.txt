@@ -42,13 +42,17 @@ if(NOT WIN32)
     -march=x86-64-v3   # AVX2/FMA/F16C: xmath uses those intrinsics unconditionally (MSVC needs no flag for them)
     -ferror-limit=200
     -Wno-unknown-pragmas -Wno-ignored-attributes -Wno-microsoft-template -Wno-microsoft-cast
-    -Wno-unused-value -Wno-switch -Wno-deprecated-declarations -Wno-nonportable-include-path
+    -Wno-unused-value -Wno-switch -Wno-deprecated-declarations -Wno-nonportable-include-path -Wno-invalid-constexpr -fbracket-depth=2048
   )
   # MSVC defines _DEBUG for Debug builds (/MDd); several depots key debug-only members/asserts off it.
   add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
   # zstd's x86-64 Huffman fast path lives in a .S file the xcompression component does not list; MSVC
   # builds never use it either, so turn it off and use the C implementation.
   add_compile_definitions(ZSTD_DISABLE_ASM)
+  # Linux port: stub <windows.h> for UI-only Win32 calls (never on the MSVC include path)
+  include_directories(AFTER "${CMAKE_SOURCE_DIR}/source/Platform/linux_win32_shim")
+  # MSVC also searches the directories of all open includers; clang does not.
+  include_directories(AFTER "${CMAKE_SOURCE_DIR}/dependencies/xGPU/source")
 endif()
 
 #
@@ -358,7 +362,7 @@ set(GLSLC "${GLSLC_CANDIDATE}")
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/sprv_shaders_h")
 
 set(FRAG_SHADER_SOURCES
-  "dependencies/xGPU/bin/draw_frag.glsl"
+  "dependencies/xGPU/Bin/draw_frag.glsl"
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticShadowMapCreation_frag.glsl"
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_frag.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_frag.glsl"
@@ -377,8 +381,8 @@ set(FRAG_SHADER_SOURCES
 )
 
 set(VERT_SHADER_SOURCES
-  "dependencies/xGPU/bin/draw_vert.glsl"
-  "dependencies/xGPU/bin/imgui_vert.glsl"
+  "dependencies/xGPU/Bin/draw_vert.glsl"
+  "dependencies/xGPU/Bin/imgui_vert.glsl"
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticShadowMapCreation_vert.glsl"
   "plugins/xgeom_static.plugin/source/runtime/GeomStaticBasicShader_vert.glsl"
   "plugins/xgeom_skin.plugin/source/runtime/GeomSkinShadowMapCreation_vert.glsl"
@@ -650,7 +654,7 @@ if(NOT WIN32)
   set_target_properties(${TARGET_PROJECT} PROPERTIES EXCLUDE_FROM_ALL TRUE)
   find_package(Vulkan REQUIRED)
   find_package(Threads REQUIRED)
-  target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS})
+  target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS} atomic)
   # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
   set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
 endif()

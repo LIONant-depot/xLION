@@ -82,7 +82,7 @@ namespace xeditor
             if (!isLoaded()) return {};
             const std::wstring Tmp = SnapshotPath();
             if (!WriteToFile(Tmp)) return {};
-            std::ifstream In(Tmp, std::ios::binary);
+            std::ifstream In(std::filesystem::path(Tmp), std::ios::binary);
             std::stringstream Text; Text << In.rdbuf();
             In.close();
             std::filesystem::remove(Tmp);
@@ -94,7 +94,7 @@ namespace xeditor
         {
             if (Text.empty()) return false;
             const std::wstring Tmp = SnapshotPath();
-            { std::ofstream Out(Tmp, std::ios::binary | std::ios::trunc); Out << Text; }
+            { std::ofstream Out(std::filesystem::path(Tmp), std::ios::binary | std::ios::trunc); Out << Text; }
             const bool bOk = ReplaceFromFile(Tmp);
             std::filesystem::remove(Tmp);
             if (!bOk) return false;
