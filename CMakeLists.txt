@@ -28,12 +28,38 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(xcmake_tools)
 include(${CMAKE_BINARY_DIR}/_deps/xcmake_tools/Common.cmake)
 
+# Linux port (clang): applies to every target added below, dependencies included, and never to MSVC.
+#  - -fms-extensions/-fdeclspec: accept the MSVC syntax the depots use (__declspec(noinline), ...);
+#    dllexport/dllimport are no-ops on ELF, where every symbol is exported by default anyway.
+#  - the force-included compat header supplies the MSVC secure-CRT names and the std headers MSVC's STL
+#    pulls in transitively (see source/Platform/xlion_platform_compat_linux.h).
+if(NOT WIN32)
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:CXX>:-include${CMAKE_SOURCE_DIR}/source/Platform/xlion_platform_compat_linux.h>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-fms-extensions>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-fdeclspec>"
+    "$<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing>"
+    -fPIC
+    -march=x86-64-v3   # AVX2/FMA/F16C: xmath uses those intrinsics unconditionally (MSVC needs no flag for them)
+    -ferror-limit=200
+    -Wno-unknown-pragmas -Wno-ignored-attributes -Wno-microsoft-template -Wno-microsoft-cast
+    -Wno-unused-value -Wno-switch -Wno-deprecated-declarations -Wno-nonportable-include-path
+  )
+endif()
+
 #
 # Get and build the sample project (Assets, plugins, and most third-party dependencies live here -
 # same mechanism xGPU itself uses, reused verbatim so LevelEditor's plugin editors and asset
 # pipeline work identically once ported).
 #
-if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/check_changes.bat")
+# Linux (WSL) port: example.lionprj's Install.bat is Windows-only - on other platforms the tree
+# (example.lionprj + its Cache/dependencies and Cache/Plugins clones) must already be in place (see
+# documentation/Linux/README_linux_headless.md). Never auto-populate there: FetchContent_Populate of
+# example.lionprj into an existing source dir wipes it.
+if(NOT WIN32 AND NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies")
+    message(FATAL_ERROR "example.lionprj/Cache/dependencies is missing - set the tree up first (see documentation/Linux/README_linux_headless.md)")
+endif()
+if(WIN32 AND NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/check_changes.bat")
     FetchContent_Declare(
       xresource_pipeline_example
       GIT_REPOSITORY https://github.com/LIONant-depot/example.lionprj.git
@@ -94,7 +120,7 @@ endforeach()
 # compiled, and nothing else is affected.
 foreach(CompilerPlugin xscript_module xgame)
     set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
-    if(EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
+    if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
         if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
             file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies" "${COMPILER_PLUGIN_DIR}/dependencies" SYMBOLIC RESULT result)
         endif()
@@ -270,6 +296,12 @@ FetchAndPopulate("https://github.com/LIONant-depot/xeditor_tools.git" "main")
 #
 # Add ImGui files directly - identical component definition to xGPU's own
 #
+# The Win32 platform backend only exists on Windows (headless on other platforms never creates a window).
+if(WIN32)
+  set(XLION_IMGUI_PLATFORM_BACKEND "backends/imgui_impl_win32.h" "backends/imgui_impl_win32.cpp")
+else()
+  set(XLION_IMGUI_PLATFORM_BACKEND)
+endif()
 DefineInterfaceComponent(imgui "dependencies"
   "imconfig.h"
   "imgui.cpp"
@@ -282,8 +314,7 @@ DefineInterfaceComponent(imgui "dependencies"
   "imstb_rectpack.h"
   "imstb_textedit.h"
   "imstb_truetype.h"
-  "backends/imgui_impl_win32.h"
-  "backends/imgui_impl_win32.cpp"
+  ${XLION_IMGUI_PLATFORM_BACKEND}
 )
 
 DefineInterfaceComponent(imgui-node-editor "dependencies"
@@ -309,7 +340,12 @@ DefineInterfaceComponent(ImGuizmo "dependencies"
 # font) and its own mesh-preview widget actually need, plus xGPU's own core draw/imgui shaders
 # (which live in xGPU's own repo now, fetched to dependencies/xGPU).
 #
-set(GLSLC_CANDIDATE "${CMAKE_SOURCE_DIR}/dependencies/Shaderc/bin/glslc.exe")
+if(WIN32)
+  set(GLSLC_CANDIDATE "${CMAKE_SOURCE_DIR}/dependencies/Shaderc/bin/glslc.exe")
+else()
+  # Linux: the distro's glslc (Ubuntu package "glslc")
+  find_program(GLSLC_CANDIDATE glslc REQUIRED)
+endif()
 if(NOT EXISTS "${GLSLC_CANDIDATE}")
   message(FATAL_ERROR "glslc.exe not found at ${GLSLC_CANDIDATE} - expected example.lionprj's Install.bat to have provided a Shaderc install alongside xGPU's own dependencies.")
 endif()
@@ -602,6 +638,18 @@ source_group(TREE "${CMAKE_SOURCE_DIR}/plugins" PREFIX "plugins" FILES ${XLION_P
 find_package(OpenMP REQUIRED)
 target_link_libraries(${TARGET_PROJECT} PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(xLION_Headless PRIVATE OpenMP::OpenMP_CXX)
+
+# Linux port: only the headless editor is supported off Windows - the graphical target still configures
+# (shared CMake below references it) but is never part of "all". Headless still compiles xGPU's Vulkan
+# backend in (never initialized there), so it links the Vulkan loader; dlopen/threads for the platform layer.
+if(NOT WIN32)
+  set_target_properties(${TARGET_PROJECT} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  find_package(Vulkan REQUIRED)
+  find_package(Threads REQUIRED)
+  target_link_libraries(xLION_Headless PRIVATE Vulkan::Vulkan Threads::Threads ${CMAKE_DL_LIBS})
+  # $ORIGIN rpath: LIONCore.so/LIONRender.so are copied next to the executable, same as the .dlls on Windows.
+  set_target_properties(xLION_Headless PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+endif()
 
 # Shared 3D editor-viewport scaffolding (camera + grid) - the graphical target only; headless renders nothing.
 target_link_libraries(${TARGET_PROJECT} PRIVATE xeditor_tools)
