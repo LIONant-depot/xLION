@@ -15,33 +15,38 @@ import os
 import ctypes
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import time
-from ctypes import wintypes
+if os.name == "nt":
+    from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-PIPE = r"\\.\pipe\xEditor_Console"
+# Windows: a named pipe. Linux: an AF_UNIX stream socket (one request per connection, same framing), at $XEDITOR_PIPE or the default
+# path the editor uses. Set XEDITOR_PIPE (to a path of your own) to run more than one editor on a machine, e.g. parallel CI jobs.
+PIPE = r"\\.\pipe\xEditor_Console" if os.name == "nt" else (os.environ.get("XEDITOR_PIPE") or "/tmp/xEditor_Console.sock")
 SMOKE_DIR = Path(__file__).resolve().parent
 GOLDEN_DIR = SMOKE_DIR / "golden"
 REPO = SMOKE_DIR.parents[3]
 # Debug on purpose: asserts (CRT assert, IM_ASSERT, xproperty/xecs asserts) only exist there. Pass --exe for another build.
-DEFAULT_EXE = REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe"
+DEFAULT_EXE = (REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe") if os.name == "nt" else (REPO / "Build" / "xLION.linux" / "xLION_Headless")
 
 
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_k32.CreateFileW.restype = wintypes.HANDLE
-_k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-_k32.WriteFile.argtypes = [wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
-_k32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
-_k32.CancelIoEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
-_k32.CloseHandle.argtypes = [wintypes.HANDLE]
-_INVALID_HANDLE = wintypes.HANDLE(-1).value
-_GENERIC_RW = 0xC0000000
-_OPEN_EXISTING = 3
-_EOF_ERRORS = (109, 233)      # ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED: the server hung up after its reply
+if os.name == "nt":
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _k32.CreateFileW.restype = wintypes.HANDLE
+    _k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    _k32.WriteFile.argtypes = [wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    _k32.ReadFile.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    _k32.CancelIoEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
+    _k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _INVALID_HANDLE = wintypes.HANDLE(-1).value
+    _GENERIC_RW = 0xC0000000
+    _OPEN_EXISTING = 3
+    _EOF_ERRORS = (109, 233)      # ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED: the server hung up after its reply
 
 
 # Commands that write the developer's own project data. The suite runs against the real example project, so a
@@ -213,9 +218,41 @@ class Editor:
         return "\n  " + "\n  ".join([head] + mine[:frames])
 
     # ------------------------------------------------------------------ pipe
+    def _roundtrip_unix(self, line: str, timeout: float) -> str:
+        """The Linux transport: connect to the editor's socket, write "<command>\\n", read until the server closes (same as the pipe)."""
+        deadline = time.monotonic() + timeout
+        while True:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                sock.settimeout(max(0.1, deadline - time.monotonic()))
+                sock.connect(PIPE)
+                break
+            except OSError as e:
+                sock.close()
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"pipe not available for {line!r}: {e}")
+                time.sleep(0.05)
+        try:
+            sock.sendall(line.encode() + b"\n")
+            chunks = []
+            while True:
+                sock.settimeout(max(0.1, deadline - time.monotonic()))
+                try:
+                    data = sock.recv(4096)
+                except socket.timeout:
+                    raise TimeoutError(f"no complete reply to {line!r} within {timeout}s")
+                if not data:
+                    break
+                chunks.append(data)
+            return b"".join(chunks).decode(errors="replace")
+        finally:
+            sock.close()
+
     def _roundtrip(self, line: str, timeout: float) -> str:
         """One request/response. Connecting retries while the server re-creates its pipe instance; a reply
         that does not finish within `timeout` is cancelled and raises TimeoutError."""
+        if os.name != "nt":
+            return self._roundtrip_unix(line, timeout)
         deadline = time.monotonic() + timeout
         while True:
             h = _k32.CreateFileW(PIPE, _GENERIC_RW, 0, None, _OPEN_EXISTING, 0, None)
@@ -294,11 +331,19 @@ class Editor:
         names = lines[0].split("\t")
         return [dict(zip(names, l.split("\t"))) for l in lines[1:]]
 
+    @staticmethod
+    def _need_win32_window() -> None:
+        """post_key / wheel / click post Win32 window messages to the editor's window: nothing to post them to on Linux or in headless."""
+        if os.name != "nt":
+            import pytest
+            pytest.skip("posts Win32 window messages to the editor's window (Windows only)")
+
     def post_key(self, vk: int, hold: float = 0.15, sys: bool = False, while_down=None):
         """A real key press for the editor's window: WM_KEYDOWN / WM_KEYUP posted to it, so it goes through the Win32 key table, xGPU's
         keyboard and ImGui like a keystroke would (PressKeys skips all of that). Needs no focus. vk is a Win32 virtual-key code (VK_F1 = 0x70).
         sys=True posts the SYS variants, which is how Windows delivers Alt (VK_MENU = 0x12) and every key pressed while Alt is held.
         while_down, if given, is called once the key has been down for the hold time (before it is released); its result is returned."""
+        self._need_win32_window()
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
@@ -333,6 +378,7 @@ class Editor:
     def wheel(self, x: float, y: float, notches: int, ctrl: bool = False) -> None:
         """The real mouse wheel turned by `notches` (positive = away from the person, the way that scrolls up) with the pointer at the SCREEN point (x, y), Ctrl held if asked.
         Like click: the window is brought forward and the real pointer goes there, then back."""
+        self._need_win32_window()
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
@@ -381,6 +427,7 @@ class Editor:
         hands ImGui a pointer position while Windows says the pointer is over the window, which messages posted to it cannot keep true. So the editor's window is brought
         forward (a click focuses a window, and ImGui ignores the pointer of one that is not focused), the pointer goes there, presses and releases, and returns to where the
         person had it."""
+        self._need_win32_window()
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
