@@ -117,8 +117,13 @@ echo "repos changed since the last run: $(wc -l < "$RESULTS/changed.txt")"; head
 # build
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 build_all() {
-  cmake --build "$TREE/Build/xLION.linux" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1
-  local rc=$?; tail -5 "$RESULTS/build.log"; return $rc
+  cmake --build "$TREE/Build/xLION.linux" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1 &
+  local pid=$! n=0
+  while kill -0 $pid 2>/dev/null; do                 # a line a minute, so the console shows it is alive (the full output is build.log)
+    sleep 5; n=$((n + 5)); [ $((n % 60)) = 0 ] || continue
+    echo "$(date +%T) build: $(grep -E '^\[[0-9]+/[0-9]+\]' "$RESULTS/build.log" | tail -1 | cut -c1-150)"
+  done
+  wait $pid; local rc=$?; tail -5 "$RESULTS/build.log"; return $rc
 }
 if ! stage_run "build" build_all; then
   echo "FAILED" > "$RESULTS/status.txt"
@@ -154,6 +159,7 @@ wait_compiles() {
   while [ $(( $(date +%s) - start )) -lt 2700 ]; do          # at most 45 minutes
     local s; s=$(timeout 60 "$BIN/xeditorcli" CompileStatus 2>&1 | head -1)
     polls=$((polls + 1)); echo "$(date +%T) $s" | cut -c1-200 >> "$log"
+    [ $((polls % 6)) = 1 ] && echo "$(date +%T) resources: $s" | cut -c1-200      # a line a minute on the console too
     if echo "$s" | grep -q "^Compiling=0 Waiting=0"; then idle=$((idle + 1)); else idle=0; fi
     [ $idle -ge 3 ] && break
     sleep 10
@@ -185,7 +191,7 @@ run_tests() {
     XEDITOR_PIPE="$PIPE" XLION_PROJECT="$PROJECT" XEDITOR_NO_ASSERT_DIALOG=1 XLION_TEST_TIMING_LOG="$RESULTS/timing.log" \
     timeout "$cap" "$BASE/venv/bin/python" -m pytest "${files[@]}" "${desel[@]}" -p no:cacheprovider --exe "$BIN/xLION_Headless" \
       --timeout=300 --timeout-method=thread -o junit_family=xunit2 -o junit_logging=all -o junit_log_passed_tests=false \
-      --junitxml="$RESULTS/suite.xml" -rfE --tb=short -q )
+      --junitxml="$RESULTS/suite.xml" -rfE --tb=short -v )
   local rc=$?
   [ -f "$RESULTS/timing.tsv" ] || true
   return 0                                      # failing tests are the summary's business, not the run's
