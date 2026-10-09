@@ -2,7 +2,7 @@
 # Runs the Jenkins agent of the CI VM as a systemd service under the low-privilege user "jenkins-agent", so that builds do not run on the Jenkins server's own
 # (built-in) node: a build runs project scripts, and on the built-in node that is the same account, files and credentials as Jenkins itself.
 #
-# 1. In Jenkins (an administrator): Manage Jenkins > Nodes > New Node, name "linux-vm", type Permanent Agent. Number of executors 1 (the two jobs share one tree),
+# 1. In Jenkins (an administrator): Manage Jenkins > Nodes > New Node, name "linux-vm", type Permanent Agent. Number of executors 3 (the jobs share one tree under a lock, so only one heavy run goes at a time; the extra executors let the poll job run while a full run and a waiting fast run hold the others),
 #    Remote root directory /var/lib/jenkins-agent/agent, Labels "linux", Usage "Only build jobs with label expressions matching this node",
 #    Launch method "Launch agent by connecting it to the controller" (with WebSocket). Save; the node page shows the secret.
 # 2. Here, as root:   sudo bash Build/jenkins/agent/install_agent.sh linux-vm <secret> [jenkins url] [tcp]
