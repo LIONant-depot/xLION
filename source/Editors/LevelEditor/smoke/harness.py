@@ -156,7 +156,11 @@ class Editor:
                 pass
         self.launches += 1
         log = open(self.log_dir / f"editor_{self.launches}.log", "wb")
-        self.proc = subprocess.Popen([str(self.exe), *self.args], cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
+        argv = [str(self.exe), *self.args]
+        if os.name != "nt" and os.environ.get("XLION_TEST_GDB") and shutil.which("gdb"):
+            # Linux: run the editor under gdb so a crash leaves its backtrace in the editor log (there is no crash handler writing LevelEditor.trace.log)
+            argv = ["gdb", "-q", "-batch", "-ex", "handle SIGPIPE nostop noprint", "-ex", "run", "-ex", "bt 30", "--args", *argv]
+        self.proc = subprocess.Popen(argv, cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
                                      env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
