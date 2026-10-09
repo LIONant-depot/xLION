@@ -80,7 +80,7 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/dependencies")
 endif()
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/plugins")
-  file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/plugins" "${CMAKE_SOURCE_DIR}/plugins" SYMBOLIC RESULT result)
+  file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins" "${CMAKE_SOURCE_DIR}/plugins" SYMBOLIC RESULT result)
   if(result)
     message(FATAL_ERROR "Failed to create symlink: ${result}")
   endif()
