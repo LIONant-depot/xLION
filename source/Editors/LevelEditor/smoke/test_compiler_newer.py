@@ -49,6 +49,7 @@ def _run_editor(exe: Path, seconds: float, until=None) -> None:
 def test_a_compiler_built_after_its_resources_compiles_them_again(request):
     exe     = Path(request.config.getoption("--exe"))
     project = _project()
+    request.getfixturevalue("editor").stop()        # in a full run the shared editor of the session is up and owns the command pipe: it is closed (the next test starts it again)
     compilers = _font_compilers(project)
     if not compilers:
         pytest.skip("the font compiler is not built in this project")
