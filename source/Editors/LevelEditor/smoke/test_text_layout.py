@@ -8,6 +8,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.needs_window          # needs a window: skipped for a headless editor (see conftest.py)
+
 MTSDF = "5549D8C8E9220001, 3285CB58BB79E1AD"
 BITMAP = "5549D8C8E9220003, 3285CB58BB79E1AD"          # an instance guid is odd: the resource manager tells a guid from a pointer by its lowest bit
 SIZE_ASCENDER_DESCENDER = 1.117                         # Arial: the ascender and the descender of the font, in em

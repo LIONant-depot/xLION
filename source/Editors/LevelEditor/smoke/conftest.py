@@ -23,6 +23,17 @@ from harness import DEFAULT_EXE, GOLDEN_DIR, Editor, vulkan_messages_from_text
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "no_editor: the test needs no editor (it is not started for it)")
+    config.addinivalue_line("markers", "needs_window: the test needs the graphical editor (a window, ImGui state, text and font rendering); skipped when --exe is a headless editor")
+
+
+def pytest_collection_modifyitems(config, items):
+    """A headless editor has no window: the tests that need one are skipped for it (they run on the graphical editor, which is what the default --exe is)."""
+    if "headless" not in Path(config.getoption("--exe")).name.lower():
+        return
+    skip = pytest.mark.skip(reason="needs the graphical editor (window, ImGui, font rendering): --exe is a headless editor")
+    for item in items:
+        if item.get_closest_marker("needs_window"):
+            item.add_marker(skip)
 
 
 def pytest_addoption(parser):

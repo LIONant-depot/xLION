@@ -5,6 +5,8 @@ only, so Alt did nothing in the editor.
 """
 import pytest
 
+pytestmark = pytest.mark.needs_window          # needs a window: skipped for a headless editor (see conftest.py)
+
 VK_SHIFT, VK_CONTROL, VK_MENU = 0x10, 0x11, 0x12
 
 

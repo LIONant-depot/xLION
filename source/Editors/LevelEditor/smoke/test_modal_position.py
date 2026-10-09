@@ -8,6 +8,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.needs_window          # needs a window: skipped for a headless editor (see conftest.py)
+
 VK_RETURN = 0x0D
 TOLERANCE = 3.0         # pixels
 

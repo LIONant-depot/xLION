@@ -8,6 +8,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.needs_window          # needs a window: skipped for a headless editor (see conftest.py)
+
 from test_text_layout import BITMAP, MTSDF, label
 
 
