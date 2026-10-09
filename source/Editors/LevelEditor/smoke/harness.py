@@ -303,6 +303,12 @@ class Editor:
         except (TimeoutError, OSError) as e:
             if not self.alive():
                 raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()}){self.crash_summary()}") from e
+            if isinstance(e, TimeoutError):
+                # Alive but answering nothing: it is wedged. Left running, every later test would wait out its own timeout against it (the run stalled for an hour that way):
+                # it is killed, this test fails with the reason, and the next one starts a fresh editor.
+                self.proc.kill()
+                self.proc.wait(timeout=10)
+                raise EditorCrashed(f"editor did not answer {line!r} within {timeout}s (hung): killed, the next test gets a new one") from e
             raise
         finally:
             self._last_cmd_at = time.monotonic()
