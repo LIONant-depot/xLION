@@ -34,9 +34,9 @@ case "$ROOT" in /mnt/[a-z]/*) echo "warning: $ROOT is a Windows drive mounted in
 # ---------------------------------------------------------------------------------------------------------------------
 # 1. Packages
 #    clang-20: clang 18 crashes on the ECS code. libx11-dev/libvulkan-dev/glslc: the X11 window backend of xGPU and the
-#    shader compiler. zenity + xdg-utils: file dialogs and "open" in the editor (runtime only). libXrandr/libXcursor: runtime.
+#    shader compiler; libshaderc-dev: the material asset compiler (xmaterial.plugin) links the distribution shaderc. zenity + xdg-utils: file dialogs and "open" in the editor (runtime only). libXrandr/libXcursor: runtime.
 # ---------------------------------------------------------------------------------------------------------------------
-PACKAGES="build-essential git cmake ninja-build pkg-config python3 clang-20 lld-20 libomp-20-dev libvulkan-dev glslc libx11-dev libxrandr2 libxcursor1 zenity xdg-utils"
+PACKAGES="build-essential git cmake ninja-build pkg-config python3 clang-20 lld-20 libomp-20-dev libvulkan-dev glslc libshaderc-dev libx11-dev libxrandr2 libxcursor1 zenity xdg-utils"
 if [ "$DO_PACKAGES" = 1 ]; then
   if command -v apt-get >/dev/null; then
     SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
