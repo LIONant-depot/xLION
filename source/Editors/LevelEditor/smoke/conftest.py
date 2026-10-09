@@ -52,8 +52,21 @@ def editor(request):
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
+    report = outcome.get_result()
     if call.when == "call":
-        item.call_failed = outcome.get_result().failed
+        item.call_failed = report.failed
+    if report.failed:
+        # What a person needs to see in the test report (JUnit / Jenkins) without opening a log: how the editor is doing and the end of what it printed.
+        try:
+            ed = item.funcargs.get("editor")
+            if ed is not None:
+                state = "running" if ed.alive() else f"not running (exit {ed.describe_exit()})"
+                text = ed.log_text()
+                tail = chr(10).join(text.splitlines()[-80:])
+                crash = ed.crash_summary() if not ed.alive() else ""
+                report.sections.append(("Editor", f"launch #{ed.launches}, {state}{crash}{chr(10)}--- the last lines of its log ({ed.log_dir}/editor_{ed.launches}.log):{chr(10)}{tail}"))
+        except Exception as e:                      # a report that cannot be enriched is still a report
+            report.sections.append(("Editor", f"(could not read the editor's log: {e})"))
 
 
 @pytest.fixture(autouse=True)

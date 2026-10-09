@@ -1,0 +1,53 @@
+// xLION: the FAST smoke tests on Linux, for check-ins: the reliable, broad test files of Build/ci/fast_files.txt (about 6 minutes of tests after the update).
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-fast" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
+// Script Path "Build/jenkins/Jenkinsfile.fast". It has no schedule of its own: the small job "xlion-poll" (Jenkinsfile.poll) starts it when any repo of the
+// project has a new commit, and it can be started by hand (FORCE). The result is the same kind of report as the full job: documentation/Linux/jenkins.md.
+pipeline {
+    agent { label 'built-in' }
+
+    options {
+        timestamps()
+        timeout(time: 3, unit: 'HOURS')         // the first run on an empty tree builds everything
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '200', artifactNumToKeepStr: '60'))
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE', defaultValue: false, description: 'Run even when no repo has a new commit')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    environment {
+        CI_TREE = '/var/lib/jenkins/xlion-ci/tree'
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                script {
+                    def flags = (params.SCRATCH ? '--scratch ' : '')
+                    sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results"
+bash Build/ci/ci_run.sh --tier fast --tree "\$CI_TREE" --results "\$WORKSPACE/results" ${flags}
+"""
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite.xml', allowEmptyResults: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'NEW' || status == 'FAILED' || status == 'NOTESTS') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

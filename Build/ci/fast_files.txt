@@ -1,0 +1,35 @@
+# The fast tier: the test files the check-in job runs (Build/jenkins/Jenkinsfile.fast). One file name per line under source/Editors/LevelEditor/smoke/.
+#
+# Chosen from the first full Linux run (headless editor, 2 core VM): files that passed every test, had no test over a minute, ranked by how many source areas they
+# cover per second ("breadth" = rows of golden/test_impact.json that list the file). About 5.5 minutes of test time in total. A file that is broad but still fails on
+# Linux is not here (it would turn every check-in red); it runs in the full job until it is fixed, and then it comes in.
+# Regenerate with: python Build/ci/pick_fast.py <junit xml of a full run> (prints the ranking; edit this file by hand from it).
+#
+#   file                                tests  seconds  breadth
+test_system_order.py                  #   2        2      5
+test_resource_groups.py               #   3        0      2
+test_session_command_surface.py       #   2        2      4
+test_entities.py                      #   7        9     15
+test_command_line.py                  #   6        2      2
+test_physics_events.py                #   2        7      4
+test_components.py                    #   8       11      6
+test_script_modules.py                #  10       10      5
+test_folders.py                       #   5        6      3
+test_resource_editors.py              #  13       13      6
+test_save_all.py                      #   3        6      2
+test_editor_menu.py                   #   7        7      2
+test_undo_redo.py                     #   5        8      2
+test_sessions_and_entities.py         #   6        8      2
+test_event_handlers.py                #   4        4      1
+test_game_module_reload_more.py       #   3        4      1
+test_soccer_goals.py                  #   2       14      3
+test_scene_editor.py                  #   6       16      2
+test_physics_contact_events.py        #   3       16      2
+test_command_helpers.py               #   6        8      1
+test_console_and_chat.py              #   8        9      1
+test_play_more.py                     #  10       18      2
+test_read_only_queries.py             #  12       13      1
+test_game_module_reload.py            #   2       39      3
+test_system_constraints.py            #  13       18      1
+test_render_transform.py              #   2       33      1
+test_robustness.py                    #   6       40      1

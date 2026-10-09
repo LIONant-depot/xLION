@@ -1,0 +1,61 @@
+// xLION: the FULL smoke suite on Linux (headless editor), every day at 08:00 Singapore time.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-full" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
+// Script Path "Build/jenkins/Jenkinsfile.full". How to read the result, and what each file is: documentation/Linux/jenkins.md.
+//
+// What a person sees without opening a log: the build name carries the verdict (GREEN / KNOWN / NEW / FAILED), the description the counts and the repos that
+// changed, the Test Result page every test with its message and the tail of the editor's log, and the artifacts (results/) the summary, the timing of every
+// test, the commit of every repo, and the build log.
+pipeline {
+    agent { label 'built-in' }
+
+    options {
+        timestamps()
+        timeout(time: 4, unit: 'HOURS')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '60', artifactNumToKeepStr: '30'))
+    }
+
+    // 8 o'clock in Singapore, whatever the time zone of the Jenkins server is
+    triggers { cron('TZ=Asia/Singapore\n0 8 * * *') }
+
+    parameters {
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing (always done on Sundays)')
+    }
+
+    environment {
+        CI_TREE = '/var/lib/jenkins/xlion-ci/tree'      // the persistent checkout + build, shared with the fast job (one run at a time: they wait for each other)
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                script {
+                    def sunday = sh(returnStdout: true, script: 'TZ=Asia/Singapore date +%u').trim() == '7'
+                    def scratch = (params.SCRATCH || sunday) ? '--scratch' : ''
+                    sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results"
+bash Build/ci/ci_run.sh --tier full --tree "\$CI_TREE" --results "\$WORKSPACE/results" ${scratch}
+"""
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // the test results page: every test, its time, its message and the editor's log tail for the ones that failed
+            junit testResults: 'results/suite.xml', allowEmptyResults: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                // GREEN = success, KNOWN = unstable (only the failures that are already known), anything else is a failure
+                if (status == 'NEW' || status == 'FAILED' || status == 'NOTESTS') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

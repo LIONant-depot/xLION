@@ -1,0 +1,46 @@
+// xLION: the trigger of the fast job. Every 5 minutes it compares the newest commit on GitHub of every repo of the project with what the CI tree has checked
+// out (git ls-remote, about 15 seconds, nothing is cloned) and starts "xlion-fast" when anything is new. It keeps the fast job's history clean: only runs
+// with something to test are in it. When the GitHub webhook of the organization is set up this job can be deleted: the webhook starts the fast job directly.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-poll" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
+// Script Path "Build/jenkins/Jenkinsfile.poll".
+pipeline {
+    agent { label 'built-in' }
+
+    options {
+        timestamps()
+        timeout(time: 10, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '40'))
+    }
+
+    triggers { cron('TZ=Asia/Singapore\nH/5 * * * *') }
+
+    parameters {
+        string(name: 'FAST_JOB', defaultValue: 'xlion-fast', description: 'The job to start')
+    }
+
+    environment {
+        CI_TREE = '/var/lib/jenkins/xlion-ci/tree'
+    }
+
+    stages {
+        stage('Any new commit?') {
+            steps {
+                script {
+                    def out = sh(returnStdout: true, script: '''#!/bin/bash
+mkdir -p "$WORKSPACE/poll"
+bash Build/ci/ci_run.sh --tier fast --tree "$CI_TREE" --results "$WORKSPACE/poll" --detect-only
+''').trim().readLines().last()
+                    echo "detect: ${out}"
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${out}"
+                    if (out == 'NOTREE' || (out.startsWith('CHANGED ') && out != 'CHANGED 0')) {
+                        if (fileExists('poll/changed_raw.txt')) { echo readFile('poll/changed_raw.txt') }
+                        // not waited for: the job runs when the tree is free (it waits for a run that is going on)
+                        build job: params.FAST_JOB, wait: false
+                    }
+                }
+            }
+        }
+    }
+}
