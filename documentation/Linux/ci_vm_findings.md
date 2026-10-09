@@ -76,3 +76,19 @@ What the 260 failures and errors are (grouped, not all analysed yet):
 | prefab group (`test_prefabs`, `test_prefab_editor`, `test_prefab_*`) | ~75 | not analysed yet; may share causes with the above |
 
 Lessons for the harness and for CI: never run the suite under gdb (a crashed editor stays stopped while gdb resolves symbols and the run stalls: use `XLION_TEST_GDB=1` only on one test); always run with `--timeout` (pytest-timeout); install `valgrind` and `gdb` on the CI box for investigations.
+
+## 7. Netdata monitor (installed 2026-10-09)
+
+* `apt-get install netdata` (Ubuntu package 1.43.2, free/open source; Netdata Cloud is not connected). `/etc/netdata/netdata.conf` is ours (previous file kept as `netdata.conf.before-xlion`): listens on `127.0.0.1:19999` only, machine learning off, 2 s samples, anonymous statistics opted out.
+* Published by Caddy at `https://team39.dp-ext8.com/monitor/` behind basic auth (user `monitor`; the password is kept by the team, not in this repository). The block is in `/etc/caddy/Caddyfile` (backup `Caddyfile.backup-20261009-130227`, restore with `sudo cp` and `sudo systemctl reload caddy`). To change the password: `caddy hash-password`, replace the hash in the `/monitor` block, reload.
+* Also installed with sudo while investigating: `libshaderc-dev`, `gdb`, `valgrind`.
+
+## 8. TODO for the VM
+
+- [ ] **Netdata Jenkins integration** (waiting for a go-ahead and a time with no running build). Needs: (1) Netdata's official apt package instead of Ubuntu's (Ubuntu's has no Go plugin, where the Jenkins collector lives); (2) the *Prometheus metrics* plugin installed in Jenkins 2.580.1 and a Jenkins restart when no build is running; (3) a read-only `netdata` Jenkins user with an API token (created by a Jenkins admin), and the collector config `/etc/netdata/go.d/jenkins.conf` pointing at `http://127.0.0.1:8080/jenkin/prometheus`.
+- [ ] Recreate the Jenkins workspace from `main` with `Build/CreateProject.sh --update` (the old `xLION-inspect-...` checkout still carries CI patches 1-5); keep `/var/lib/jenkins-agent` untouched until agreed.
+- [ ] Jenkinsfile in the repo: update (`--update` + manifest), build, wait for `CompileStatus` idle, smoke, pytest, archive logs; nightly scratch build with `ccache`.
+- [ ] Trigger: GitHub organization webhook for push events (needs Jenkins reachable from the internet) or a poller on `git ls-remote` of every repo's `main`.
+- [ ] Linux build target for the ScriptModule compiler (about 21 tests need it) and skip markers for GUI-only and Windows-only tests (see section 6).
+- [ ] Remaining Linux crashes and the `xerr` pool assertion (section 6).
+- [ ] Windows build agent (the VM is Linux only).
