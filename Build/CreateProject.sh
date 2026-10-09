@@ -5,6 +5,9 @@
 #   bash Build/CreateProject.sh --build        ... and build xLION_Headless, xLION, xeditorcli and the asset compilers
 #   bash Build/CreateProject.sh --no-packages  skip the apt step (packages already installed / not a Debian-family distro)
 #   bash Build/CreateProject.sh --clean        delete the build dir first
+#   bash Build/CreateProject.sh --update       bring every repo that follows a branch (ours: main) to the newest commit first
+#                                              (third party stays on its pinned commit); the commit of every repo is written to
+#                                              <build dir>/manifest.txt, so a build says exactly what it was built from
 #
 # What it does, in order (every step is safe to run again):
 #   1. installs the toolchain and libraries (apt; Ubuntu 24.04+ / Debian 13+, needs sudo)
@@ -21,11 +24,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux}"
 BUILD_TYPE="${BUILD_TYPE:-Debug}"
 GIT_BASE="${GIT_BASE:-https://github.com/LIONant-depot}"
-DO_BUILD=0; DO_PACKAGES=1; DO_CLEAN=0
+DO_BUILD=0; DO_PACKAGES=1; DO_CLEAN=0; DO_UPDATE=0
 for a in "$@"; do
   case "$a" in
-    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;;
-    -h|--help) sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;; --update) DO_UPDATE=1 ;;
+    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown option $a (see --help)"; exit 2 ;;
   esac
 done
@@ -56,7 +59,14 @@ command -v clang++-20 >/dev/null || { echo "clang++-20 not found (clang 18 is no
 submodules() { [ -f "$1/.gitmodules" ] && git -C "$1" submodule update -q --init --recursive --depth 1 || true; }
 clone_at() {
   local url="$1" dir="$2" ref="$3"
-  if [ -d "$dir/.git" ] && git -C "$dir" rev-parse -q --verify HEAD >/dev/null; then submodules "$dir"; return 0; fi
+  if [ -d "$dir/.git" ] && git -C "$dir" rev-parse -q --verify HEAD >/dev/null; then
+    # --update: a clone that follows a branch or tag (not a pinned 40 hex commit) is moved to its newest commit. The tree is a CI/build
+    # checkout: nothing in it is edited by hand, so the reset is safe, and a repo already at the newest commit costs one small fetch.
+    if [ "$DO_UPDATE" = 1 ] && ! [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+      git -C "$dir" fetch -q --depth 1 origin "$ref" && git -C "$dir" -c advice.detachedHead=false reset -q --hard FETCH_HEAD
+    fi
+    submodules "$dir"; return 0
+  fi
   rm -rf "$dir"; mkdir -p "$(dirname "$dir")"
   echo "  cloning $(basename "$dir")"
   if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
@@ -124,6 +134,16 @@ mkdir -p "$BUILD_DIR/_deps"
 clone_at "$GIT_BASE/xcmake_tools.git" "$BUILD_DIR/_deps/xcmake_tools" main
 CC=clang-20 CXX=clang++-20 cmake -S "$ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
       -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+# What this build is made of: one line per repo (commit and name), the root repo first
+{
+  echo "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown) xLION"
+  for d in "$PRJ" "$DEPS"/*/ "$PLUGINS"/*/; do
+    [ -L "${d%/}" ] && continue
+    [ -d "$d/.git" ] && echo "$(git -C "$d" rev-parse HEAD 2>/dev/null) $(basename "$d")"
+  done
+} > "$BUILD_DIR/manifest.txt"
+echo "manifest: $BUILD_DIR/manifest.txt ($(wc -l < "$BUILD_DIR/manifest.txt") repos)"
 
 if [ "$DO_BUILD" = 1 ]; then
   echo "== build"
