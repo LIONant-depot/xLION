@@ -56,3 +56,23 @@ Rule: a fix is only real once it is pushed to `main`; verify Linux builds from a
 * `xlion_compilers`: all nine native compilers (texture, material, material_instance, font, game, geom_static, geom_skin, skeleton, anim_package) built as ELF executables.
 * `xLION_Headless` + `xeditorcli`: built (`BUILD_EXIT=0`).
 * Headless smoke: `ListLevels` (3 levels), `OpenLevel`, `Play`, `Stop`, `Exit` all correct; the game module loaded.
+
+## 6. The pytest suite on Linux (headless editor, VM, fresh clone of main; first full run)
+
+Result: **303 passed, 225 failed, 35 errors, 16 skipped, 4 xfailed, 3 xpassed** in 1 h 00 min (566 tests, 2 cores).
+
+Fixed on the way (all in `main`): the harness had no Linux transport (`harness.py`, `cc12e39`); `ModalState` crashed a headless editor (`xlevel.plugin` `c4efebe`); closing a level that holds prefab instances crashed the editor: **a real double destruction in the ECS pool** that MSVC's self-resetting `std::vector`/`std::string` destructors hid (`xECSV2` `0837fc5`, found with valgrind). `test_entities.py` went from crashing on its second test to 7/7.
+
+What the 260 failures and errors are (grouped, not all analysed yet):
+
+| Group | Count (approx.) | What it is |
+|---|---|---|
+| "the ScriptModule compiler is not built" (`test_game_compiler`, `test_script_module_compiler`, `test_script_module_editor`) | ~21 | the tests look for the Windows-style plugin build (`xscript_module.plugin/build/CreateAndBuildProject`); there is no Linux target for it in `xlion_compilers` |
+| `FileNotFoundError: 'cmd'` | 6 | tests that start `cmd.exe` (Windows only) |
+| `'NoneType' object has no attribute 'groups'` | ~20 | a regex over an editor reply that has another shape on Linux (e.g. `test_actions`); to look at |
+| Text and layout (`KeyError: 'Quads'/'Lines'/'Bounds'`), `test_modal_position`, `test_keyboard_modifiers` | ~35 | need a real window (UI state, rendering); a headless editor has none |
+| **Editor died** (`SimulateModuleCrash`, `CreateAsset`, `LogShow -Query`, connection reset) | ~12 | real Linux crashes still to investigate |
+| `xerr_details::chain_pool::Alloc(): Assertion false` | startup of the first launches | the xerr error-chain pool is exhausted; suspected one copy of the pool per shared library (not confirmed) |
+| prefab group (`test_prefabs`, `test_prefab_editor`, `test_prefab_*`) | ~75 | not analysed yet; may share causes with the above |
+
+Lessons for the harness and for CI: never run the suite under gdb (a crashed editor stays stopped while gdb resolves symbols and the run stalls: use `XLION_TEST_GDB=1` only on one test); always run with `--timeout` (pytest-timeout); install `valgrind` and `gdb` on the CI box for investigations.
