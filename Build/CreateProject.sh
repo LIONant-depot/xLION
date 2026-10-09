@@ -52,9 +52,11 @@ command -v clang++-20 >/dev/null || { echo "clang++-20 not found (clang 18 is no
 # 2. The project tree
 # ---------------------------------------------------------------------------------------------------------------------
 # clone_at <url> <dir> <ref>: a branch/tag is cloned shallow; a 40 hex commit is fetched shallow. A half finished clone is redone.
+# Submodules (msdf-atlas-gen has msdfgen and artery-font-format) are initialised too, also for a clone that already exists.
+submodules() { [ -f "$1/.gitmodules" ] && git -C "$1" submodule update -q --init --recursive --depth 1 || true; }
 clone_at() {
   local url="$1" dir="$2" ref="$3"
-  if [ -d "$dir/.git" ] && git -C "$dir" rev-parse -q --verify HEAD >/dev/null; then return 0; fi
+  if [ -d "$dir/.git" ] && git -C "$dir" rev-parse -q --verify HEAD >/dev/null; then submodules "$dir"; return 0; fi
   rm -rf "$dir"; mkdir -p "$(dirname "$dir")"
   echo "  cloning $(basename "$dir")"
   if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
@@ -63,6 +65,7 @@ clone_at() {
   else
     git clone -q --depth 1 --branch "$ref" "$url" "$dir"
   fi
+  submodules "$dir"
 }
 
 PRJ="$ROOT/example.lionprj"
