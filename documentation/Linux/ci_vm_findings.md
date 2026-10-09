@@ -92,3 +92,10 @@ Lessons for the harness and for CI: never run the suite under gdb (a crashed edi
 - [ ] Linux build target for the ScriptModule compiler (about 21 tests need it) and skip markers for GUI-only and Windows-only tests (see section 6).
 - [ ] Remaining Linux crashes and the `xerr` pool assertion (section 6).
 - [ ] Windows build agent (the VM is Linux only).
+- [ ] SSH hardening (section 9) and the broken Caddy apt source.
+
+## 9. Removed and found (2026-10-09)
+
+* **Tailscale removed** (no longer used; one network entry point less): logged out of the tailnet, `tailscaled` disabled, `tailscale` and its keyring purged, the apt source moved to `/root/tailscale.list.removed-20261009`. Public SSH, `ufw` and everything else were not touched. If the node `team39` still shows in the tailnet's admin console, its owner can delete it there.
+* **SSH is open to the internet with passwords enabled.** The journal shows password-guessing bots all day (about 60 to 120 failed attempts per address; the only successful logins are `team39` from the team's address). Options, least to most disruptive: `fail2ban` (bans repeat offenders, changes no login settings), then `PasswordAuthentication no` (keys only; needs every person to have a key first), then limiting port 22 to known addresses. Nothing was changed.
+* **Caddy's apt repository is broken** (`dl.cloudsmith.io/public/caddy/stable` answers `402 Payment Required` and "no longer signed"): the public web server does not get updates through apt until that source is replaced.
