@@ -58,6 +58,7 @@ finish() {                                      # always: the summary, whatever 
   local junit="$RESULTS/suite.xml"
   python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux.txt" \
     --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER run $(date '+%F %T %z')" > /dev/null 2>&1 || true
+  clean_project 2>/dev/null || true
   [ -d "$TREE/source/Editors/LevelEditor/smoke/.logs" ] && tar -czf "$RESULTS/smoke_logs.tgz" -C "$TREE/source/Editors/LevelEditor/smoke" .logs 2>/dev/null || true
   [ -f "$TREE/Build/xLION.linux/manifest.txt" ] && cp "$TREE/Build/xLION.linux/manifest.txt" "$RESULTS/manifest.txt" || true
   echo; echo "status: $(cat "$RESULTS/status.txt" 2>/dev/null || echo unknown)"
@@ -79,6 +80,17 @@ if [ -d "$TREE/.git" ]; then bash "$HERE/changed_repos.sh" "$TREE" > "$RESULTS/c
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # update
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# The tests drive a real editor against the example project and it is shared by every run: a run that crashed or was killed leaves entities, scenes and
+# descriptors behind (the test tool only puts the project back when it ends normally), and the next run then sees a different project (extra bodies in the Physics
+# scene changed what a test picked). So the project is put back exactly as GitHub has it before every run and after it. Cache/ (the plugins, the dependencies and
+# the compiled resources) is never touched.
+clean_project() {
+  local p="$TREE/example.lionprj"
+  [ -d "$p/.git" ] || return 0
+  git -C "$p" reset -q --hard
+  git -C "$p" clean -fdq -- Descriptors Project.config Assets
+  return 0
+}
 update_tree() {
   if [ "$SCRATCH" = 1 ] && [ -d "$TREE" ]; then echo "scratch build: removing $TREE"; rm -rf "$TREE"; fi
   if [ ! -d "$TREE/.git" ]; then
@@ -87,6 +99,7 @@ update_tree() {
     git -C "$TREE" fetch -q --depth 1 origin main && git -C "$TREE" reset -q --hard origin/main || return 1
   fi
   ( cd "$TREE" && bash Build/CreateProject.sh --no-packages --update ) || return 1
+  clean_project
 }
 if ! stage_run "update repos" update_tree; then echo "FAILED" > "$RESULTS/status.txt"; exit 1; fi
 
@@ -158,8 +171,11 @@ stage_run "resources compile" wait_compiles || echo "(the queue did not settle: 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 run_tests() {
   local smoke="$TREE/source/Editors/LevelEditor/smoke" files=() cap
+  local desel=()
   if [ "$TIER" = fast ]; then
     while read -r line; do line="${line%%#*}"; line="$(echo "$line" | xargs)"; [ -n "$line" ] && files+=("$line"); done < "$HERE/fast_files.txt"
+    # tests left out of the fast tier for now (a failure nobody has explained yet): one node id per line, '#' comments
+    while read -r line; do line="${line%%#*}"; line="$(echo "$line" | xargs)"; [ -n "$line" ] && desel+=(--deselect "$line"); done < "$HERE/fast_deselect.txt"
     cap=1500
   else
     cap=7200
@@ -167,7 +183,7 @@ run_tests() {
   rm -rf "$smoke/.logs"
   ( cd "$smoke" && \
     XEDITOR_PIPE="$PIPE" XLION_PROJECT="$PROJECT" XEDITOR_NO_ASSERT_DIALOG=1 XLION_TEST_TIMING_LOG="$RESULTS/timing.log" \
-    timeout "$cap" "$BASE/venv/bin/python" -m pytest "${files[@]}" -p no:cacheprovider --exe "$BIN/xLION_Headless" \
+    timeout "$cap" "$BASE/venv/bin/python" -m pytest "${files[@]}" "${desel[@]}" -p no:cacheprovider --exe "$BIN/xLION_Headless" \
       --timeout=300 --timeout-method=thread -o junit_family=xunit2 -o junit_logging=all -o junit_log_passed_tests=false \
       --junitxml="$RESULTS/suite.xml" -rfE --tb=short -q )
   local rc=$?

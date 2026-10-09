@@ -1,0 +1,7 @@
+# Tests that are in a file of fast_files.txt but left out of the fast tier for now, one pytest node id per line. The full job still runs them (and lists a
+# failure in known_failures_linux.txt). Take a line out when the test is understood and fixed.
+#
+# This one fails every time on Linux when its file is run on its own (10 of 10 runs, also on a pristine project) but passed inside the first full run: the position of
+# the entity it edits drifts by up to 0.14 after the edit while the game runs at 3x speed, a different amount each run. Either a real race between a transform edit and the
+# physics steps, or the test picks an entity that is moving. Needs a look at which entity find_with_component("Transform") returns on Linux and whether it is dynamic.
+test_play_more.py::test_transform_edit_during_play_survives_every_kind_of_frame[fast_most_frames_have_several_steps]

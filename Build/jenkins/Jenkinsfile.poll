@@ -5,7 +5,7 @@
 // Create it in Jenkins as: New Item > Pipeline "xlion-poll" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.poll".
 pipeline {
-    agent { label 'built-in' }
+    agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
 
     options {
         timestamps()
@@ -20,17 +20,13 @@ pipeline {
         string(name: 'FAST_JOB', defaultValue: 'xlion-fast', description: 'The job to start')
     }
 
-    environment {
-        CI_TREE = '/var/lib/jenkins/xlion-ci/tree'
-    }
-
     stages {
         stage('Any new commit?') {
             steps {
                 script {
                     def out = sh(returnStdout: true, script: '''#!/bin/bash
 mkdir -p "$WORKSPACE/poll"
-bash Build/ci/ci_run.sh --tier fast --tree "$CI_TREE" --results "$WORKSPACE/poll" --detect-only
+bash Build/ci/ci_run.sh --tier fast --tree "${CI_TREE:-$HOME/xlion-ci/tree}" --results "$WORKSPACE/poll" --detect-only
 ''').trim().readLines().last()
                     echo "detect: ${out}"
                     currentBuild.displayName = "#${env.BUILD_NUMBER} ${out}"

@@ -8,8 +8,12 @@ Two jobs test xLION on the CI VM (headless editor, Linux), plus one tiny job tha
 | `xlion-fast` | `Build/jenkins/Jenkinsfile.fast` | started by `xlion-poll` when any repo has a new commit (and by hand) | the same, but only the files of `Build/ci/fast_files.txt` (reliable, broad: about 6 minutes of tests) |
 | `xlion-poll` | `Build/jenkins/Jenkinsfile.poll` | every 5 minutes | compares the newest commit of every repo on GitHub with the CI tree (15 seconds, nothing cloned) and starts `xlion-fast` if anything is new. Delete it when the GitHub organization webhook starts `xlion-fast` directly |
 
-All three run on the Jenkins server itself (label `built-in`) and share one persistent checkout and build, `/var/lib/jenkins/xlion-ci/tree` (updated with
-`Build/CreateProject.sh --update`, so a run only rebuilds what changed). They take a lock on it: when the full run is going, a fast run waits its turn.
+All three run on an **agent** with the label `linux`, not on the Jenkins server's own (built-in) node: a build runs project scripts, and on the built-in node that
+is the same account, files and credentials as Jenkins itself (Jenkins warns about this on its management page). The agent is a service of the low-privilege user
+`jenkins-agent` on the same VM; set it up with `Build/jenkins/agent/install_agent.sh` (the steps are at the top of that file), then give the built-in node 0 executors.
+Until then, giving the built-in node the label `linux` makes the jobs run (on the less safe node). All three share one persistent checkout and build,
+`~/xlion-ci/tree` of the agent's user (updated with `Build/CreateProject.sh --update`, so a run only rebuilds what changed). They take a lock on it: when the full run
+is going, a fast run waits its turn. Before every run the example project is put back exactly as GitHub has it (the tests leave files behind when a run is killed).
 The full job starts from nothing on Sundays (or with `SCRATCH`).
 
 ## Creating the jobs (a Jenkins administrator does this once)
@@ -19,8 +23,10 @@ For each of the three: **New Item**, name as in the table, type **Pipeline**; **
 tree with a first full build, about an hour on a 2 core machine, then the fast job starts). If Jenkins refuses a script step, approve it under
 *Manage Jenkins > In-process Script Approval*.
 
+`Build/ci/fast_deselect.txt` lists tests of the fast files that are left out of the fast tier for now (with the reason).
+
 Needs on the machine (already installed on the CI VM): `Build/CreateProject.sh` packages (clang-20, cmake, ninja, libvulkan-dev, glslc, libshaderc-dev, libx11-dev),
-python3-venv. The tests make their own Python environment (`/var/lib/jenkins/xlion-ci/venv`: pytest and pytest-timeout).
+python3-venv. The tests make their own Python environment (`~/xlion-ci/venv`: pytest and pytest-timeout).
 
 ## Reading a run without opening a log
 

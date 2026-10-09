@@ -93,6 +93,11 @@ Lessons for the harness and for CI: never run the suite under gdb (a crashed edi
 - [ ] Remaining Linux crashes and the `xerr` pool assertion (section 6).
 - [ ] **Windows build agent: needs a dedicated PC** (the VM is Linux only; the working PC is already fully used by people and AIs). Spec: 8+ cores, 32 GB RAM, 500 GB+ NVMe SSD, any GPU with a Vulkan driver (the window-only tests need a real editor window). It must keep an interactive desktop session (auto-login; a disconnected remote-desktop session locks the screen and breaks the window tests), so the agent runs from the user session, not as a service, under its own low-privilege Windows account, in a CI folder (not a dev tree). Install: Visual Studio 2022 Build Tools (v143, Windows SDK), CMake, Git, Java 17+, Python + pytest, Vulkan SDK. It connects outward to Jenkins with `-webSocket` through `/jenkin/` (no port opened on the PC); the node (label `windows`) is created by a Jenkins admin. Prepare in advance: the agent setup script and the Windows job (build, smoke, upload `timing.log`).
 - [ ] SSH hardening (section 9) and the broken Caddy apt source.
+- [ ] **Jenkins agent instead of the built-in node** (Jenkins' own warning): a Jenkins administrator creates the node `linux-vm` (label `linux`) and runs `Build/jenkins/agent/install_agent.sh` here with its secret; then the Built-In Node gets 0 executors. The jobs already ask for the label `linux`.
+- [ ] Create the three Jenkins jobs (`xlion-full`, `xlion-fast`, `xlion-poll`: documentation/Linux/jenkins.md). The full job runs at 08:00 Singapore time.
+- [ ] Restart Jenkins once (with the Prometheus plugin restart when that is done) so its pages use Singapore time: the schedules name `TZ=Asia/Singapore`, but the page still shows UTC.
+- [ ] Jenkins housekeeping from its management page: Content Security Policy (enable in report-only mode if offered, check the Test Result pages, then enforce); Java 21 reaches end of support on or after 2027-09-30 (plan the move to a newer Java before then).
+- [ ] Understand `test_play_more.py::test_transform_edit_during_play_survives_every_kind_of_frame[fast_...]`: fails every time on Linux when its file runs alone (the edited entity drifts up to 0.14 after the edit at 3x game speed), passed inside the first full run (see `Build/ci/fast_deselect.txt`).
 
 ## 9. Removed and found (2026-10-09)
 

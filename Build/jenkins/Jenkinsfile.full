@@ -7,7 +7,7 @@
 // changed, the Test Result page every test with its message and the tail of the editor's log, and the artifacts (results/) the summary, the timing of every
 // test, the commit of every repo, and the build log.
 pipeline {
-    agent { label 'built-in' }
+    agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
 
     options {
         timestamps()
@@ -23,10 +23,6 @@ pipeline {
         booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing (always done on Sundays)')
     }
 
-    environment {
-        CI_TREE = '/var/lib/jenkins/xlion-ci/tree'      // the persistent checkout + build, shared with the fast job (one run at a time: they wait for each other)
-    }
-
     stages {
         stage('Update, build, test') {
             steps {
@@ -35,7 +31,7 @@ pipeline {
                     def scratch = (params.SCRATCH || sunday) ? '--scratch' : ''
                     sh """#!/bin/bash
 mkdir -p "\$WORKSPACE/results"
-bash Build/ci/ci_run.sh --tier full --tree "\$CI_TREE" --results "\$WORKSPACE/results" ${scratch}
+bash Build/ci/ci_run.sh --tier full --tree "\${CI_TREE:-\$HOME/xlion-ci/tree}" --results "\$WORKSPACE/results" ${scratch}
 """
                 }
             }
