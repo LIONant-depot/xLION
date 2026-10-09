@@ -386,14 +386,24 @@ set(GEOM_SHADER_SOURCES
   "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_geom.glsl"
 )
 
+# What a shader #includes is not seen by the custom commands below, so each one also depends on the other shader files of its own folder
+# (an over-approximation: an edit to any of them recompiles the folder's shaders, which is cheap). Without it an edit to an included
+# file (xgeom_skin_mb_input_*.vert, ...) left the old SPIR-V in sprv_shaders_h while the C++ that feeds it changed.
+function(xlion_shader_deps OUT SHADER)
+    get_filename_component(SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" DIRECTORY)
+    file(GLOB SHADER_DEPS CONFIGURE_DEPENDS "${SHADER_DIR}/*.glsl" "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag" "${SHADER_DIR}/*.geom")
+    set(${OUT} "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" ${SHADER_DEPS} PARENT_SCOPE)
+endfunction()
+
 set(GENERATED_HEADERS)
 foreach(SHADER ${FRAG_SHADER_SOURCES})
     get_filename_component(FILENAME ${SHADER} NAME_WE)
     set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    xlion_shader_deps(SHADER_DEPS ${SHADER})
     add_custom_command(
         OUTPUT ${OUTPUT_FILE}
         COMMAND ${GLSLC} -fshader-stage=frag "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        DEPENDS ${SHADER_DEPS}
         COMMENT "Compiling fragment shader ${SHADER}"
     )
     list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
@@ -402,10 +412,11 @@ endforeach()
 foreach(SHADER ${VERT_SHADER_SOURCES})
     get_filename_component(FILENAME ${SHADER} NAME_WE)
     set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    xlion_shader_deps(SHADER_DEPS ${SHADER})
     add_custom_command(
         OUTPUT ${OUTPUT_FILE}
         COMMAND ${GLSLC} -fshader-stage=vert "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        DEPENDS ${SHADER_DEPS}
         COMMENT "Compiling vertex shader ${SHADER}"
     )
     list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
@@ -414,10 +425,11 @@ endforeach()
 foreach(SHADER ${GEOM_SHADER_SOURCES})
     get_filename_component(FILENAME ${SHADER} NAME_WE)
     set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/sprv_shaders_h/${FILENAME}.h")
+    xlion_shader_deps(SHADER_DEPS ${SHADER})
     add_custom_command(
         OUTPUT ${OUTPUT_FILE}
         COMMAND ${GLSLC} -fshader-stage=geom "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}" -mfmt=num -o ${OUTPUT_FILE}
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}"
+        DEPENDS ${SHADER_DEPS}
         COMMENT "Compiling geometry shader ${SHADER}"
     )
     list(APPEND GENERATED_HEADERS ${OUTPUT_FILE})
