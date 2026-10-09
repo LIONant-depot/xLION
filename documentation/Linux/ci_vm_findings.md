@@ -91,7 +91,7 @@ Lessons for the harness and for CI: never run the suite under gdb (a crashed edi
 - [ ] Trigger: GitHub organization webhook for push events (needs Jenkins reachable from the internet) or a poller on `git ls-remote` of every repo's `main`.
 - [ ] Linux build target for the ScriptModule compiler (about 21 tests need it) and skip markers for GUI-only and Windows-only tests (see section 6).
 - [ ] Remaining Linux crashes and the `xerr` pool assertion (section 6).
-- [ ] Windows build agent (the VM is Linux only).
+- [ ] **Windows build agent: needs a dedicated PC** (the VM is Linux only; the working PC is already fully used by people and AIs). Spec: 8+ cores, 32 GB RAM, 500 GB+ NVMe SSD, any GPU with a Vulkan driver (the window-only tests need a real editor window). It must keep an interactive desktop session (auto-login; a disconnected remote-desktop session locks the screen and breaks the window tests), so the agent runs from the user session, not as a service, under its own low-privilege Windows account, in a CI folder (not a dev tree). Install: Visual Studio 2022 Build Tools (v143, Windows SDK), CMake, Git, Java 17+, Python + pytest, Vulkan SDK. It connects outward to Jenkins with `-webSocket` through `/jenkin/` (no port opened on the PC); the node (label `windows`) is created by a Jenkins admin. Prepare in advance: the agent setup script and the Windows job (build, smoke, upload `timing.log`).
 - [ ] SSH hardening (section 9) and the broken Caddy apt source.
 
 ## 9. Removed and found (2026-10-09)
