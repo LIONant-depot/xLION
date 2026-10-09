@@ -17,6 +17,8 @@ set -euo pipefail
 NAME="${1:?usage: install_agent.sh <node name> <secret> [jenkins url] [tcp]}"
 SECRET="${2:?usage: install_agent.sh <node name> <secret> [jenkins url] [tcp]}"
 URL="${3:-http://127.0.0.1:8080/jenkin/}"
+# the secret may be given as @<file> (read from it) so it does not appear in the command line, the shell history or the sudo log
+case "$SECRET" in @*) SECRET=$(tr -d '[:space:]' < "${SECRET#@}") ;; esac
 WS="-webSocket"; [ "${4:-}" = tcp ] && WS=""
 USER_=jenkins-agent
 HOME_=$(getent passwd "$USER_" | cut -d: -f6)
