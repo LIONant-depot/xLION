@@ -694,10 +694,15 @@ if(NOT WIN32)
     endif()
     ExternalProject_Add(${_xlion_c}_compiler_linux
       SOURCE_DIR        "${_xlion_pdir}"
-      BINARY_DIR        "${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/Release"
+      # Configured in _cmake, executable (and libxlion_pathcompat.so) put in Release/ where the pipeline looks for it: every plugin
+      # CMakeLists does add_subdirectory(... ${CMAKE_CURRENT_BINARY_DIR}/<name>_compiler), a directory that would sit exactly where
+      # the executable <name>_compiler must be written if both lived in the same folder ("cannot open output file: Is a directory").
+      BINARY_DIR        "${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/_cmake"
       PREFIX            "${CMAKE_BINARY_DIR}/compilers/${_xlion_c}"
       CMAKE_GENERATOR   Ninja
       CMAKE_ARGS        -DCMAKE_BUILD_TYPE=Release
+                        -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/Release
+                        -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/Release
                         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                         -DCMAKE_PROJECT_INCLUDE=${CMAKE_SOURCE_DIR}/source/Platform/xlion_linux_asset_compiler.cmake
