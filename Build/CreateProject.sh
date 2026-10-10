@@ -115,13 +115,9 @@ tinyexr            https://github.com/syoyo/tinyexr.git                      644
 zstd               https://github.com/facebook/zstd.git                      f8745da6ff1ad1e7bab384bd1f9d742439278e99
 EOF
 
-# plugins (what Install.bat clones, plus the header-only ones the root CMakeLists clones on Windows)
-for p in xvirtual_folders xmaterial xtexture xmaterial_instance xgeom xgeom_static xskeleton xanim_package xfont xgeom_skin \
-         xscene xlevel xscript_module xgame xPhysicsMaterial xShareComponent xprefab; do
-  clone_at "$GIT_BASE/$p.plugin.git" "$PLUGINS/$p.plugin" main
-  # every plugin except xvirtual_folders reaches the shared dependencies through its own "dependencies" link
-  if [ "$p" != xvirtual_folders ] && [ ! -e "$PLUGINS/$p.plugin/dependencies" ]; then ln -s ../../dependencies "$PLUGINS/$p.plugin/dependencies"; fi
-done
+# plugins: the project's own Install.sh (the counterpart of Install.bat: clone every plugin, give each its "dependencies" link)
+[ -f "$PRJ/Install.sh" ] || { echo "example.lionprj/Install.sh is missing: the project repo is older than the Linux setup (use --update)"; exit 1; }
+GIT_BASE="$GIT_BASE" bash "$PRJ/Install.sh" $([ "$DO_UPDATE" = 1 ] && echo --update) || exit 1
 
 # ---------------------------------------------------------------------------------------------------------------------
 # 3. Configure (like CreateProject.bat: cmake ../ -B xLION.<platform>)
