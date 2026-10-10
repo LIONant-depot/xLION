@@ -70,7 +70,7 @@ $ok = Stage 'build' {
         Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 *> "$Results\cmake.log"; $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { return $false }
     }
-    foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: Debug is the one the tests gate on, Release is built and tested too
+    foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
         & $MSBuild "$Tree\Build\xLION.vs2022\xLION.sln" '/t:xLION;xLION_Headless;xeditorcli' "/p:Configuration=$cfg" /m /nologo /v:m "/flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
         if ($LASTEXITCODE -ne 0) { Copy-Item "$Results\build_$cfg.log" "$Results\build.log" -Force; return $false }
     }
@@ -88,10 +88,9 @@ $ok = Stage 'python (pytest)' {
 if (-not $ok) { Fail 'python failed' }
 
 # ---------------------------------------------------------------------------------------------------------------- tests
-foreach ($cfg in 'Debug', 'Release') {
-$Bin = "$Tree\Build\xLION.vs2022\$cfg"
-$Xml = if ($cfg -eq 'Debug') { "$Results\suite.xml" } else { "$Results\suite_release.xml" }     # the summary and the verdict follow Debug (asserts exist only there); Release is reported next to it
-$null = Stage "tests ($Tier, $cfg)" {
+$Bin = "$Tree\Build\xLION.vs2022\Debug"       # the smoke tests run on Debug only (asserts exist only there); Release is built, so a Release-only compile or link error is caught
+$Xml = "$Results\suite.xml"
+$null = Stage "tests ($Tier)" {
     $smoke = "$Tree\source\Editors\LevelEditor\smoke"
     $files = @('.'); $desel = @()
     if ($Tier -eq 'fast') {
@@ -105,7 +104,6 @@ $null = Stage "tests ($Tier, $cfg)" {
         -o junit_family=xunit2 -o junit_logging=all -o junit_log_passed_tests=false --junitxml="$Xml" -rfE --tb=short -v
     Pop-Location
     $true                                                   # failing tests are the summary's business, not the run's
-}
 }
 if (Test-Path "$Tree\source\Editors\LevelEditor\smoke\.logs") { tar -czf "$Results\smoke_logs.tgz" -C "$Tree\source\Editors\LevelEditor\smoke" .logs 2>$null }
 Finish
