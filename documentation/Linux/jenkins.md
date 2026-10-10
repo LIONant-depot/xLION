@@ -30,6 +30,10 @@ The verdict is the findings, not the tests: every finding gets a fingerprint (it
 - **Compressed debug info** (`-gz`, and `--compress-debug-sections` at link): on by default in every Linux build (`XLION_COMPRESS_DEBUG`, `source/Platform/xlion_linux_flags.cmake`); an object file of `xecs.cpp` went from 10.2 MB to 6.2 MB.
 - **ccache**: used by `Build/CreateProject.sh` when it is installed (`XLION_CCACHE=0` turns it off), for the editors and the asset compilers. It keys on the compiler, the flags and the preprocessed source, compresses its entries (zstd) and is capped at 4 GB (`CCACHE_MAXSIZE`); `ci_run.sh` keeps it in `xlion-ci/ccache`. The build from scratch of the first week of a month runs with the cache off (`CCACHE_DISABLE`), so a cold, honest build is made every month.
 
+## The shared compiler cache (ccache remote storage)
+
+The three Linux machines share what they compile. team38 runs a small cache server (`Build/jenkins/agent/ccache_server.py`, systemd service `ccache-remote`, folder `/var/lib/ccache-remote`, 8 GB, the oldest files go first, port 8089); the firewall of team38 lets only the three machines in. Each machine keeps its own local ccache (4 GB) and also asks the server (`remote_storage` in `/var/lib/jenkins-agent/xlion-ci/ccache/ccache.conf`, with `hash_dir = false`, so the build folder name is not part of the key). A file compiled on one machine is a hit on the others as long as the compiler, the flags and the paths are the same (they are: the same user and the same `xlion-ci/tree` on every machine). The Debug and the Release builds, and the sanitizer one, have different flags and so different entries. Setting up a machine: `sudo bash Build/jenkins/agent/setup_ccache_remote.sh client <ip of team38>` (the server: `... server <its ip> <ips that may use it>`). To check it: `ccache -s` shows "Remote storage: Hits". If the server is down ccache just compiles (2 s connect timeout).
+
 ## Creating the jobs (a Jenkins administrator does this once)
 
 For each of the three: **New Item**, name as in the table, type **Pipeline**; **Pipeline > Definition: Pipeline script from SCM**, SCM **Git**, Repository URL
