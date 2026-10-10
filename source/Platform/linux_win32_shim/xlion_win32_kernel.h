@@ -366,7 +366,7 @@ namespace xlion_win32_shim::kernel
                     if (bNames)       Queue(D, FILE_ACTION_RENAMED_NEW_NAME, Rel);
                     else if (bWrites) Queue(D, FILE_ACTION_MODIFIED, Rel);
                 }
-                else if (pEv->mask & IN_ATTRIB)      { if (bAttribs) Queue(D, FILE_ACTION_MODIFIED, Rel); }
+                else if (pEv->mask & IN_ATTRIB)      { if (bAttribs || bWrites) Queue(D, FILE_ACTION_MODIFIED, Rel); }       // touch (a new write time) is an IN_ATTRIB: for Windows it is a change of the last write
             }
         }
     }

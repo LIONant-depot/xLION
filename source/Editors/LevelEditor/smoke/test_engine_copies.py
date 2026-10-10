@@ -1,9 +1,17 @@
 """The copies of the engine DLLs that a Level runs on (plugins/xlevel.plugin/source/Editor/xlevel_engine_copies.h): renamed copies of the core and the render DLL, loaded under their own names, each with a registry of
 its own, so that several Levels can run side by side without sharing anything."""
+import os
 import re
 import time
 
+# the copy of LIONCore.dll is LC000004.dll; on Linux the copy of libLIONCore.so is libLC000004.so
+LIB, EXT = ("", "dll") if os.name == "nt" else ("lib", "so")
 COPIES = "EngineCopies"
+
+
+def file_of(module: str) -> str:
+    """The file of a module name: the name itself on Windows, "LC000001.dll" -> "libLC000001.so" on Linux."""
+    return module if os.name == "nt" else LIB + module[:-4] + "." + EXT
 
 
 def fields(reply):
@@ -13,9 +21,11 @@ def fields(reply):
 def copies_on_disk(editor, wait=2.0):
     """The copies in the folder; waits a little for the ones that are being deleted (the file of a module that was just freed can stay locked for a moment)."""
     folder = editor.exe.parent / COPIES
+    if os.name != "nt":
+        folder = folder / str(editor.proc.pid)              # on Linux each process keeps its copies in a folder of its own (xlevel_engine_copies.h, CleanLeftovers)
     deadline = time.monotonic() + wait
     while True:
-        found = sorted(p.name for p in folder.glob("L[CR]??????.dll")) if folder.is_dir() else []
+        found = sorted(p.name for p in folder.glob(f"{LIB}L[CR]??????.{EXT}")) if folder.is_dir() else []
         if not found or time.monotonic() > deadline:
             return found
         time.sleep(0.1)
@@ -50,8 +60,8 @@ def test_the_render_copy_is_bound_to_its_own_core(editor):
     got = fields(editor.cmd("ProbeEngineSet"))
     if got["Render"] == "none":
         return                                              # a build without the render DLL: nothing to bind
-    assert re.fullmatch(r"LR\d{6}\.dll", got["Render"])
-    assert got["RenderImportsCore"] == got["Core"], "the import of LIONCore.dll was renamed to the copy of this set"
+    assert re.fullmatch(r"LR\d{6}\.dll", got["Render"])          # the module names keep their Windows spelling on every system
+    assert got["RenderImportsCore"] == file_of(got["Core"]), "the import of LIONCore.dll was renamed to the copy of this set"
     assert got["RenderEditor"] == "ok", "the copy loads and hands out its editor interface"
     assert got["Checksum"] == "ok", "the PE checksum was fixed after the import table was patched"
 
@@ -65,7 +75,7 @@ def test_a_set_is_gone_when_it_is_released(editor):
 
 def test_every_open_level_runs_on_copies_of_its_own(level, editor):
     held = settled_copies(editor)
-    assert len([n for n in held if n.startswith("LC")]) >= 2, "the editor that stands in and the Level each have a core of their own"
+    assert len([n for n in held if n.startswith(LIB + "LC")]) >= 2, "the editor that stands in and the Level each have a core of their own"
     editor.cmd("Close -Save 0")
     assert len(settled_copies(editor)) < len(held), "closing the Level frees its copies"
 

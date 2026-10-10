@@ -37,6 +37,7 @@ def locate(editor, guid: str) -> str:
     return editor.cmd(f"LocateResource -Asset {guid}")
 
 
+@pytest.mark.needs_window
 def test_finding_a_resource_shows_it_in_the_browser_and_opens_the_drawer_on_it(editor):
     type_name, guid, name = assets(editor)[0]
     editor.cmd("SetBrowserSearch -Text this_matches_no_resource_at_all")
@@ -55,6 +56,7 @@ def test_finding_a_resource_that_is_not_there_is_refused(editor):
     assert "required option" in editor.cmd("LocateResource")
 
 
+@pytest.mark.needs_window
 def test_finding_goes_through_the_history_of_the_browser(editor):
     """Back and Forward of the browser work on the history of the folders: finding adds the folder the way a click on it does, once, and keeps what was before it."""
     first = next(iter(assets(editor)), None)

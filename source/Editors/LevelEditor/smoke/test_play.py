@@ -5,6 +5,8 @@ identical content, and the harness refuses to Play over unsaved edits.
 """
 import time
 
+import pytest
+
 from harness import quote
 from test_modal_position import _state as _modal_state, _near as _modal_near, _dismiss as _modal_dismiss
 
@@ -27,6 +29,7 @@ def test_transport_cycle(editor, level):
     editor.wait_play_state("Playing")
 
 
+@pytest.mark.needs_window
 def test_step_from_stopped_starts_play_and_lands_paused(editor, level):
     assert editor.cmd("Step") == "Step"
     editor.wait_play_state("Paused")

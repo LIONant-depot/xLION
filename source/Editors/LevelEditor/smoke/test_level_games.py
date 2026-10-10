@@ -108,6 +108,7 @@ def test_a_game_that_lacks_a_module_the_scenes_need_is_refused_with_the_module(e
         remove_asset("Game", empty)
 
 
+@pytest.mark.needs_window
 def test_a_level_that_names_another_game_opens_on_that_game(editor, scratch_game):
     """Every Level runs on its own game module, the one of the Game it names: another Game than the project's opens like any other, once its Game.dll is built (the open waits for it)."""
     assert editor.cmd(f"SetLevelGame -Level {SOCCER_LEVEL} -Game {scratch_game}", allow_disk=True) == ""

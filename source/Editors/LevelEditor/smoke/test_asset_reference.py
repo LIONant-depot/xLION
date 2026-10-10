@@ -7,6 +7,8 @@ selection - and the drawer is open on that tab. GetBrowserState says where the t
 import re
 import time
 
+import pytest
+
 ASSETS_TAB = "1"
 
 
@@ -16,6 +18,7 @@ def state(editor) -> dict:
     return {key: value for key, value in re.findall(r"^(\w+)=(.*)$", reply, re.M)}
 
 
+@pytest.mark.needs_window
 def test_finding_a_file_shows_it_in_the_assets_tab_and_opens_the_drawer_on_it(editor):
     editor.cmd("SetBrowserSearch -Text this_matches_no_file_at_all")
     assert editor.cmd("LocateAsset -Path Assets/SheKnewMe.tga") == "LocateAsset: ok"
@@ -29,7 +32,7 @@ def test_finding_a_file_shows_it_in_the_assets_tab_and_opens_the_drawer_on_it(ed
 def test_finding_a_file_in_a_folder_makes_that_folder_the_current_one(editor):
     assert editor.cmd("LocateAsset -Path Assets\\PuppyDog\\textures\\White-4096x4096.png") == "LocateAsset: ok"
     now = state(editor)
-    assert now["AssetsFolder"] == "PuppyDog\\textures"
+    assert now["AssetsFolder"].replace("/", "\\") == "PuppyDog\\textures"          # the editor says it with the separator of its system
     assert now["AssetsSelected"] == "White-4096x4096.png"
 
 
@@ -48,6 +51,7 @@ def dependents(editor, path: str) -> list[tuple[str, str]]:
     return [(m[1], m[2]) for l in lines[1:] if (m := re.match(r"([0-9A-F]{32})  (.*)", l))]
 
 
+@pytest.mark.needs_window
 def test_a_file_that_resources_point_at_lists_them(editor):
     """The items of the menu act on these: Find Resource is LocateResource of each one, Open Resource is its editor."""
     found = dependents(editor, "Assets/SheKnewMe.tga")

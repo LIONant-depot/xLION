@@ -41,6 +41,7 @@ def test_the_tags_are_there_and_the_kinds_are_told(level):
     ("disable",          "no system names the tag, so none sees the entity (the render included)"),
     ("editor_disable",   "the same for the editor's own exclusive tag"),
 ])
+@pytest.mark.needs_window
 def test_the_tag_stops_the_drawing_and_removing_it_brings_it_back(quiet, labels, tag, what):
     level = quiet
     t = labels("Hello")

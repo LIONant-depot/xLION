@@ -10,6 +10,7 @@
     ["source/Tools/Editor/xeditor_(toolbar|resource_editor|resource_tab|document_editor)", ["test_editor_menu.py", "test_resource_editors.py", "test_actions.py", "test_script_module_editor.py"]],
     ["plugins/xlevel.plugin/source/Editor/xlevel_(prefab_document|commands_prefab_editor)", ["test_prefab_editor.py", "test_prefabs.py", "test_session_command_surface.py", "test_prefab_live.py", "test_prefab_context.py", "test_scene_editor.py"]],
     ["plugins/xlevel.plugin/source/Editor/xlevel_engine_copies\\.h", ["test_engine_copies.py"]],
+    ["dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr\\.h|plugins/[a-z_]+\\.plugin/.*compiler", ["test_compiler_newer.py"]],
     ["plugins/xlevel.plugin/source/Editor/game_module/", ["test_game_module_reload.py", "test_game_module_reload_more.py", "test_game_module_crash.py", "test_game_resource.py", "test_level_games.py", "test_module_dependencies.py", "test_script_modules.py", "test_type_sources.py", "test_engine_copies.py"]],
     ["plugins/xlevel.plugin/source/Editor/xlevel_play|xlevel_panel_play|xlevel_commands_play|xlevel_visual_studio", ["test_play.py", "test_play_more.py", "test_visual_studio.py"]],
     ["plugins/xlevel.plugin/source/Editor/xlevel_panel_level", ["test_level_properties.py", "test_scenes_and_levels.py", "test_level_games.py", "test_prefab_editor.py"]],

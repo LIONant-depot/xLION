@@ -53,6 +53,7 @@ def test_a_root_is_where_its_transform_says(lv):
     assert w["Child"] == 0 and near(w["Position"], (3, 1, 2)) and near(w["Scale"], (1, 1, 1))
 
 
+@pytest.mark.needs_window
 def test_a_child_is_where_its_parent_plus_its_own_offset_say(lv):
     p = node(lv, "7E7E0001", position=(3, 1, 0))
     c = node(lv, "7E7E0002", parent=p, position=(0, 2, 0))
@@ -62,6 +63,7 @@ def test_a_child_is_where_its_parent_plus_its_own_offset_say(lv):
     assert near(c.world(lambda w: near(w["Position"], (10, 3, 0)))["Position"], (10, 3, 0))
 
 
+@pytest.mark.needs_window
 def test_a_child_turns_with_its_parent_and_its_offset_turns_with_it(lv):
     p = node(lv, "7E7E0001", position=(3, 0, 0))
     c = node(lv, "7E7E0002", parent=p, position=(1, 0, 0))
@@ -73,6 +75,7 @@ def test_a_child_turns_with_its_parent_and_its_offset_turns_with_it(lv):
     assert near(w["Position"], (4, 0, 0), 1e-2), f"without FollowRotation the offset stays along x: {w}"
 
 
+@pytest.mark.needs_window
 def test_the_scale_of_the_parent_is_not_taken_unless_asked(lv):
     p = node(lv, "7E7E0001", position=(3, 0, 0))
     p.set("Transform", "Transform/Scale/X", 2); p.set("Transform", "Transform/Scale/Y", 2); p.set("Transform", "Transform/Scale/Z", 2)
@@ -85,6 +88,7 @@ def test_the_scale_of_the_parent_is_not_taken_unless_asked(lv):
     assert near(w["Position"], (5, 0, 0)) and near(w["Scale"], (2, 2, 2)), w
 
 
+@pytest.mark.needs_window
 def test_the_scale_can_be_followed_axis_by_axis(lv):
     p = node(lv, "7E7E0001", position=(0, 0, 0))
     p.set("Transform", "Transform/Scale/X", 2); p.set("Transform", "Transform/Scale/Y", 3); p.set("Transform", "Transform/Scale/Z", 4)
@@ -94,6 +98,7 @@ def test_the_scale_can_be_followed_axis_by_axis(lv):
     assert near(w["Scale"], (1, 3, 1)) and near(w["Position"], (1, 3, 1)), w
 
 
+@pytest.mark.needs_window
 def test_a_child_can_follow_only_the_heading_of_its_parent(lv):
     p = node(lv, "7E7E0001", position=(0, 0, 0))
     c = node(lv, "7E7E0002", parent=p, position=(1, 0, 0))
@@ -109,6 +114,7 @@ def test_a_child_can_follow_only_the_heading_of_its_parent(lv):
     assert abs(w["Position"][0]) < 5e-2 and abs(abs(w["Position"][2]) - 1) < 5e-2 and abs(w["Position"][1]) < 5e-2, f"turned a quarter turn around the vertical axis, level: {w}"
 
 
+@pytest.mark.needs_window
 def test_an_axis_that_does_not_follow_is_a_world_value(lv):
     p = node(lv, "7E7E0001", position=(3, 5, 4))
     s = node(lv, "7E7E0002", parent=p, position=(0, 0.5, 0))
@@ -120,6 +126,7 @@ def test_an_axis_that_does_not_follow_is_a_world_value(lv):
     assert near(w["Position"], (3, 0.5, 4)), w
 
 
+@pytest.mark.needs_window
 def test_a_hierarchy_goes_down_more_than_one_level(lv):
     a = node(lv, "7E7E0001", position=(1, 0, 0))
     b = node(lv, "7E7E0002", parent=a, position=(0, 1, 0))
@@ -130,6 +137,7 @@ def test_a_hierarchy_goes_down_more_than_one_level(lv):
     assert near(c.world(lambda w: near(w["Position"], (4, 1, 1)))["Position"], (4, 1, 1))
 
 
+@pytest.mark.needs_window
 def test_a_child_is_picked_where_it_is_drawn_not_where_its_transform_says(lv):
     p = node(lv, "7E7E0001", position=(20, 0, 0))
     c = node(lv, "7E7E0002", parent=p, position=(0, 0, 0))
@@ -139,6 +147,7 @@ def test_a_child_is_picked_where_it_is_drawn_not_where_its_transform_says(lv):
     assert "7E7E0002" not in far, f"the child's Transform (0,0,0) is relative: it is not at the origin: {far}"
 
 
+@pytest.mark.needs_window
 def test_a_child_survives_a_save_and_a_reload(lv):
     import pathlib
     import shutil

@@ -119,6 +119,7 @@ def test_remove_scene_dependency_with_refs_refused(level):
                 break
 
 
+@pytest.mark.needs_window
 def test_the_first_scene_of_a_level_is_expanded_in_the_level_tree_when_the_level_opens(level):
     import time
     line = ""

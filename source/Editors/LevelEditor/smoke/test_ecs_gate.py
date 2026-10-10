@@ -3,11 +3,14 @@
 The editor does not need to be running for any of this. The link gate builds the target xLION_ecs_gate (the headless editor linked without LIONCore.dll and LIONRender.dll): that takes as long as
 a build of the editor the first time and is quick when nothing changed.
 """
+import os
+import pytest
 import json
 
 import ecs_gate
 
 
+@pytest.mark.skipif(os.name != "nt", reason="the link gate builds with MSBuild and the PE import table: Windows only")
 def test_the_editor_uses_no_more_of_the_registry_than_the_baseline():
     """A bit id, a pool, the registry itself ... in the code of the editor is a place that silently talks to the core the exe imports, not to the copy of the core the world belongs to."""
     baseline = json.loads(ecs_gate.SCAN_BASELINE.read_text())
@@ -15,6 +18,7 @@ def test_the_editor_uses_no_more_of_the_registry_than_the_baseline():
     assert not grown, ("the editor reaches the registry in more places than before (go through the xECSEditor interface, or if it really is less: python ecs_gate.py scan --update):\n  " + "\n  ".join(grown))
 
 
+@pytest.mark.skipif(os.name != "nt", reason="the link gate builds with MSBuild and the PE import table: Windows only")
 def test_the_editor_takes_no_more_from_the_engine_dlls_than_the_baseline():
     """Linked without LIONCore.dll and LIONRender.dll, the editor has these symbols unresolved: each is a call or a static that goes to the one core the exe imports."""
     symbols = ecs_gate.link_gate()
