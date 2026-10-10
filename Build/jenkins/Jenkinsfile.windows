@@ -1,5 +1,6 @@
 // xLION: the Windows run on the PC agent ("pc-agent", label windows): update, MSBuild of the editor, the smoke tests with the window editor (a screen and a GPU).
-// FULL every day at 08:30 Singapore time (the Linux full run is at 08:00, 10:00 is the Linux sanitizer; the PC does not share the VM's lock); by hand with TIER=fast for a quick check.
+// The standard (light) run: the Debug and the Release build, then the fast tests on the Debug build (TIER=fast, TESTS=auto). Every check-in (the poll job starts it), daily at 08:30 Singapore time, and on
+// Sundays at 12:00, which also tests the Release build. The PC does not share the VM's lock. By hand: TIER=full for every test file, TESTS=no for the builds only.
 //
 // Create it in Jenkins as: New Item > Pipeline "xlion-windows" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.windows".
 // The agent must run in the logged-in desktop session (not as a service): the window editor needs the screen. Needs git, Visual Studio 2022 (MSVC, MSBuild), CMake and Python on the PC.
@@ -16,7 +17,7 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'TIER', choices: ['full', 'fast'], description: 'full: every test file. fast: the files of Build/ci/fast_files.txt')
+        choice(name: 'TIER', choices: ['fast', 'full'], description: 'fast (the standard, light run): the files of Build/ci/fast_files.txt. full: every test file')
         choice(name: 'TESTS', choices: ['auto', 'debug', 'both', 'no'], description: 'Which builds are tested. debug: the Debug build. both: Debug and Release. no: no tests at all, only the builds (no Python needed). auto: debug, and both on the Sunday 12:00 run')
         booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
     }
