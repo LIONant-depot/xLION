@@ -69,6 +69,7 @@ def test_stop_asks_about_tweaks_and_keep_or_discard_is_honoured(editor, level):
     assert editor.property_value(level.name, scene, entity, path) == original
 
 
+@pytest.mark.needs_window          # where the question opens is read from the window editor's ImGui state: a headless editor has none (see conftest.py)
 def test_the_keep_play_changes_question_opens_in_the_middle_of_the_level_editor(editor, level):
     """Stop after changing a property while playing asks to keep or discard it: that question is a modal like any other, in the middle of the editor that is playing."""
     scene, entity, transform = level.find_with_component("Transform")

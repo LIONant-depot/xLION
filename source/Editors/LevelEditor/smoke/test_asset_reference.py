@@ -29,6 +29,7 @@ def test_finding_a_file_shows_it_in_the_assets_tab_and_opens_the_drawer_on_it(ed
     assert now["AssetsFolder"] == "", "its folder (the root of the Assets) is the current one"
 
 
+@pytest.mark.needs_window          # the Assets tab only exists in an editor that renders (a headless one has no tabs to reveal the file in)
 def test_finding_a_file_in_a_folder_makes_that_folder_the_current_one(editor):
     assert editor.cmd("LocateAsset -Path Assets\\PuppyDog\\textures\\White-4096x4096.png") == "LocateAsset: ok"
     now = state(editor)
