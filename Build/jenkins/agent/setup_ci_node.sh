@@ -9,6 +9,7 @@
 #       sudo bash setup_ci_node.sh <node name> @/root/node.secret [jenkins url]
 #    The default url is the public one (https://team39.dp-ext8.com/jenkin/); the agent connects over WebSocket. If that is refused (the proxy in front of Jenkins must pass WebSockets),
 #    add "tcp" as the last argument and open the controller's TCP port for inbound agents (Manage Jenkins > Security > Agents > fixed 50000, firewall allowing it from this VM).
+#    With "-" as the secret only the machine is prepared (tools, swap, user) and no agent is installed; run again with the real secret when the node exists in Jenkins.
 # 3. The node should show as connected. Nothing else is needed: the jobs build in the agent's own home, $HOME/xlion-ci.
 #
 # Safe to run again (every step checks what is already there).
@@ -48,7 +49,7 @@ id jenkins-agent > /dev/null 2>&1 || useradd --system --create-home --home-dir /
 install -d -o jenkins-agent -g jenkins-agent /var/lib/jenkins-agent/xlion-ci
 
 echo "== the agent service"
-bash "$HERE/install_agent.sh" "$NAME" "$SECRET" "$URL" $([ "$MODE" = tcp ] && echo tcp)
+if [ "$SECRET" = "-" ]; then echo "(no secret given: the machine is prepared, the agent is not installed)"; else bash "$HERE/install_agent.sh" "$NAME" "$SECRET" "$URL" $([ "$MODE" = tcp ] && echo tcp); fi
 
 echo
 echo "Done: $(nproc) cores, $(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo) MB RAM, $(df -h --output=avail / | tail -1 | tr -d ' ') free."
