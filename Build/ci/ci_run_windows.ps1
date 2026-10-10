@@ -41,8 +41,12 @@ if (-not (Test-Path "$Here\known_failures_windows.txt")) { '# failures that are 
 
 # ---------------------------------------------------------------------------------------------------------------- update
 $changed = New-Object System.Collections.Generic.List[string]
+# the names of the pinned third party libraries (read from the tree's Build\third_party.txt; before the first checkout there is nothing to protect)
+$ThirdPartyNames = @(); if (Test-Path "$Tree\Build\third_party.txt") { $ThirdPartyNames = @(Get-Content "$Tree\Build\third_party.txt" | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ -and -not $_.StartsWith('#') }) }
 function Update-Repo([string]$Dir) {                      # a repo that follows a branch (ours: main) is moved to its newest commit; a pinned (detached) one is left alone
     if (-not (Test-Path "$Dir\.git")) { return }
+    # a third party library is never moved here, whatever branch it is on: it is pinned (Build\third_party.txt) and the configure patches some of them; a "reset --hard" would undo the patch
+    if ($ThirdPartyNames -contains (Split-Path -Leaf $Dir)) { return }
     $branch = git -C $Dir symbolic-ref -q --short HEAD 2>$null
     if (-not $branch) { return }
     $old = git -C $Dir rev-parse HEAD
@@ -72,7 +76,7 @@ $ok = Stage 'build' {
     # ImGui sources: the link then fails with hundreds of unresolved ImGui:: symbols), which is not a configured tree.
     $Marker = "$Tree\Build\xLION.vs2022\.configured_ok"
     # the marker holds what the configure was made with: the pinned third party commits and the xcmake_tools commit. A change of either means the configure runs again (it fetches the pinned commits and patches them).
-    function Get-Stamp { "$((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\xLION.vs2022\_deps\xcmake_tools" rev-parse HEAD 2>$null)" }
+    function Get-Stamp { "v2 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\xLION.vs2022\_deps\xcmake_tools" rev-parse HEAD 2>$null)" }
     if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
         Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
