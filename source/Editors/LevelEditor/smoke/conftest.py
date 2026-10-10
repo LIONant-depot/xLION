@@ -118,11 +118,16 @@ class Level:
     def dirty(self) -> bool:
         return next(s.dirty for s in self.ed.sessions() if s.name == self.name)
 
-    def find_with_component(self, component: str):
-        """(scene, entity, component guid) of the first existing entity that has the named component."""
+    def find_with_component(self, component: str, without: tuple = ()):
+        """(scene, entity, component guid) of the first existing entity that has the named component and none of the components in `without`.
+        Which entity is first depends on the order the editor lists them, which is not the same on every platform: a test that needs a property to STAY where it put it asks for an entity
+        that nothing moves (without=("PhysicsDynamics",): a body the physics does not drive); it does not rely on the first one being such."""
         for scene, _ in self.scenes:
             for entity in self.entities(scene):
-                m = re.search(rf"\[(\w{{16}})\] {re.escape(component)}", self.describe(entity, scene))
+                text = self.describe(entity, scene)
+                if any(re.search(rf"\[\w{{16}}\] {re.escape(name)}\b", text) for name in without):
+                    continue
+                m = re.search(rf"\[(\w{{16}})\] {re.escape(component)}", text)
                 if m:
                     return scene, entity, m[1]
         pytest.skip(f"the example project has no entity with a {component} component")

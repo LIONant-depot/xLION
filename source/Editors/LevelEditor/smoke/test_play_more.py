@@ -144,9 +144,10 @@ def test_stop_keep_false(level):
 @pytest.mark.parametrize("scale", ["0.25", "3"], ids=["slow_most_frames_have_no_step", "fast_most_frames_have_several_steps"])
 def test_transform_edit_during_play_survives_every_kind_of_frame(level, scale):
     """Slow: most frames have no fixed step due, and the physics must not read the old pose back over an edit made in between. Fast: several steps
-    run in one frame, and the edit must reach the body in the first of them and survive the rest."""
+    run in one frame, and the edit must reach the body in the first of them and survive the rest. The entity is one the physics does not drive (a dynamic one falls onto its neighbours
+    and is pushed away from where the edit put it, which says nothing about the edit)."""
     editor = level.ed
-    scene, entity, transform = level.find_with_component("Transform")
+    scene, entity, transform = level.find_with_component("Transform", without=("PhysicsDynamics",))
     path = "Transform/Position/X"
     original = editor.property_value(level.name, scene, entity, path)
     type_guid = level.property_type(entity, path, scene)
