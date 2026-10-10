@@ -1,10 +1,35 @@
-// xLION: the FAST smoke tests on Linux, for check-ins: the reliable, broad test files of Build/ci/fast_files.txt (about 6 minutes of tests after the update).
+// xLION: the FAST smoke tests on Linux, for check-ins: the reliable, broad test files of Build/ci/fast_files.txt, in TWO LEGS that run at the same time on two agents:
+//   Debug   (agent label "linux && !release && !san"):   the Debug build, then the tests; the asserts of the engine exist only here.
+//   Release (agent label "linux && release"): the Release build, then the same tests; the optimizer exposes what Debug hides.
+// The check-in is green when both are. Each leg has its own results (results-Debug, results-Release) and its own known failures list (Build/ci/known_failures_linux[_release].txt).
 //
 // Create it in Jenkins as: New Item > Pipeline "xlion-fast" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.fast". It has no schedule of its own: the small job "xlion-poll" (Jenkinsfile.poll) starts it when any repo of the
 // project has a new commit, and it can be started by hand (FORCE). The result is the same kind of report as the full job: documentation/Linux/jenkins.md.
+// The agents: team39 "linux" (Debug leg), team37 "linux release" (Release leg), team38 "linux san" (the sanitizer jobs). A machine with both legs' labels would do them one after the other.
+
+def runLeg(String cfg, boolean scratch) {
+    def flags = scratch ? '--scratch ' : ''
+    timeout(activity: true, time: 20, unit: 'MINUTES') {      // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
+        sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results-${cfg}"
+bash Build/ci/ci_run.sh --tier fast --config ${cfg} --tree "\${CI_TREE:-\$HOME/xlion-ci/tree}" --results "\$WORKSPACE/results-${cfg}" ${flags}
+"""
+    }
+}
+
+def collectLeg(String cfg) {
+    def r = "results-${cfg}"
+    junit testResults: "${r}/suite.xml", allowEmptyResults: true
+    archiveArtifacts artifacts: "${r}/**", allowEmptyArchive: true
+    def status = fileExists("${r}/status.txt") ? readFile("${r}/status.txt").trim() : 'FAILED'
+    def desc   = fileExists("${r}/description.txt") ? readFile("${r}/description.txt").trim().replace('\n', ' | ') : 'no result: see the console log'
+    env."LEG_${cfg}" = "${status}\t${desc}"                   // for the build name, which is made when both legs are done
+    if (fileExists("${r}/summary.md")) { echo readFile("${r}/summary.md") }
+}
+
 pipeline {
-    agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+    agent none
 
     options {
         timestamps()
@@ -19,16 +44,17 @@ pipeline {
     }
 
     stages {
-        stage('Update, build, test') {
-            steps {
-                script {
-                    def flags = (params.SCRATCH ? '--scratch ' : '')
-                    timeout(activity: true, time: 20, unit: 'MINUTES') {   // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
-                    sh """#!/bin/bash
-mkdir -p "\$WORKSPACE/results"
-bash Build/ci/ci_run.sh --tier fast --tree "\${CI_TREE:-\$HOME/xlion-ci/tree}" --results "\$WORKSPACE/results" ${flags}
-"""
-                    }
+        stage('Debug and Release') {
+            parallel {
+                stage('Debug') {
+                    agent { label 'linux && !release && !san' }          // a Linux agent that is neither the Release nor the sanitizer one (team39 today); it runs as a low-privilege user: see documentation/Linux/jenkins.md
+                    steps { script { runLeg('Debug', params.SCRATCH) } }
+                    post { always { script { collectLeg('Debug') } } }
+                }
+                stage('Release') {
+                    agent { label 'linux && release' }
+                    steps { script { runLeg('Release', params.SCRATCH) } }
+                    post { always { script { collectLeg('Release') } } }
                 }
             }
         }
@@ -36,15 +62,17 @@ bash Build/ci/ci_run.sh --tier fast --tree "\${CI_TREE:-\$HOME/xlion-ci/tree}" -
 
     post {
         always {
-            junit testResults: 'results/suite.xml', allowEmptyResults: true
-            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
             script {
-                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
-                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
-                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
-                currentBuild.description = desc
-                if (status == 'NEW' || status == 'FAILED' || status == 'NOTESTS') { currentBuild.result = 'FAILURE' }
-                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+                def names = []; def descs = []; def bad = false
+                ['Debug', 'Release'].each { cfg ->
+                    def leg = (env."LEG_${cfg}" ?: "FAILED\tno result: see the console log").split('\t', 2)
+                    names << "${cfg.substring(0, 1)}:${leg[0]}"
+                    descs << "${cfg}: ${leg.size() > 1 ? leg[1] : ''}"
+                    if (leg[0] == 'NEW' || leg[0] == 'FAILED' || leg[0] == 'NOTESTS') { bad = true }
+                }
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${names.join(' ')}"
+                currentBuild.description = descs.join(' || ')
+                if (bad) { currentBuild.result = 'FAILURE' }
             }
         }
     }
