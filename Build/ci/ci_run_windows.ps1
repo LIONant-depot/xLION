@@ -8,6 +8,7 @@ param(
     [ValidateSet('fast', 'full')][string]$Tier = 'full',
     [Parameter(Mandatory)][string]$Tree,
     [Parameter(Mandatory)][string]$Results,
+    [ValidateSet('auto', 'yes', 'no')][string]$ReleaseTests = 'auto',     # auto: the Sunday run that starts at 11:00 or later (Singapore time, the 12:00 job) also tests the Release build
     [switch]$Scratch,
     [switch]$Force
 )
@@ -88,9 +89,13 @@ $ok = Stage 'python (pytest)' {
 if (-not $ok) { Fail 'python failed' }
 
 # ---------------------------------------------------------------------------------------------------------------- tests
-$Bin = "$Tree\Build\xLION.vs2022\Debug"       # the smoke tests run on Debug only (asserts exist only there); Release is built, so a Release-only compile or link error is caught
-$Xml = "$Results\suite.xml"
-$null = Stage "tests ($Tier)" {
+$sg = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
+$configs = @('Debug')                         # the daily smoke tests run on Debug only (asserts exist only there); Release is built, so a Release-only compile or link error is caught
+if ($ReleaseTests -eq 'yes' -or ($ReleaseTests -eq 'auto' -and $sg.DayOfWeek -eq 'Sunday' -and $sg.Hour -ge 11)) { $configs += 'Release' }
+foreach ($cfg in $configs) {
+$Bin = "$Tree\Build\xLION.vs2022\$cfg"
+$Xml = if ($cfg -eq 'Debug') { "$Results\suite.xml" } else { "$Results\suite_release.xml" }     # the verdict and the summary follow Debug; Release is reported next to it
+$null = Stage "tests ($Tier, $cfg)" {
     $smoke = "$Tree\source\Editors\LevelEditor\smoke"
     $files = @('.'); $desel = @()
     if ($Tier -eq 'fast') {
@@ -104,6 +109,7 @@ $null = Stage "tests ($Tier)" {
         -o junit_family=xunit2 -o junit_logging=all -o junit_log_passed_tests=false --junitxml="$Xml" -rfE --tb=short -v
     Pop-Location
     $true                                                   # failing tests are the summary's business, not the run's
+}
 }
 if (Test-Path "$Tree\source\Editors\LevelEditor\smoke\.logs") { tar -czf "$Results\smoke_logs.tgz" -C "$Tree\source\Editors\LevelEditor\smoke" .logs 2>$null }
 Finish
