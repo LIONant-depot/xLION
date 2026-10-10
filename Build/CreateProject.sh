@@ -98,7 +98,9 @@ for d in xresource_pipeline_v2 xeditor xresource_guid xmath xstrtool xLIONCore x
 done
 clone_at "$GIT_BASE/xproperty.git" "$DEPS/xproperty" master
 
-# the third party libraries are pinned in Build/third_party.txt, which the CMake configure reads (FetchAndPopulate clones them at those commits): nothing to do for them here
+# the third party libraries, at the commits of Build/third_party.txt (the one list: the CMake configure reads it too, FetchAndPopulate pins by it). They are cloned HERE as well because the configure below
+# runs disconnected from the network (FETCHCONTENT_FULLY_DISCONNECTED): a library that CMake fetches with a plain FetchContent (box3d, in xLIONCore's CMake) is never fetched then, and its target is missing.
+while read -r name url ref; do case "$name" in ""|\#*) continue ;; esac; clone_at "$url" "$DEPS/$name" "$ref"; done < "$ROOT/Build/third_party.txt"
 
 # plugins: the project's own Install.sh (the counterpart of Install.bat: clone every plugin, give each its "dependencies" link)
 [ -f "$PRJ/Install.sh" ] || { echo "example.lionprj/Install.sh is missing: the project repo is older than the Linux setup (use --update)"; exit 1; }
