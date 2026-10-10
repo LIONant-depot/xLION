@@ -57,7 +57,10 @@ def _probe(level, target: str) -> str:
 # ---- a level saved before recipes ---------------------------------------------------------------------------------------------------------------
 
 def _normalized(describe: str) -> str:
-    return re.sub(r"runtime-entity [0-9A-F]+", "runtime-entity", describe)
+    """What a conversion changes: the entity's components and their values. The part after "Systems running on this entity:" says which of the editor's systems would run on it (Render in a window
+    editor, nothing of the kind in a headless one): it is about the editor that describes, not about the scene file, so it is not compared (the goldens were made with a window editor)."""
+    data = describe.split("\nSystems running on this entity:")[0]
+    return re.sub(r"runtime-entity [0-9A-F]+", "runtime-entity", data)
 
 
 def _replace_folder(folder: Path, source: Path) -> None:
