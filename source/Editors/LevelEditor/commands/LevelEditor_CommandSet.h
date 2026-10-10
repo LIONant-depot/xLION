@@ -227,6 +227,14 @@ namespace level_editor
         level_editor::commands::reset_key_query_cmd               CmdResetKey;
         level_editor::commands::press_keys_query_cmd              CmdPressKeys;
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
+        level_editor::commands::virtual_input_cmd                 CmdVirtualInput;
+        level_editor::commands::mouse_move_cmd                    CmdMouseMove;
+        level_editor::commands::mouse_button_cmd                  CmdMouseButton;
+        level_editor::commands::mouse_wheel_cmd                   CmdMouseWheel;
+        level_editor::commands::virtual_key_cmd                   CmdVirtualKey;
+        level_editor::commands::virtual_text_cmd                  CmdVirtualText;
+        level_editor::commands::input_frames_cmd                  CmdInputFrames;
+        level_editor::commands::input_state_cmd                   CmdInputState;
         xlevel::commands::open_level_cmd                    CmdOpenLevel;
         xlevel::commands::open_prefab_cmd                   CmdOpenPrefab;          // OpenPrefab: a prefab in its own editor (a Prefab Editor)
         xlevel::commands::open_scene_cmd                    CmdOpenScene;           // OpenScene: a Scene in its own editor (a Scene Editor)
@@ -327,6 +335,14 @@ namespace level_editor
         , CmdResetKey(Workspace, pEditor)
         , CmdPressKeys(Workspace, pEditor)
         , CmdExplainLastKey(Workspace, pEditor)
+        , CmdVirtualInput(Workspace, pEditor)
+        , CmdMouseMove(Workspace, pEditor)
+        , CmdMouseButton(Workspace, pEditor)
+        , CmdMouseWheel(Workspace, pEditor)
+        , CmdVirtualKey(Workspace, pEditor)
+        , CmdVirtualText(Workspace, pEditor)
+        , CmdInputFrames(Workspace, pEditor)
+        , CmdInputState(Workspace, pEditor)
         , CmdOpenLevel(Workspace, pEditor)
         , CmdOpenPrefab(Workspace, pEditor)
         , CmdOpenScene(Workspace, pEditor)

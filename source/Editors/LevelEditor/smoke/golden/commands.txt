@@ -26,6 +26,9 @@ GetLog
 GetPlayState
 GetPrefabGame
 GetProject
+InputFrames
+InputState
+Key
 ListActions
 ListAssetDependents
 ListAssets
@@ -76,6 +79,9 @@ LogViewDelete
 LogViewSave
 LogViews
 LogWindow
+MouseButton
+MouseMove
+MouseWheel
 MoveAsset
 MoveAssetFile
 OpenInVisualStudio
@@ -127,6 +133,8 @@ SourceControlStatus
 SourceControlUnlock
 Step
 Stop
+Text
 Undo
 Unsaved
 UseKeymap
+VirtualInput
