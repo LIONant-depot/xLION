@@ -105,6 +105,18 @@ clone_at "$GIT_BASE/xproperty.git" "$DEPS/xproperty" master
 GIT_BASE="$GIT_BASE" bash "$PRJ/Install.sh" $([ "$DO_UPDATE" = 1 ] && echo --update) || exit 1
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Integrity: every repo of this tree must have a real remote (https/ssh) as its origin. A tree cloned from another working copy (a path such as /mnt/d/... on WSL) would fetch from, and could be
+# reset or pushed against, somebody's live files: refuse it, and say how to fix it.
+# ---------------------------------------------------------------------------------------------------------------------
+LOCAL_ORIGINS=0
+for r in "$ROOT" "$PRJ" "$DEPS"/* "$PLUGINS"/*; do
+  [ -d "$r/.git" ] && [ ! -L "$r" ] || continue
+  url="$(git -C "$r" remote get-url origin 2>/dev/null || true)"
+  case "$url" in https://*|ssh://*|git@*|"") ;; *) echo "ERROR: $r has the origin '$url', which is a local path, not a remote. Fix: git -C \"$r\" remote set-url origin <its GitHub url>"; LOCAL_ORIGINS=$((LOCAL_ORIGINS + 1)) ;; esac
+done
+[ "$LOCAL_ORIGINS" = 0 ] || { echo "$LOCAL_ORIGINS repo(s) with a local origin: stopping (nothing was built)"; exit 1; }
+
+# ---------------------------------------------------------------------------------------------------------------------
 # 3. Configure (like CreateProject.bat: cmake ../ -B xLION.<platform>)
 #    xcmake_tools (Common.cmake) is placed in the build tree up front, then configure runs disconnected from the network.
 # ---------------------------------------------------------------------------------------------------------------------
