@@ -99,24 +99,7 @@ done
 clone_at "$GIT_BASE/xproperty.git" "$DEPS/xproperty" master
 
 # third party, pinned to the commits this port was verified with
-while read -r name url ref; do clone_at "$url" "$DEPS/$name" "$ref"; done <<'EOF'
-imgui              https://github.com/ocornut/imgui.git                      3bae66c735670619baf51391eba7f3d90a25d125
-imgui-node-editor  https://github.com/thedmd/imgui-node-editor.git           021aa0ea4da13fed864bafb2a92d4c5205076866
-ImGuizmo           https://github.com/CedricGuillemet/ImGuizmo.git           18cef5e031d8c6973d80284c67f60549fafd78c1
-MikkTSpace         https://github.com/mmikk/MikkTSpace.git                   3e895b49d05ea07e4c2133156cfa94369e19e409
-assimp             https://github.com/assimp/assimp.git                      a4eff9f89585c590d7b43daf5065f7bdf398bbc6
-basis_universal    https://github.com/BinomialLLC/basis_universal.git        99f52d63aa6799cbdaecfe977111dc5ec3b31d47
-box3d              https://github.com/erincatto/box3d.git                    5d83df83ab47172c2c745b44315e7538ead02397
-compressonator     https://github.com/GPUOpen-Tools/compressonator.git       f4b53d79ec5abbb50924f58aebb7bf2793200b94
-crunch             https://github.com/BinomialLLC/crunch.git                 36479bc697be19168daafbf15f47f3c60ccec004
-freetype           https://gitlab.freedesktop.org/freetype/freetype.git      42608f77f20749dd6ddc9e0536788eaad70ea4b5
-meshoptimizer      https://github.com/zeux/meshoptimizer.git                 717ca3489b457f781e5cd3e3a8bbc0229619415c
-msdf-atlas-gen     https://github.com/Chlumsky/msdf-atlas-gen.git           6148900d59423059bafde2f51a0cb303184404bd
-stb                https://github.com/nothings/stb.git                       2c980bb59875b0d32144a71867fbdebb2f77cd20
-tinyddsloader      https://github.com/benikabocha/tinyddsloader.git          a2ce2fdcef9c6c3687d1def2c8bb07ba27f4d1ba
-tinyexr            https://github.com/syoyo/tinyexr.git                      644148d0fd6b1b204a68a902dc963a70c749b417
-zstd               https://github.com/facebook/zstd.git                      f8745da6ff1ad1e7bab384bd1f9d742439278e99
-EOF
+while read -r name url ref; do case "$name" in ""|\#*) continue ;; esac; clone_at "$url" "$DEPS/$name" "$ref"; done < "$ROOT/Build/third_party.txt"
 
 # plugins: the project's own Install.sh (the counterpart of Install.bat: clone every plugin, give each its "dependencies" link)
 [ -f "$PRJ/Install.sh" ] || { echo "example.lionprj/Install.sh is missing: the project repo is older than the Linux setup (use --update)"; exit 1; }

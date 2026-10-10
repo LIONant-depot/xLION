@@ -52,11 +52,33 @@ function Update-Repo([string]$Dir) {                      # a repo that follows 
     $new = git -C $Dir rev-parse HEAD
     if ($old -ne $new) { $changed.Add("$(Split-Path -Leaf $Dir) $($new.Substring(0,9)) $(git -C $Dir log -1 --format=%s)") }
 }
+function Sync-ThirdParty {                                 # every library of Build\third_party.txt at its pinned commit, BEFORE the configure (the configure then does not fetch a newer upstream: see that file)
+    $deps = "$Tree\example.lionprj\Cache\dependencies"
+    New-Item -ItemType Directory -Force $deps | Out-Null
+    $moved = $false
+    foreach ($line in Get-Content "$Tree\Build\third_party.txt") {
+        $t = $line.Trim(); if (-not $t -or $t.StartsWith('#')) { continue }
+        $name, $url, $ref = $t -split '\s+'
+        $d = "$deps\$name"
+        $have = if (Test-Path "$d\.git") { git -C $d rev-parse HEAD 2>$null } else { '' }
+        if ($have -eq $ref) { continue }
+        if (-not (Test-Path "$d\.git")) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; git init -q $d; git -C $d remote add origin $url }
+        git -C $d fetch -q --depth 1 origin $ref
+        if ($LASTEXITCODE -ne 0) { throw "cannot fetch $name at $ref" }
+        git -C $d -c advice.detachedHead=false checkout -q -f FETCH_HEAD
+        git -C $d clean -fdq
+        if (Test-Path "$d\.gitmodules") { git -C $d submodule update -q --init --recursive --depth 1 }
+        Write-Host "third party $name -> $($ref.Substring(0, 9))"
+        $moved = $true
+    }
+    if ($moved) { Remove-Item "$Tree\Build\xLION.vs2022\.configured_ok" -ErrorAction SilentlyContinue }      # the configure patches some of them: it must run again on the files as they are now
+}
 $ok = Stage 'update repos' {
     if ($Scratch -and (Test-Path $Tree)) { Remove-Item -Recurse -Force $Tree }
     if (-not (Test-Path "$Tree\.git")) { git clone -q --depth 1 --branch main "$GitBase/xLION.git" $Tree; if ($LASTEXITCODE -ne 0) { return $false } }
     $dirs = @($Tree, "$Tree\example.lionprj") + @(Get-ChildItem "$Tree\example.lionprj\Cache\dependencies", "$Tree\example.lionprj\Cache\Plugins" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
     $dirs | ForEach-Object { Update-Repo $_ }
+    Sync-ThirdParty
     # the example project is shared by every run: put it back exactly as GitHub has it (Cache/ is never touched)
     if (Test-Path "$Tree\example.lionprj\.git") { git -C "$Tree\example.lionprj" clean -fdq -- Descriptors Project.config Assets }
     $true
