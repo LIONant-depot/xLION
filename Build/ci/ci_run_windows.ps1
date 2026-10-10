@@ -68,17 +68,24 @@ Write-Host "repos changed since the last run: $($changed.Count)"; $changed | Sel
 # ---------------------------------------------------------------------------------------------------------------- build
 $ok = Stage 'build' {
     if (-not (Test-Path "$Tree\Build\xLION.vs2022\xLION.sln")) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
-        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
     }
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
-        & $MSBuild "$Tree\Build\xLION.vs2022\xLION.sln" '/t:xLION;xLION_Headless;xeditorcli' "/p:Configuration=$cfg" /m /nologo /v:m "/flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
-        if ($LASTEXITCODE -ne 0) { Copy-Item "$Results\build_$cfg.log" "$Results\build.log" -Force; return $false }
+        $out = "$Results\build_${cfg}_console.log"
+        $p = Start-Process -FilePath $MSBuild -PassThru -NoNewWindow -RedirectStandardOutput $out -ArgumentList "`"$Tree\Build\xLION.vs2022\xLION.sln`" /t:xLION;xLION_Headless;xeditorcli /p:Configuration=$cfg /m /nologo /v:m /flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
+        $n = 0
+        while (-not $p.WaitForExit(60000)) {          # a line a minute, so the console shows it is alive: the projects finished so far and the last one (the full output is build_<config>.log)
+            $n++; $lines = @(Get-Content $out -ErrorAction SilentlyContinue)
+            Write-Host ("{0} build {1}: {2} min, {3} outputs finished, last: {4}" -f (Get-Date -Format 'HH:mm:ss'), $cfg, $n, ($lines | Where-Object { $_ -match ' -> ' }).Count, ($lines | Select-Object -Last 1))
+        }
+        Get-Content $out -Tail 8 | ForEach-Object { Write-Host $_ }
+        if ($p.ExitCode -ne 0) { Copy-Item "$Results\build_$cfg.log" "$Results\build.log" -Force -ErrorAction SilentlyContinue; return $false }
     }
     $true
 }
-if (-not $ok) { Select-String -Path "$Results\build.log" -Pattern ' error ' -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }; Fail 'build failed' }
+if (-not $ok) { if (Test-Path "$Results\build.log") { Select-String -Path "$Results\build.log" -Pattern ' error ' | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line } }; Fail 'build failed' }
 
 # ---------------------------------------------------------------------------------------------------------------- python
 $ok = Stage 'python (pytest)' {
@@ -88,6 +95,28 @@ $ok = Stage 'python (pytest)' {
     $LASTEXITCODE -eq 0
 }
 if (-not $ok) { Fail 'python failed' }
+
+# ---------------------------------------------------------------------------------------------------------------- resources
+# let the resources compile first: an editor on the project until the compile queue is empty, so the tests do not fight over it (a cold cache is the long case, a warm one is seconds)
+$null = Stage 'resources compile' {
+    $bin = "$Tree\Build\xLION.vs2022\Debug"; $log = "$Results\compile_wait.log"
+    $env:XEDITOR_NO_ASSERT_DIALOG = '1'
+    $ed = Start-Process -FilePath "$bin\xLION_Headless.exe" -ArgumentList "`"$Tree\example.lionprj`"" -PassThru -RedirectStandardOutput "$Results\compile_editor.log" -RedirectStandardError "$Results\compile_editor_err.log"
+    $idle = 0; $polls = 0; $start = Get-Date
+    Start-Sleep -Seconds 10
+    while (((Get-Date) - $start).TotalMinutes -lt 45 -and -not $ed.HasExited) {          # at most 45 minutes
+        $s = (& "$bin\xeditorcli.exe" CompileStatus 2>&1 | Select-Object -First 1) -as [string]
+        $polls++; "$(Get-Date -Format 'HH:mm:ss') $s" | Add-Content $log
+        if ($polls % 6 -eq 1) { Write-Host "$(Get-Date -Format 'HH:mm:ss') resources: $s" }          # a line a minute on the console too
+        if ($s -match '^Compiling=0 Waiting=0') { $idle++ } else { $idle = 0 }
+        if ($idle -ge 3) { break }
+        Start-Sleep -Seconds 10
+    }
+    Write-Host "compile queue idle after $([int]((Get-Date) - $start).TotalSeconds) s ($polls polls)"
+    & "$bin\xeditorcli.exe" Exit *> $null
+    if (-not $ed.WaitForExit(120000)) { $ed.Kill() }
+    $idle -ge 3
+}
 
 # ---------------------------------------------------------------------------------------------------------------- tests
 $sg = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
