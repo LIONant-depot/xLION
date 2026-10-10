@@ -6,7 +6,7 @@
 pipeline {
     agent { label 'windows' }
 
-    triggers { cron('TZ=Asia/Singapore\n30 8 * * *\n0 12 * * 0') }     // daily 08:30; Sundays also at 12:00, the run that tests the Release build too (TESTS=auto)
+    triggers { cron('TZ=Asia/Singapore\n0 14 * * *') }     // every day at 14:00: the whole suite, on Debug and Release (the defaults below)
 
     options {
         timestamps()
