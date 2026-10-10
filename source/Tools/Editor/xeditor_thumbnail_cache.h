@@ -77,8 +77,18 @@ namespace xeditor
             // case (already generated on a previous run) never touches the GPU at all past this.
             const std::wstring Path = DiskPath(Guid);
             if (Path.empty()) return {};
-            m_InFlight.emplace(Guid, in_flight{ .m_DiskLoad = std::async(std::launch::async, [Path]() noexcept -> xbitmap
+
+            // A thumbnail older than the compiled resource shows an older version of it (the compile finished while the editor was not looking: at startup by the
+            // compiler-newer rule, from outside the session, ...): it counts as missing, so a fresh one is drawn and written over it.
+            std::filesystem::file_time_type ResourceTime = std::filesystem::file_time_type::min();
+            xresource_editor::g_LibMgr.getNodeInfo(Guid, [&](const xresource_editor::library_db::info_node& Node) { if (Node.m_bHasResource) ResourceTime = Node.m_ResourceTime; });
+
+            m_InFlight.emplace(Guid, in_flight{ .m_DiskLoad = std::async(std::launch::async, [Path, ResourceTime]() noexcept -> xbitmap
                 {
+                    std::error_code Ec;
+                    const auto ThumbnailTime = std::filesystem::last_write_time(Path, Ec);
+                    if (!Ec && ThumbnailTime < ResourceTime) return {};
+
                     xbitmap Bmp;
                     if (auto Err = xbmp::tools::loader::LoadSTDImage(Bmp, Path); Err) return {};
                     return Bmp;
