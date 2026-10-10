@@ -95,9 +95,8 @@ for d in xresource_pipeline_v2 xeditor xresource_guid xmath xstrtool xLIONCore x
 done
 clone_at "$GIT_BASE/xproperty.git" "$DEPS/xproperty" master
 clone_at "$GIT_BASE/xECS.git"      "$DEPS/xECS"      Lesson09_Prefabs
-# repo names that differ only by case / the same repo under two names
+# repo names that differ only by case
 ln -sfn actions.imgui "$DEPS/Actions.imgui"
-ln -sfn xlog          "$DEPS/xlog_editor"
 
 # third party, pinned to the commits this port was verified with
 while read -r name url ref; do clone_at "$url" "$DEPS/$name" "$ref"; done <<'EOF'

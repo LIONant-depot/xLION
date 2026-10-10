@@ -68,15 +68,8 @@ Write-Host "repos changed since the last run: $($changed.Count)"; $changed | Sel
 # ---------------------------------------------------------------------------------------------------------------- build
 $ok = Stage 'build' {
     if (-not (Test-Path "$Tree\Build\xLION.vs2022\xLION.sln")) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
-        # the same repo under two names (CreateProject.sh does this on Linux): xlog_editor is a link to xlog. The configure clones xlog first, so the first pass can fail on the missing link: make it and configure again.
-        $rc = 1
-        foreach ($pass in 1, 2) {
-            $deps = "$Tree\example.lionprj\Cache\dependencies"
-            if ((Test-Path "$deps\xlog") -and -not (Test-Path "$deps\xlog_editor")) { New-Item -ItemType SymbolicLink -Path "$deps\xlog_editor" -Target "$deps\xlog" | Out-Null }
-            Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake$pass.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
-            $rc = $LASTEXITCODE; Pop-Location
-            if ($rc -eq 0) { break }
-        }
+        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
+        $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
     }
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug

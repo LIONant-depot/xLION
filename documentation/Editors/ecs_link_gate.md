@@ -36,5 +36,4 @@ Both baselines may only shrink. After moving a use behind the interface, run `ec
 
 ## Note: reconfiguring
 
-A CMake reconfigure needs `dependencies/xlog_editor` to exist: the `xlog` depot declares a component of that name whose files are under `dependencies/xlog/editor`. Until that is fixed in the depot, make the folder a
-junction to `dependencies/xlog` (`New-Item -ItemType Junction`).
+No manual `dependencies/xlog_editor` link is needed any more: the `xlog` depot has one component, named `xlog`, and the editor headers are listed in it.
