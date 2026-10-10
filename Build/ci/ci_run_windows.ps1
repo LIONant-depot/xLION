@@ -21,6 +21,9 @@ $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
 $MSBuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $MSBuild) { $MSBuild = 'D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' }
 
+# The heartbeat and the stall watchdog (Build\ci\watch_windows.ps1): a second process that shares this console, watches everything this script starts, prints a line a minute and, when nothing used CPU and
+# no log or result file changed for 5 minutes, prints the process tree and kills what this script started (the stage fails, the run goes on).
+Start-Process powershell -NoNewWindow -ArgumentList '-NoProfile', '-File', "`"$Here\watch_windows.ps1`"", '-ParentPid', $PID, '-StallSeconds', '300', '-WatchDirs', "`"$Results;$Tree\source\Editors\LevelEditor\smoke\.logs`"", '-Stamp', "`"$Results\stalled.txt`"" | Out-Null
 function Stage([string]$Name, [scriptblock]$Body) {         # runs it, records the time and the result in stages.tsv
     Write-Host "`n=================== $Name ($(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) ==================="
     $t0 = Get-Date
