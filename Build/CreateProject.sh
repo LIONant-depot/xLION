@@ -25,7 +25,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SANITIZE=0; for a in "$@"; do [ "$a" = --sanitize ] && SANITIZE=1; done
 BUILD_TYPE="${BUILD_TYPE:-Debug}"
-BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux$([ "$SANITIZE" = 1 ] && echo -san)$([ "$BUILD_TYPE" = Release ] && echo -release)}"   # Debug: xLION.linux, Release: xLION.linux-release
+SUFFIX=""
+if [ "$SANITIZE" = 1 ]; then SUFFIX="-san"; fi
+if [ "$BUILD_TYPE" = Release ]; then SUFFIX="$SUFFIX-release"; fi       # Debug: xLION.linux, Release: xLION.linux-release
+BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux$SUFFIX}"
 GIT_BASE="${GIT_BASE:-https://github.com/LIONant-depot}"
 DO_BUILD=0; DO_PACKAGES=1; DO_CLEAN=0; DO_UPDATE=0
 for a in "$@"; do
