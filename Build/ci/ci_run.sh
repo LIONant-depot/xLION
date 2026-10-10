@@ -18,17 +18,17 @@
 # not be made (build failure, no result); failing tests are reported in status.txt (GREEN, KNOWN failures only, NEW failures), not by the exit status.
 set -uo pipefail
 
-TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0; SAN=0
+TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0; SAN=0; CONFIG=Debug
 while [ $# -gt 0 ]; do
   case "$1" in
     --tier) TIER="$2"; shift 2 ;; --tree) TREE="$2"; shift 2 ;; --results) RESULTS="$2"; shift 2 ;;
-    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --sanitize) SAN=1; shift ;; --force) FORCE=1; shift ;;
+    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --sanitize) SAN=1; shift ;; --force) FORCE=1; shift ;; --config) CONFIG="$2"; shift 2 ;;
     *) echo "unknown argument $1"; exit 2 ;;
   esac
 done
-[ -n "$TREE" ] && [ -n "$RESULTS" ] || { echo "usage: ci_run.sh --tier fast|full --tree DIR --results DIR [--scratch] [--detect-only] [--force]"; exit 2; }
+[ -n "$TREE" ] && [ -n "$RESULTS" ] || { echo "usage: ci_run.sh --tier fast|full --tree DIR --results DIR [--config Debug|Release] [--scratch] [--detect-only] [--force]"; exit 2; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BSUB="xLION.linux"; [ "$SAN" = 1 ] && BSUB="xLION.linux-san"
+BSUB="xLION.linux"; [ "$SAN" = 1 ] && BSUB="xLION.linux-san"; [ "$CONFIG" = Release ] && BSUB="$BSUB-release"; export BUILD_TYPE="$CONFIG"      # --config Debug|Release: its own build folder
 # ccache (see Build/CreateProject.sh): one cache next to the trees, capped; the build from scratch of the FIRST week of a month runs with the cache off, so a cold, honest build is
 # made every month (the cache cannot hide a build that no longer works from nothing)
 export CCACHE_DIR="${CCACHE_DIR:-$(dirname "$TREE")/ccache}" CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-4G}"
@@ -65,8 +65,8 @@ stage_run() {                                   # stage_run <name> <command...>:
 }
 finish() {                                      # always: the summary, whatever happened
   local junit="$RESULTS/suite.xml"
-  python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux.txt" \
-    --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER run $(date '+%F %T %z')" > /dev/null 2>&1 || true
+  python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux$([ "$CONFIG" = Release ] && echo _release).txt" \
+    --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER $CONFIG run $(date '+%F %T %z')" > /dev/null 2>&1 || true
   clean_project 2>/dev/null || true
   if [ "$SAN" = 1 ]; then          # the verdict of a sanitizer run is its findings
     python3 "$HERE/sanitize_report.py" --logs "$RESULTS/sanitizer" --out "$RESULTS" --baseline "$HERE/sanitizer_baseline.txt" || true
@@ -74,7 +74,7 @@ finish() {                                      # always: the summary, whatever 
     tar -czf "$RESULTS/sanitizer_logs.tgz" -C "$RESULTS" sanitizer 2>/dev/null || true
   fi
   [ -d "$TREE/source/Editors/LevelEditor/smoke/.logs" ] && tar -czf "$RESULTS/smoke_logs.tgz" -C "$TREE/source/Editors/LevelEditor/smoke" .logs 2>/dev/null || true
-  [ -f "$TREE/Build/xLION.linux/manifest.txt" ] && cp "$TREE/Build/xLION.linux/manifest.txt" "$RESULTS/manifest.txt" || true
+  [ -f "$TREE/Build/$BSUB/manifest.txt" ] && cp "$TREE/Build/$BSUB/manifest.txt" "$RESULTS/manifest.txt" || true
   echo; echo "status: $(cat "$RESULTS/status.txt" 2>/dev/null || echo unknown)"
   cat "$RESULTS/summary.md" 2>/dev/null || true
 }

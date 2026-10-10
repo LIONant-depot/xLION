@@ -1,0 +1,5 @@
+# The known failures of the xLION smoke tests on Linux on the RELEASE build (--config Release): one "file::test" per line, same format and rules as known_failures_linux.txt.
+#
+# Empty to start with. The first Release runs will list tests that only make sense with asserts (Debug) or that behave differently when optimized: each one is either a bug
+# the optimizer exposes (fix it) or a test that needs asserts (mark it with a skip reason in the test, as needs_window is), and only then, for the ones that cannot be
+# fixed yet, a line here. Debug-only failures stay in known_failures_linux.txt.
