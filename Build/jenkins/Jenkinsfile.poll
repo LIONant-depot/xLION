@@ -5,7 +5,7 @@
 // Create it in Jenkins as: New Item > Pipeline "xlion-poll" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.poll".
 pipeline {
-    agent { label 'debug' }       // team39: the machine whose CI tree it compares with GitHub (the other agents have no tree there and would report NOTREE); the agent runs as a low-privilege user: see documentation/Linux/jenkins.md
+    agent { label 'full' }       // team39: the machine whose CI tree it compares with GitHub (the other agents have no tree there and would report NOTREE); the agent runs as a low-privilege user: see documentation/Linux/jenkins.md
 
     options {
         timestamps()

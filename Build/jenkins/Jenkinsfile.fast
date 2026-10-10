@@ -6,7 +6,7 @@
 // Create it in Jenkins as: New Item > Pipeline "xlion-fast" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.fast". It has no schedule of its own: the small job "xlion-poll" (Jenkinsfile.poll) starts it when any repo of the
 // project has a new commit, and it can be started by hand (FORCE). The result is the same kind of report as the full job: documentation/Linux/jenkins.md.
-// The agents and their labels: team39 "debug" (the Debug leg, the full run), team37 "release" (the Release leg), team38 "san" (the sanitizer jobs). A machine with both legs' labels would do them one after the other.
+// The agents and their labels: team38 "debug" (the Debug leg), team37 "release" (the Release leg), team39 "full san" (the poll, the full run, the sanitizer: once a day each, so the controller stays calm). A machine with both legs' labels would do them one after the other.
 
 def runLeg(String cfg, boolean scratch) {
     def flags = scratch ? '--scratch ' : ''
@@ -47,7 +47,7 @@ pipeline {
         stage('Debug and Release') {
             parallel {
                 stage('Debug') {
-                    agent { label 'debug' }          // team39; the agent runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+                    agent { label 'debug' }          // team38; the agent runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
                     steps { script { runLeg('Debug', params.SCRATCH) } }
                     post { always { script { collectLeg('Debug') } } }
                 }

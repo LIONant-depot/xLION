@@ -7,7 +7,7 @@
 // changed, the Test Result page every test with its message and the tail of the editor's log, and the artifacts (results/) the summary, the timing of every
 // test, the commit of every repo, and the build log.
 pipeline {
-    agent { label 'debug' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+    agent { label 'full' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
 
     options {
         timestamps()
