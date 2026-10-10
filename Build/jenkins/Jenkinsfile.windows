@@ -6,7 +6,7 @@
 pipeline {
     agent { label 'windows' }
 
-    triggers { cron('TZ=Asia/Singapore\n30 8 * * *\n0 12 * * 0') }     // daily 08:30; Sundays also at 12:00, the run that tests the Release build too (RELEASE_TESTS=auto)
+    triggers { cron('TZ=Asia/Singapore\n30 8 * * *\n0 12 * * 0') }     // daily 08:30; Sundays also at 12:00, the run that tests the Release build too (TESTS=auto)
 
     options {
         timestamps()
@@ -17,7 +17,7 @@ pipeline {
 
     parameters {
         choice(name: 'TIER', choices: ['full', 'fast'], description: 'full: every test file. fast: the files of Build/ci/fast_files.txt')
-        choice(name: 'RELEASE_TESTS', choices: ['auto', 'yes', 'no'], description: 'Also run the tests on the Release build. auto: only the Sunday 12:00 run')
+        choice(name: 'TESTS', choices: ['auto', 'debug', 'both', 'no'], description: 'Which builds are tested. debug: the Debug build. both: Debug and Release. no: no tests at all, only the builds (no Python needed). auto: debug, and both on the Sunday 12:00 run')
         booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
     }
 
@@ -26,7 +26,7 @@ pipeline {
             steps {
                 powershell """
 New-Item -ItemType Directory -Force "\$env:WORKSPACE\\results" | Out-Null
-powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -ReleaseTests ${params.RELEASE_TESTS} -Tree D:\\xlion-ci\\tree -Results "\$env:WORKSPACE\\results" ${params.SCRATCH ? '-Scratch' : ''}
+powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -Tests ${params.TESTS} -Tree D:\\xlion-ci\\tree -Results "\$env:WORKSPACE\\results" ${params.SCRATCH ? '-Scratch' : ''}
 """
             }
         }

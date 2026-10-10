@@ -37,7 +37,7 @@ bash Build/ci/ci_run.sh --tier fast --tree "${CI_TREE:-$HOME/xlion-ci/tree}" --r
                         build job: params.FAST_JOB, wait: false
                         if (params.WINDOWS_JOB) {
                             // the PC (Debug and Release builds, the fast tests on Debug); a run that is going on keeps the others waiting, they do not pile up (the job allows one at a time)
-                            build job: params.WINDOWS_JOB, wait: false, propagate: false, parameters: [string(name: 'TIER', value: 'fast'), string(name: 'RELEASE_TESTS', value: 'no'), booleanParam(name: 'SCRATCH', value: false)]
+                            build job: params.WINDOWS_JOB, wait: false, propagate: false, parameters: [string(name: 'TIER', value: 'fast'), string(name: 'TESTS', value: 'debug'), booleanParam(name: 'SCRATCH', value: false)]
                         }
                     }
                 }

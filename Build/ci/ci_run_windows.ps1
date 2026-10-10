@@ -8,7 +8,7 @@ param(
     [ValidateSet('fast', 'full')][string]$Tier = 'full',
     [Parameter(Mandatory)][string]$Tree,
     [Parameter(Mandatory)][string]$Results,
-    [ValidateSet('auto', 'yes', 'no')][string]$ReleaseTests = 'auto',     # auto: the Sunday run that starts at 11:00 or later (Singapore time, the 12:00 job) also tests the Release build
+    [ValidateSet('auto', 'debug', 'both', 'no')][string]$Tests = 'auto',     # which builds are tested: debug; both (Debug and Release); no (no tests at all: only the builds, no Python needed); auto = debug, and both on the Sunday run that starts at 11:00 or later (Singapore time, the 12:00 job)
     [switch]$Scratch,
     [switch]$Force
 )
@@ -97,6 +97,15 @@ $ok = Stage 'build' {
 }
 if (-not $ok) { if (Test-Path "$Results\build.log") { Select-String -Path "$Results\build.log" -Pattern ' error ' | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line } }; Fail 'build failed' }
 
+# ---------------------------------------------------------------------------------------------------------------- no tests: the builds are the whole run
+if ($Tests -eq 'no') {
+    'BUILD-OK' | Set-Content "$Results\status.txt"
+    'Debug and Release built; no tests were asked for (Tests=no)' | Set-Content "$Results\description.txt"
+    "# Builds only`n`nDebug and Release were built. No tests were run (Tests=no)." | Set-Content "$Results\summary.md"
+    Write-Host 'status: BUILD-OK (builds only, no tests)'
+    exit 0
+}
+
 # ---------------------------------------------------------------------------------------------------------------- python
 $ok = Stage 'python (pytest)' {
     if (-not (Test-Path "$Base\venv\Scripts\python.exe")) {
@@ -144,7 +153,7 @@ $null = Stage 'resources compile' {
 # ---------------------------------------------------------------------------------------------------------------- tests
 $sg = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
 $configs = @('Debug')                         # the daily smoke tests run on Debug only (asserts exist only there); Release is built, so a Release-only compile or link error is caught
-if ($ReleaseTests -eq 'yes' -or ($ReleaseTests -eq 'auto' -and $sg.DayOfWeek -eq 'Sunday' -and $sg.Hour -ge 11)) { $configs += 'Release' }
+if ($Tests -eq 'both' -or ($Tests -eq 'auto' -and $sg.DayOfWeek -eq 'Sunday' -and $sg.Hour -ge 11)) { $configs += 'Release' }
 foreach ($cfg in $configs) {
 $Bin = "$Tree\Build\xLION.vs2022\$cfg"
 $Xml = if ($cfg -eq 'Debug') { "$Results\suite.xml" } else { "$Results\suite_release.xml" }     # the verdict and the summary follow Debug; Release is reported next to it
