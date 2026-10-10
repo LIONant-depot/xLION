@@ -31,7 +31,7 @@ def build():
         exe = OUT / "smoke_test_hint_card"
         platform = REPO / "source" / "Platform"
         shim_alias = harness.DEFAULT_EXE.parent / "linux_win32_shim_alias"
-        cmd = ["clang++", "-std=gnu++20", "-O1", "-w", "-DIMGUI_DEFINE_MATH_OPERATORS", f"-include{platform / 'xlion_platform_compat_linux.h'}", "-fms-extensions", "-fdeclspec",
+        cmd = [harness.cxx_compiler(), "-std=gnu++20", "-O1", "-w", "-DIMGUI_DEFINE_MATH_OPERATORS", f"-include{platform / 'xlion_platform_compat_linux.h'}", "-fms-extensions", "-fdeclspec",
                f"-I{platform / 'linux_win32_shim'}", *([f"-I{shim_alias}"] if shim_alias.is_dir() else []), f"-I{REPO}", f"-I{IMGUI}", *[str(s) for s in sources], "-o", str(exe)]
         done = subprocess.run(cmd, capture_output=True, text=True, cwd=OUT)
     assert done.returncode == 0 and exe.is_file(), "the card test did not compile:\n" + (done.stdout + done.stderr)[-4000:]

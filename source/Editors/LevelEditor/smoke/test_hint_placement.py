@@ -7,6 +7,7 @@ import subprocess
 
 import pytest
 
+import harness
 from harness import REPO
 
 SRC = REPO / "dependencies" / "xeditor" / "smoke_test_hint_placement.cpp"
@@ -24,7 +25,7 @@ def build():
         done = subprocess.run(["cmd", "/c", str(bat)], capture_output=True, text=True, cwd=OUT)
     else:
         exe = OUT / "smoke_test_hint_placement"
-        done = subprocess.run(["clang++", "-std=gnu++20", "-O2", f"-I{INCLUDE}", str(SRC), "-o", str(exe)], capture_output=True, text=True, cwd=OUT)
+        done = subprocess.run([harness.cxx_compiler(), "-std=gnu++20", "-O2", f"-I{INCLUDE}", str(SRC), "-o", str(exe)], capture_output=True, text=True, cwd=OUT)
     assert done.returncode == 0 and exe.is_file(), "the placement test did not compile:\n" + (done.stdout + done.stderr)[-3000:]
     return exe
 

@@ -48,7 +48,7 @@ def build_linux(debug: bool, src: Path, out: Path) -> Path:
     incs = [f"-I{REPO / 'source' / 'Platform' / 'linux_win32_shim'}"] + ([f"-I{shim_alias}"] if shim_alias.is_dir() else []) + [f"-I{REPO / i}" for i in INCLUDES]
     exe = out / src.stem
     platform = REPO / "source" / "Platform"
-    cmd = ["clang++", "-std=gnu++20", *flags, f"-include{platform / 'linux_win32_shim' / 'xlion_hide_posix_link.h'}",       # the programs have a type "link" (xecs): see that header
+    cmd = [harness.cxx_compiler(), "-std=gnu++20", *flags, f"-include{platform / 'linux_win32_shim' / 'xlion_hide_posix_link.h'}",       # the programs have a type "link" (xecs): see that header
            f"-include{platform / 'xlion_platform_compat_linux.h'}", "-fms-extensions", "-fdeclspec", "-march=x86-64-v3", "-fbracket-depth=2048", "-w",
            *incs, str(src), *[str(s) for s in SOURCES[1:]], "-o", str(exe), "-lpthread"]
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=out)

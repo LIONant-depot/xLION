@@ -35,6 +35,20 @@ REPO = SMOKE_DIR.parents[3]
 DEFAULT_EXE = (REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe") if os.name == "nt" else (REPO / "Build" / "xLION.linux" / "xLION_Headless")
 
 
+def cxx_compiler() -> str:
+    """The C++ compiler for the standalone programs the tests build on Linux: the one the editor's own build was configured with (the CI box has only clang++-20, no plain clang++), else one on the PATH."""
+    try:
+        for line in (DEFAULT_EXE.parent / "CMakeCache.txt").read_text(errors="replace").splitlines():
+            if line.startswith("CMAKE_CXX_COMPILER:"):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    for name in ("clang++", "clang++-20", "clang++-19", "clang++-18", "g++"):
+        if shutil.which(name):
+            return name
+    return "clang++"
+
+
 def compiler_exe(plugin: str) -> Path:
     """The resource compiler of plugins/<plugin>.plugin (xgame, xscript_module, ...): where the Windows build puts it, or the Linux one (ninja xlion_compilers)."""
     folder = REPO / "plugins" / f"{plugin}.plugin"
