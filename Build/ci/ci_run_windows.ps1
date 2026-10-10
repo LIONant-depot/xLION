@@ -68,8 +68,9 @@ Write-Host "repos changed since the last run: $($changed.Count)"; $changed | Sel
 # ---------------------------------------------------------------------------------------------------------------- build
 $ok = Stage 'build' {
     if (-not (Test-Path "$Tree\Build\xLION.vs2022\xLION.sln")) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
-        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 *> "$Results\cmake.log"; $rc = $LASTEXITCODE; Pop-Location
-        if ($rc -ne 0) { return $false }
+        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+        $rc = $LASTEXITCODE; Pop-Location
+        if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
     }
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
         & $MSBuild "$Tree\Build\xLION.vs2022\xLION.sln" '/t:xLION;xLION_Headless;xeditorcli' "/p:Configuration=$cfg" /m /nologo /v:m "/flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
