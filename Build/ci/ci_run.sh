@@ -159,9 +159,9 @@ stage_run "python (pytest)" make_venv || { echo "FAILED" > "$RESULTS/status.txt"
 PROJECT="$TREE/example.lionprj"
 if [ "$SAN" = 1 ]; then
   mkdir -p "$RESULTS/sanitizer"; rm -f "$RESULTS/sanitizer"/*
-  # one log file per process; the editor stops at the first AddressSanitizer error (that is the finding), UndefinedBehaviorSanitizer reports and goes on; no leak report: an editor that is
+  # one log file per process; both sanitizers report and go on (the build has -fsanitize-recover=address), so one run lists every finding; no leak report: an editor that is
   # stopped is not asked to free everything
-  export ASAN_OPTIONS="detect_leaks=0:halt_on_error=1:abort_on_error=0:symbolize=1:handle_segv=0:log_path=$RESULTS/sanitizer/asan"
+  export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:symbolize=1:handle_segv=0:log_path=$RESULTS/sanitizer/asan"
   export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=0:symbolize=1:log_path=$RESULTS/sanitizer/ubsan"
 fi
 BIN="$TREE/Build/$BSUB"

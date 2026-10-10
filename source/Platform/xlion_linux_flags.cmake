@@ -34,7 +34,8 @@ endif()
 # The asset compilers (the plugins' own ExternalProjects) do not inherit these flags: they stay ordinary builds.
 option(XLION_SANITIZE "Build the editors with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 if(XLION_SANITIZE)
-  add_compile_options(-fsanitize=address,undefined -fno-sanitize=vptr,function -fno-omit-frame-pointer
+  # -fsanitize-recover=address: AddressSanitizer reports and GOES ON (ASAN_OPTIONS halt_on_error=0 in the CI run), so one run lists every finding instead of one per run
+  add_compile_options(-fsanitize=address,undefined -fsanitize-recover=address -fno-sanitize=vptr,function -fno-omit-frame-pointer
                       "-fsanitize-ignorelist=${XLION_ROOT_DIR}/Build/ci/sanitizer_ignorelist.txt")
   add_link_options(-fsanitize=address,undefined)
 endif()
