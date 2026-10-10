@@ -67,7 +67,9 @@ def _addable_component(level, entity: str, avoid=()):
     have = _components(level, entity)
     for line in level.cmd("ListComponentTypes").splitlines():
         m = re.match(r"([0-9A-F]{16})\s+(\S+)\s+(\w+)", line)
-        if not m or m[3] in have or m[3] in avoid or "builder" in m[2]:
+        # (the editor's own state tags, editor_disable and editor_no_render, are not data of the prefab: the Level Tree's power and eye set them and the override report leaves them out;
+        #  which type comes first in the list depends on the platform, so a test that adds "the first one" must not take them)
+        if not m or m[3] in have or m[3] in avoid or "builder" in m[2] or m[3].startswith("editor_"):
             continue
         if level.cmd(f"AddComponent -Scene {level.scene} -Id {entity} -Component {m[1]}") == "":
             return m[1], m[3]

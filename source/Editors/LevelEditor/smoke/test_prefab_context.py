@@ -81,6 +81,7 @@ def _edit_in_context(level, closing, prefab: str, name: str, instance: str) -> P
 
 # ---- the roles ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+@pytest.mark.needs_window          # PickRay asks the render module of the Level (a click in the viewport): a headless editor has none
 def test_a_context_scene_is_drawn_faded_and_never_picked_not_even_to_hide_what_is_behind_it(level, opened, level_files_restored):
     prefab, name = _make(level, parts=PARTS)
     _wall(level, 30.0)
@@ -109,6 +110,7 @@ def test_a_context_scene_is_drawn_faded_and_never_picked_not_even_to_hide_what_i
 
 # ---- Edit in Context ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+@pytest.mark.needs_window          # PickRay asks the render module of the Level (a click in the viewport): a headless editor has none
 def test_edit_in_context_places_the_prefab_at_the_instance_with_the_level_around_it(level, closing, opened, level_files_restored):
     prefab, name = _make(level, children=1, parts=PARTS)
     instance = _instance_of(level, name)
