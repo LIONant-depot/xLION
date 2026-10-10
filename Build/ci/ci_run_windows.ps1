@@ -52,33 +52,12 @@ function Update-Repo([string]$Dir) {                      # a repo that follows 
     $new = git -C $Dir rev-parse HEAD
     if ($old -ne $new) { $changed.Add("$(Split-Path -Leaf $Dir) $($new.Substring(0,9)) $(git -C $Dir log -1 --format=%s)") }
 }
-function Sync-ThirdParty {                                 # every library of Build\third_party.txt at its pinned commit, BEFORE the configure (the configure then does not fetch a newer upstream: see that file)
-    $deps = "$Tree\example.lionprj\Cache\dependencies"
-    New-Item -ItemType Directory -Force $deps | Out-Null
-    $moved = $false
-    foreach ($line in Get-Content "$Tree\Build\third_party.txt") {
-        $t = $line.Trim(); if (-not $t -or $t.StartsWith('#')) { continue }
-        $name, $url, $ref = $t -split '\s+'
-        $d = "$deps\$name"
-        $have = if (Test-Path "$d\.git") { git -C $d rev-parse HEAD 2>$null } else { '' }
-        if ($have -eq $ref) { continue }
-        if (-not (Test-Path "$d\.git")) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; git init -q $d; git -C $d remote add origin $url }
-        git -C $d fetch -q --depth 1 origin $ref
-        if ($LASTEXITCODE -ne 0) { throw "cannot fetch $name at $ref" }
-        git -C $d -c advice.detachedHead=false checkout -q -f FETCH_HEAD
-        git -C $d clean -fdq
-        if (Test-Path "$d\.gitmodules") { git -C $d submodule update -q --init --recursive --depth 1 }
-        Write-Host "third party $name -> $($ref.Substring(0, 9))"
-        $moved = $true
-    }
-    if ($moved) { Remove-Item "$Tree\Build\xLION.vs2022\.configured_ok" -ErrorAction SilentlyContinue }      # the configure patches some of them: it must run again on the files as they are now
-}
 $ok = Stage 'update repos' {
     if ($Scratch -and (Test-Path $Tree)) { Remove-Item -Recurse -Force $Tree }
     if (-not (Test-Path "$Tree\.git")) { git clone -q --depth 1 --branch main "$GitBase/xLION.git" $Tree; if ($LASTEXITCODE -ne 0) { return $false } }
     $dirs = @($Tree, "$Tree\example.lionprj") + @(Get-ChildItem "$Tree\example.lionprj\Cache\dependencies", "$Tree\example.lionprj\Cache\Plugins" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $dirs += "$Tree\Build\xLION.vs2022\_deps\xcmake_tools"        # the CMake helpers: an old copy would not know the pinned commits of Build\third_party.txt
     $dirs | ForEach-Object { Update-Repo $_ }
-    Sync-ThirdParty
     # the example project is shared by every run: put it back exactly as GitHub has it (Cache/ is never touched)
     if (Test-Path "$Tree\example.lionprj\.git") { git -C "$Tree\example.lionprj" clean -fdq -- Descriptors Project.config Assets }
     $true
@@ -92,11 +71,13 @@ $ok = Stage 'build' {
     # configured = the marker that is written when a configure ENDED WELL. A failed configure still leaves xLION.sln and half the projects on the disk (the xLION target without its
     # ImGui sources: the link then fails with hundreds of unresolved ImGui:: symbols), which is not a configured tree.
     $Marker = "$Tree\Build\xLION.vs2022\.configured_ok"
-    if (-not (Test-Path $Marker)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
+    # the marker holds what the configure was made with: the pinned third party commits and the xcmake_tools commit. A change of either means the configure runs again (it fetches the pinned commits and patches them).
+    function Get-Stamp { "$((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\xLION.vs2022\_deps\xcmake_tools" rev-parse HEAD 2>$null)" }
+    if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
         Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
-        Set-Content $Marker (Get-Date -Format o)
+        Set-Content $Marker (Get-Stamp)
     }
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
         $out = "$Results\build_${cfg}_console.log"

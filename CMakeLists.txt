@@ -179,6 +179,9 @@ endif()
 # duplicated list is worth. FetchAndPopulate no-ops for anything Install.bat above already placed
 # in example.lionprj/Cache/dependencies, so this is mostly a defensive/consistency measure.)
 #
+# The third party libraries are pinned to the commits this build was verified with, in one file (name, url, commit per line). FetchAndPopulate uses the pinned commit of every dependency that is listed
+# there, whatever tag is asked for below ("docking" and "master" are the newest commit of a branch, which moves: the newest imgui broke the patch of imgui-node-editor further down).
+set(XCMAKE_PINS_FILE "${CMAKE_SOURCE_DIR}/Build/third_party.txt")
 FetchAndPopulate("https://github.com/ocornut/imgui.git" "docking")
 FetchAndPopulate("https://github.com/LIONant-depot/xresource_mgr.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xcontainer.git" "main")
