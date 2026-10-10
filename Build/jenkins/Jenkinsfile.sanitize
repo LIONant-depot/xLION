@@ -1,4 +1,4 @@
-// xLION: the SANITIZER run on Linux, every night: the editor built with AddressSanitizer and UndefinedBehaviorSanitizer (Build/xLION.linux-san, its own tree) and the files of the fast tier
+// xLION: the SANITIZER run on Linux, every day at 10:00 Singapore time (after the 08:00 full run; they share the tree lock): the editor built with AddressSanitizer and UndefinedBehaviorSanitizer (Build/xLION.linux-san, its own tree) and the files of the fast tier
 // run on it. The verdict is the NEW findings (Build/ci/sanitize_report.py, compared with Build/ci/sanitizer_baseline.txt), shown as the build name SAN-GREEN / SAN-KNOWN / SAN-NEW and in the
 // description; the report is sanitizer.md in the artifacts. See documentation/Linux/jenkins.md.
 //
@@ -6,7 +6,7 @@
 pipeline {
     agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
 
-    triggers { cron('TZ=Asia/Singapore\n0 3 * * *') }
+    triggers { cron('TZ=Asia/Singapore\n0 10 * * *') }
 
     options {
         timestamps()

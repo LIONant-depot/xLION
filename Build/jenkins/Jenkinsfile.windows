@@ -1,0 +1,48 @@
+// xLION: the Windows run on the PC agent ("pc-agent", label windows): update, MSBuild of the editor, the smoke tests with the window editor (a screen and a GPU).
+// FULL every day at 08:30 Singapore time (the Linux full run is at 08:00, 10:00 is the Linux sanitizer; the PC does not share the VM's lock); by hand with TIER=fast for a quick check.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-windows" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.windows".
+// The agent must run in the logged-in desktop session (not as a service): the window editor needs the screen. Needs git, Visual Studio 2022 (MSVC, MSBuild), CMake and Python on the PC.
+pipeline {
+    agent { label 'windows' }
+
+    triggers { cron('TZ=Asia/Singapore\n30 8 * * *') }
+
+    options {
+        timestamps()
+        timeout(time: 5, unit: 'HOURS')         // the first run on an empty tree builds everything
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '100', artifactNumToKeepStr: '40'))
+    }
+
+    parameters {
+        choice(name: 'TIER', choices: ['full', 'fast'], description: 'full: every test file. fast: the files of Build/ci/fast_files.txt')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                powershell """
+New-Item -ItemType Directory -Force "\$env:WORKSPACE\\results" | Out-Null
+powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -Tree D:\\xlion-ci\\tree -Results "\$env:WORKSPACE\\results" ${params.SCRATCH ? '-Scratch' : ''}
+"""
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

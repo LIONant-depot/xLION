@@ -81,8 +81,9 @@ trap finish EXIT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # one run at a time on this tree (the fast and the full job share it)
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-exec 9> "$BASE/.lock"
-echo "waiting for the tree lock ($BASE/.lock) ..."
+LOCK="${XLION_CI_LOCK:-$HOME/xlion-ci/.lock}"      # one lock for every job and every tree (fast, full, sanitize): no two builds ever overlap on this machine
+mkdir -p "$(dirname "$LOCK")"; exec 9> "$LOCK"
+echo "waiting for the CI lock ($LOCK) ..."
 flock -w 7200 9 || { echo "the tree was busy for 2 hours"; echo "FAILED" > "$RESULTS/status.txt"; exit 1; }
 echo "lock taken"
 
