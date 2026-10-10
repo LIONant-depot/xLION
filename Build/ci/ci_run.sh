@@ -184,6 +184,7 @@ run_tests() {
     while read -r line; do line="${line%%#*}"; line="$(echo "$line" | xargs)"; [ -n "$line" ] && desel+=(--deselect "$line"); done < "$HERE/fast_deselect.txt"
     cap=1500
   else
+    files=(.)           # the whole folder, named: pytest with no argument does not find this folder's pytest.ini and conftest.py ("unrecognized arguments: --exe")
     cap=7200
   fi
   rm -rf "$smoke/.logs"
