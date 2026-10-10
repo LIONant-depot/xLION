@@ -1,0 +1,49 @@
+// xLION: the Windows FULL run on the PC agent (label windows): every test file, on the Debug build and on the Release build, every day at 14:00 Singapore time (the light run, Jenkinsfile.windows, is the
+// standard one for every check-in; this is the same script with the whole suite). Jenkins here has no parameterized cron, so the full run is its own job.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-windows-full" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.windows_full".
+// It shares the PC (one executor) with xlion-windows: whichever comes second waits.
+pipeline {
+    agent { label 'windows' }
+
+    triggers { cron('TZ=Asia/Singapore\n30 8 * * *\n0 12 * * 0') }     // daily 08:30; Sundays also at 12:00, the run that tests the Release build too (TESTS=auto)
+
+    options {
+        timestamps()
+        timeout(time: 6, unit: 'HOURS')         // the first run on an empty tree builds everything
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '100', artifactNumToKeepStr: '40'))
+    }
+
+    parameters {
+        choice(name: 'TIER', choices: ['full', 'fast'], description: 'fast (the standard, light run): the files of Build/ci/fast_files.txt. full: every test file')
+        choice(name: 'TESTS', choices: ['both', 'auto', 'debug', 'no'], description: 'Which builds are tested. debug: the Debug build. both: Debug and Release. no: no tests at all, only the builds (no Python needed). auto: debug, and both on the Sunday 12:00 run')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                powershell """
+New-Item -ItemType Directory -Force "\$env:WORKSPACE\\results" | Out-Null
+powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -Tests ${params.TESTS} -Tree D:\\xlion-ci\\tree -Results "\$env:WORKSPACE\\results" ${params.SCRATCH ? '-Scratch' : ''}
+"""
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite*.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'NEW' || status == 'FAILED' || status == 'NOTESTS') { currentBuild.result = 'FAILURE' }       // BUILD-OK (TESTS=no), GREEN and KNOWN are fine
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

@@ -29,7 +29,12 @@ function Stage([string]$Name, [scriptblock]$Body) {         # runs it, records t
     "{0}`t{1}`t{2}" -f $Name, [int]((Get-Date) - $t0).TotalSeconds, $(if ($ok) { 'ok' } else { 'FAILED' }) | Add-Content $Stages
     return $ok
 }
+function Write-Manifest {                                 # "<commit> <repo>" for every repo of the tree, as the Linux CI writes it: the history (Build\ci\history.py) bisects with it
+    $repos = @($Tree, "$Tree\example.lionprj") + @(Get-ChildItem "$Tree\example.lionprj\Cache\dependencies", "$Tree\example.lionprj\Cache\Plugins" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $repos | Where-Object { Test-Path "$_\.git" } | ForEach-Object { "$(git -C $_ rev-parse HEAD 2>$null) $(if ($_ -eq $Tree) { 'xLION' } else { Split-Path -Leaf $_ })" } | Set-Content "$Results\manifest.txt"
+}
 function Finish {
+    Write-Manifest
     $py = if (Test-Path "$Base\venv\Scripts\python.exe") { "$Base\venv\Scripts\python.exe" } else { 'python' }
     & $py "$Here\summarize.py" --junit "$Results\suite.xml" --out $Results --tier $Tier --known "$Here\known_failures_windows.txt" `
         --changed "$Results\changed.txt" --stages $Stages --title "xLION windows $Tier run $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" *> $null
