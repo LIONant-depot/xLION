@@ -114,16 +114,16 @@ if ($Tests -eq 'no') {
 $ok = Stage 'python (pytest)' {
     if (-not (Test-Path "$Base\venv\Scripts\python.exe")) {
         # a real Python 3: the "py" launcher (python.org) or "python" on the PATH. The Microsoft Store shortcut named python.exe is not one (it prints "Python was not found...").
-        $base = $null
+        $pyCmd = $null                      # (not $base: PowerShell variables ignore case, $base would be $Base, the folder of the CI)
         foreach ($cand in @(@('py', '-3'), @('python'))) {
             $exe = $cand[0]; $extra = @($cand | Select-Object -Skip 1)
             if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
             $v = & $exe @extra --version 2>&1 | Out-String
-            if ($v -match '^Python 3\.') { $base = @($exe) + $extra; break }
+            if ($v -match '^Python 3\.') { $pyCmd = @($exe) + $extra; break }
         }
-        if (-not $base) { Write-Host 'No Python 3 on this PC. Install it (winget install -e --id Python.Python.3.12), turn off the Microsoft Store shortcuts for python.exe in Settings > Apps > Advanced app settings > App execution aliases, and restart the Jenkins agent.'; return $false }
-        Write-Host "python: $($base -join ' ')"
-        & $base[0] @($base | Select-Object -Skip 1) -m venv "$Base\venv"
+        if (-not $pyCmd) { Write-Host 'No Python 3 on this PC. Install it (winget install -e --id Python.Python.3.12), turn off the Microsoft Store shortcuts for python.exe in Settings > Apps > Advanced app settings > App execution aliases, and restart the Jenkins agent.'; return $false }
+        Write-Host "python: $($pyCmd -join ' ')"
+        & $pyCmd[0] @($pyCmd | Select-Object -Skip 1) -m venv "$Base\venv"
         if ($LASTEXITCODE -ne 0) { return $false }
     }
     & "$Base\venv\Scripts\python.exe" -c 'import pytest, pytest_timeout' 2>$null

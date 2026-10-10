@@ -42,7 +42,7 @@ powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -
                 def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
                 currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
                 currentBuild.description = desc
-                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (status == 'NEW' || status == 'FAILED' || status == 'NOTESTS') { currentBuild.result = 'FAILURE' }       // BUILD-OK (TESTS=no), GREEN and KNOWN are fine
                 if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
             }
         }
