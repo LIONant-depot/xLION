@@ -79,12 +79,15 @@ $ok = Stage 'build' {
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
         $out = "$Results\build_${cfg}_console.log"
         $p = Start-Process -FilePath $MSBuild -PassThru -NoNewWindow -RedirectStandardOutput $out -ArgumentList "`"$Tree\Build\xLION.vs2022\xLION.sln`" /t:xLION;xLION_Headless;xeditorcli /p:Configuration=$cfg /m /nologo /v:m /flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
+        $null = $p.Handle                              # without this a process started with -PassThru can report an empty ExitCode (which is not 0: the build would be called failed)
         $n = 0
         while (-not $p.WaitForExit(60000)) {          # a line a minute, so the console shows it is alive: the projects finished so far and the last one (the full output is build_<config>.log)
             $n++; $lines = @(Get-Content $out -ErrorAction SilentlyContinue)
             Write-Host ("{0} build {1}: {2} min, {3} outputs finished, last: {4}" -f (Get-Date -Format 'HH:mm:ss'), $cfg, $n, ($lines | Where-Object { $_ -match ' -> ' }).Count, ($lines | Select-Object -Last 1))
         }
+        $p.WaitForExit()
         Get-Content $out -Tail 8 | ForEach-Object { Write-Host $_ }
+        Write-Host "build ${cfg}: MSBuild exit code [$($p.ExitCode)]"
         if ($p.ExitCode -ne 0) { Copy-Item "$Results\build_$cfg.log" "$Results\build.log" -Force -ErrorAction SilentlyContinue; return $false }
     }
     $true
