@@ -29,10 +29,12 @@ pipeline {
                 script {
                     def sunday = sh(returnStdout: true, script: 'TZ=Asia/Singapore date +%u').trim() == '7'
                     def scratch = (params.SCRATCH || sunday) ? '--scratch' : ''
+                    timeout(activity: true, time: 20, unit: 'MINUTES') {   // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
                     sh """#!/bin/bash
 mkdir -p "\$WORKSPACE/results"
 bash Build/ci/ci_run.sh --tier full --tree "\${CI_TREE:-\$HOME/xlion-ci/tree}" --results "\$WORKSPACE/results" ${scratch}
 """
+                    }
                 }
             }
         }

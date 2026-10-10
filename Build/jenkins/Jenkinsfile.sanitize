@@ -25,10 +25,12 @@ pipeline {
             steps {
                 script {
                     def flags = (params.SCRATCH ? '--scratch ' : '') + (params.FORCE ? '--force ' : '')
+                    timeout(activity: true, time: 20, unit: 'MINUTES') {   // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
                     sh """#!/bin/bash
 mkdir -p "\$WORKSPACE/results"
 bash Build/ci/ci_run.sh --tier fast --sanitize --tree "\${CI_TREE_SAN:-\$HOME/xlion-ci/tree-san}" --results "\$WORKSPACE/results" ${flags}
 """
+                    }
                 }
             }
         }

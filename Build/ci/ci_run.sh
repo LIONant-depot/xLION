@@ -52,13 +52,15 @@ fi
 # helpers
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 : > "$STAGES"
+source "$HERE/watch.sh"
 stage_run() {                                   # stage_run <name> <command...>: runs it, records the time and the result in stages.tsv
   local name="$1"; shift
   local t0; t0=$(date +%s)
   echo; echo "=================== $name ($(date '+%F %T %z')) ==================="
-  "$@"; local rc=$?
+  # a heartbeat a minute, and a stall (5 minutes without output and without CPU use) is killed and reported: Build/ci/watch.sh
+  watched "${STALL_SECONDS:-300}" "$name" "$@"; local rc=$?
   local t1; t1=$(date +%s)
-  printf "%s\t%d\t%s\n" "$name" $((t1 - t0)) "$([ $rc = 0 ] && echo ok || echo "FAILED($rc)")" >> "$STAGES"
+  printf "%s\t%d\t%s\n" "$name" $((t1 - t0)) "$([ $rc = 0 ] && echo ok || { [ $rc = 124 ] && echo STALLED || echo "FAILED($rc)"; })" >> "$STAGES"
   return $rc
 }
 finish() {                                      # always: the summary, whatever happened
@@ -84,7 +86,12 @@ trap finish EXIT
 LOCK="${XLION_CI_LOCK:-$HOME/xlion-ci/.lock}"      # one lock for every job and every tree (fast, full, sanitize): no two builds ever overlap on this machine
 mkdir -p "$(dirname "$LOCK")"; exec 9> "$LOCK"
 echo "waiting for the CI lock ($LOCK) ..."
-flock -w 7200 9 || { echo "the tree was busy for 2 hours"; echo "FAILED" > "$RESULTS/status.txt"; exit 1; }
+waited=0                                                   # a line every 5 minutes while waiting, so a wait is not mistaken for a hang (Jenkins stops a job that prints nothing for 20 minutes)
+until flock -n 9; do
+  [ $waited -ge 7200 ] && { echo "the tree was busy for 2 hours"; echo "FAILED" > "$RESULTS/status.txt"; exit 1; }
+  sleep 30; waited=$((waited + 30))
+  [ $((waited % 300)) = 0 ] && echo "$(date +%T) still waiting for the CI lock ($((waited / 60)) min): another run holds it"
+done
 echo "lock taken"
 
 # what changed since the last run (before the update moves the repos)
@@ -130,14 +137,11 @@ echo "repos changed since the last run: $(wc -l < "$RESULTS/changed.txt")"; head
 # build
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 build_all() {
-  cmake --build "$TREE/Build/$BSUB" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1 &
-  local pid=$! n=0
-  while kill -0 $pid 2>/dev/null; do                 # a line a minute, so the console shows it is alive (the full output is build.log)
-    sleep 5; n=$((n + 5)); [ $((n % 60)) = 0 ] || continue
-    echo "$(date +%T) build: $(grep -E '^\[[0-9]+/[0-9]+\]' "$RESULTS/build.log" | tail -1 | cut -c1-150)"
-  done
-  wait $pid; local rc=$?; tail -5 "$RESULTS/build.log"; return $rc
+  # the heartbeat (watch.sh) shows the last line of build.log every minute; the full output is build.log
+  cmake --build "$TREE/Build/$BSUB" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1
+  local rc=$?; tail -5 "$RESULTS/build.log"; return $rc
 }
+export WATCH_TAIL="$RESULTS/build.log" WATCH_FILES="$RESULTS/build.log"
 if ! stage_run "build" build_all; then
   echo "FAILED" > "$RESULTS/status.txt"
   grep -n -E "error:|FAILED:|Error " "$RESULTS/build.log" | head -20
@@ -179,7 +183,6 @@ wait_compiles() {
   while [ $(( $(date +%s) - start )) -lt 2700 ]; do          # at most 45 minutes
     local s; s=$(timeout 60 "$BIN/xeditorcli" CompileStatus 2>&1 | head -1)
     polls=$((polls + 1)); echo "$(date +%T) $s" | cut -c1-200 >> "$log"
-    [ $((polls % 6)) = 1 ] && echo "$(date +%T) resources: $s" | cut -c1-200      # a line a minute on the console too
     if echo "$s" | grep -q "^Compiling=0 Waiting=0"; then idle=$((idle + 1)); else idle=0; fi
     [ $idle -ge 3 ] && break
     sleep 10
@@ -190,6 +193,7 @@ wait_compiles() {
   kill -9 $ed 2>/dev/null
   [ $idle -ge 3 ]
 }
+export WATCH_TAIL="$RESULTS/compile_wait.log" WATCH_FILES=""         # the heartbeat shows the last status line; the polls are not progress: the compilers using CPU are
 stage_run "resources compile" wait_compiles || echo "(the queue did not settle: the tests run anyway)"
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -209,7 +213,7 @@ run_tests() {
   fi
   rm -rf "$smoke/.logs"
   ( cd "$smoke" && \
-    XEDITOR_PIPE="$PIPE" XLION_PROJECT="$PROJECT" XEDITOR_NO_ASSERT_DIALOG=1 XLION_TEST_TIMING_LOG="$RESULTS/timing.log" \
+    PYTHONUNBUFFERED=1 XEDITOR_PIPE="$PIPE" XLION_PROJECT="$PROJECT" XEDITOR_NO_ASSERT_DIALOG=1 XLION_TEST_TIMING_LOG="$RESULTS/timing.log" \
     timeout "$cap" "$BASE/venv/bin/python" -m pytest "${files[@]}" "${desel[@]}" -p no:cacheprovider --exe "$BIN/xLION_Headless" \
       --timeout=300 --timeout-method=thread -o junit_family=xunit2 -o junit_logging=all -o junit_log_passed_tests=false \
       --junitxml="$RESULTS/suite.xml" -rfE --tb=short -v )
@@ -217,5 +221,6 @@ run_tests() {
   [ -f "$RESULTS/timing.tsv" ] || true
   return 0                                      # failing tests are the summary's business, not the run's
 }
+export WATCH_TAIL="$RESULTS/timing.log" WATCH_FILES=""               # pytest prints a line per test: that is the activity
 stage_run "tests ($TIER)" run_tests
 exit 0
