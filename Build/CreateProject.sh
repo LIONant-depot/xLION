@@ -94,7 +94,6 @@ for d in xresource_pipeline_v2 xeditor xresource_guid xmath xstrtool xLIONCore x
   clone_at "$GIT_BASE/$d.git" "$DEPS/$d" main
 done
 clone_at "$GIT_BASE/xproperty.git" "$DEPS/xproperty" master
-clone_at "$GIT_BASE/xECS.git"      "$DEPS/xECS"      Lesson09_Prefabs
 # repo names that differ only by case
 ln -sfn actions.imgui "$DEPS/Actions.imgui"
 
