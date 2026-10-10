@@ -18,7 +18,7 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Base = Split-Path -Parent $Tree
 New-Item -ItemType Directory -Force $Results, $Base | Out-Null
 $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
-$MSBuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+$MSBuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $MSBuild) { $MSBuild = 'D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' }
 
 function Stage([string]$Name, [scriptblock]$Body) {         # runs it, records the time and the result in stages.tsv
