@@ -62,6 +62,7 @@ namespace level_editor
         xeditor::diagnostics::InstallCrtReportHook();
         xeditor::diagnostics::InstallTerminateHandler();
         xeditor::diagnostics::InstallUnhandledExceptionFilter();
+        xeditor::hint::g_Diagnostic = [](const char* pLine) { xeditor::diagnostics::Log("%s", pLine); };       // DIAGNOSTIC (to be removed): the hover cards write their first frames to the trace file
         xeditor::diagnostics::Log("startup: LevelEditor_Example begin");
 
         // A project that was asked for is checked before anything is created (no window for a path that is wrong).
