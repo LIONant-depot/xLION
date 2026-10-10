@@ -67,10 +67,14 @@ Write-Host "repos changed since the last run: $($changed.Count)"; $changed | Sel
 
 # ---------------------------------------------------------------------------------------------------------------- build
 $ok = Stage 'build' {
-    if (-not (Test-Path "$Tree\Build\xLION.vs2022\xLION.sln")) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
+    # configured = the marker that is written when a configure ENDED WELL. A failed configure still leaves xLION.sln and half the projects on the disk (the xLION target without its
+    # ImGui sources: the link then fails with hundreds of unresolved ImGui:: symbols), which is not a configured tree.
+    $Marker = "$Tree\Build\xLION.vs2022\.configured_ok"
+    if (-not (Test-Path $Marker)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
         Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
+        Set-Content $Marker (Get-Date -Format o)
     }
     foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
         $out = "$Results\build_${cfg}_console.log"
