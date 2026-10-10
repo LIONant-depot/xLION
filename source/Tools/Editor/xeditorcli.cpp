@@ -107,8 +107,17 @@ int main(int argc, char** argv)
         if (!Command.empty()) Command += ' ';
         if (A.empty() || A.find_first_of(" \t\r\n\"") != std::string::npos)
         {
+            // The editor's rule: a backslash only matters in front of a quote. So n backslashes before a quote (and before the closing one) are written 2n times, and the quote is escaped.
             Command += '"';
-            for (char c : A) { if (c == '"') Command += '\\'; Command += c; }
+            std::size_t Slashes = 0;
+            for (char c : A)
+            {
+                if (c == '\\') { ++Slashes; continue; }
+                if (c == '"') { Command.append(Slashes * 2, '\\'); Command += "\\\""; }
+                else          { Command.append(Slashes, '\\');     Command += c; }
+                Slashes = 0;
+            }
+            Command.append(Slashes * 2, '\\');
             Command += '"';
         }
         else Command += A;

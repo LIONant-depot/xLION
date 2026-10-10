@@ -4,6 +4,7 @@ One set of rules, the Windows command line rules: words are separated by spaces 
 quote (\\" is a quote inside a value, "" is an empty value); everything else is literal, so a path needs no care. These tests use real commands of the Logs (LogViewSave and
 LogViews keep a name and a query: a value that comes back as it went in proves the line was not damaged on the way).
 """
+import os
 import re
 import subprocess
 
@@ -62,7 +63,8 @@ def test_the_cli_sends_the_raw_command_line_not_the_argv(editor, clean_views):
     out = subprocess.run([str(cli), "LogViewSave", "-Name", name, "-Query", query], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     assert views(editor)[name] == query
-    raw = subprocess.run(f'"{cli}" LogViewSave -Name "raw  line" -Query "channel:raw.line"', capture_output=True, text=True, timeout=30)
+    # one string, as typed: Windows takes it as the command line itself, elsewhere a shell is what splits it
+    raw = subprocess.run(f'"{cli}" LogViewSave -Name "raw  line" -Query "channel:raw.line"', capture_output=True, text=True, timeout=30, shell=(os.name != "nt"))
     assert raw.returncode == 0 and views(editor)["raw  line"] == "channel:raw.line", "a line typed in a shell arrives untouched"
     help_text = subprocess.run([str(cli)], capture_output=True, text=True, timeout=30)
     assert help_text.returncode == 1 and "Usage" in help_text.stderr
