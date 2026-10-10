@@ -717,6 +717,8 @@ if(NOT WIN32)
                         -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${_xlion_pdir}/Build/${_xlion_c}_compiler.linux/Release
                         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                        "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}"
+                        "-DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}"
                         -DCMAKE_PROJECT_INCLUDE=${CMAKE_SOURCE_DIR}/source/Platform/xlion_linux_asset_compiler.cmake
                         -DXLION_XCMAKE_TOOLS_DIR=${CMAKE_BINARY_DIR}/_deps/xcmake_tools
                         -DFETCHCONTENT_FULLY_DISCONNECTED=ON

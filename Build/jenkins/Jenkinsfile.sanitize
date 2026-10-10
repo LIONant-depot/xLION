@@ -1,0 +1,52 @@
+// xLION: the SANITIZER run on Linux, every night: the editor built with AddressSanitizer and UndefinedBehaviorSanitizer (Build/xLION.linux-san, its own tree) and the files of the fast tier
+// run on it. The verdict is the NEW findings (Build/ci/sanitize_report.py, compared with Build/ci/sanitizer_baseline.txt), shown as the build name SAN-GREEN / SAN-KNOWN / SAN-NEW and in the
+// description; the report is sanitizer.md in the artifacts. See documentation/Linux/jenkins.md.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-sanitize" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.sanitize".
+pipeline {
+    agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+
+    triggers { cron('TZ=Asia/Singapore\n0 3 * * *') }
+
+    options {
+        timestamps()
+        timeout(time: 6, unit: 'HOURS')         // the first run builds everything with the sanitizers (about twice the time)
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '200', artifactNumToKeepStr: '60'))
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE', defaultValue: false, description: 'Run even when no repo has a new commit')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                script {
+                    def flags = (params.SCRATCH ? '--scratch ' : '') + (params.FORCE ? '--force ' : '')
+                    sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results"
+bash Build/ci/ci_run.sh --tier fast --sanitize --tree "\${CI_TREE_SAN:-\$HOME/xlion-ci/tree-san}" --results "\$WORKSPACE/results" ${flags}
+"""
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'SAN-NEW') { currentBuild.result = 'UNSTABLE' }
+                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

@@ -1,0 +1,20 @@
+# Code the sanitizers (AddressSanitizer, UndefinedBehaviorSanitizer) do not instrument: other people's code, which we do not own or fix. Used by the sanitizer build
+# (-fsanitize-ignorelist, see source/Platform/xlion_linux_flags.cmake). Paths are globs on the source file.
+src:*/dependencies/imgui/*
+src:*/dependencies/imgui-node-editor/*
+src:*/dependencies/ImGuizmo/*
+src:*/dependencies/stb/*
+src:*/dependencies/tinyexr/*
+src:*/dependencies/tinyddsloader/*
+src:*/dependencies/zstd/*
+src:*/dependencies/box3d/*
+src:*/dependencies/assimp/*
+src:*/dependencies/shaderc/*
+src:*/dependencies/freetype/*
+src:*/dependencies/meshoptimizer/*
+src:*/dependencies/msdf-atlas-gen/*
+src:*/dependencies/basis_universal/*
+src:*/dependencies/crunch/*
+src:*/dependencies/compressonator/*
+src:*/dependencies/MikkTSpace/*
+src:*/_deps/*

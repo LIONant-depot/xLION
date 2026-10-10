@@ -1,0 +1,2 @@
+# The sanitizer findings that are known and not fixed yet: one fingerprint per line, as in the sanitizer_all.txt a run writes (python Build/ci/sanitize_report.py ... --update-baseline
+# rewrites this file from a run). A run is only worth reading when it has a NEW finding. Delete a line when its finding is fixed (the report lists the ones that were not seen).

@@ -6,6 +6,7 @@ Two jobs test xLION on the CI VM (headless editor, Linux), plus one tiny job tha
 |---|---|---|---|
 | `xlion-full` | `Build/jenkins/Jenkinsfile.full` | every day 08:00 Singapore time (and by hand) | update, build, let the resources compile, the whole smoke suite (about an hour) |
 | `xlion-fast` | `Build/jenkins/Jenkinsfile.fast` | started by `xlion-poll` when any repo has a new commit (and by hand) | the same, but only the files of `Build/ci/fast_files.txt` (reliable, broad: about 6 minutes of tests) |
+| `xlion-sanitize` | `Build/jenkins/Jenkinsfile.sanitize` | every night 03:00 Singapore time (and by hand) | the same fast files on a build with the sanitizers; reports the NEW findings (below) |
 | `xlion-poll` | `Build/jenkins/Jenkinsfile.poll` | every 5 minutes | compares the newest commit of every repo on GitHub with the CI tree (15 seconds, nothing cloned) and starts `xlion-fast` if anything is new. Delete it when the GitHub organization webhook starts `xlion-fast` directly |
 
 All three run on an **agent** with the label `linux`, not on the Jenkins server's own (built-in) node: a build runs project scripts, and on the built-in node that
@@ -15,6 +16,17 @@ Until then, giving the built-in node the label `linux` makes the jobs run (on th
 `~/xlion-ci/tree` of the agent's user (updated with `Build/CreateProject.sh --update`, so a run only rebuilds what changed). They take a lock on it: when the full run
 is going, a fast run waits its turn. Before every run the example project is put back exactly as GitHub has it (the tests leave files behind when a run is killed).
 The full job starts from nothing on Sundays (or with `SCRATCH`).
+
+## The sanitizer job (`xlion-sanitize`)
+
+Every night at 03:00 Singapore time (before the 08:00 full run; the tree lock keeps them apart) the editor is built with AddressSanitizer and UndefinedBehaviorSanitizer in its own tree (`~/xlion-ci/tree-san`, build dir `Build/xLION.linux-san`, made by `Build/CreateProject.sh --sanitize`) and the fast tier runs on it (`Build/ci/ci_run.sh --tier fast --sanitize`). Third-party code is not instrumented (`Build/ci/sanitizer_ignorelist.txt`), the asset compilers stay ordinary builds, vptr/function checks and leak detection are off.
+
+The verdict is the findings, not the tests: every finding gets a fingerprint (its kind and the top three frames of our code) and `Build/ci/sanitize_report.py` compares them with `Build/ci/sanitizer_baseline.txt`. The build name is `SAN-GREEN`, `SAN-KNOWN` (only known ones) or `SAN-NEW` (yellow: something new; the description counts them). Read `sanitizer.md` in the artifacts: the new findings with three frames each, the known ones counted. To accept a finding copy its line from `sanitizer_all.txt` into the baseline; delete a line when it is fixed. Locally: `bash Build/CreateProject.sh --sanitize --build`, then run the editor or a test from `Build/xLION.linux-san`.
+
+## Disk and build time (the CI machine has a 38 GB disk)
+
+- **Compressed debug info** (`-gz`, and `--compress-debug-sections` at link): on by default in every Linux build (`XLION_COMPRESS_DEBUG`, `source/Platform/xlion_linux_flags.cmake`); an object file of `xecs.cpp` went from 10.2 MB to 6.2 MB.
+- **ccache**: used by `Build/CreateProject.sh` when it is installed (`XLION_CCACHE=0` turns it off), for the editors and the asset compilers. It keys on the compiler, the flags and the preprocessed source, compresses its entries (zstd) and is capped at 4 GB (`CCACHE_MAXSIZE`); `ci_run.sh` keeps it in `xlion-ci/ccache`. The build from scratch of the first week of a month runs with the cache off (`CCACHE_DISABLE`), so a cold, honest build is made every month.
 
 ## Creating the jobs (a Jenkins administrator does this once)
 

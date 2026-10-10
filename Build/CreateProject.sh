@@ -5,6 +5,8 @@
 #   bash Build/CreateProject.sh --build        ... and build xLION_Headless, xLION, xeditorcli and the asset compilers
 #   bash Build/CreateProject.sh --no-packages  skip the apt step (packages already installed / not a Debian-family distro)
 #   bash Build/CreateProject.sh --clean        delete the build dir first
+#   bash Build/CreateProject.sh --sanitize     a build with AddressSanitizer + UndefinedBehaviorSanitizer, in its own build dir Build/xLION.linux-san (the nightly CI job; see
+#                                              source/Platform/xlion_linux_flags.cmake)
 #   bash Build/CreateProject.sh --update       bring every repo that follows a branch (ours: main) to the newest commit first
 #                                              (third party stays on its pinned commit); the commit of every repo is written to
 #                                              <build dir>/manifest.txt, so a build says exactly what it was built from
@@ -21,13 +23,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux}"
+SANITIZE=0; for a in "$@"; do [ "$a" = --sanitize ] && SANITIZE=1; done
+BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux$([ "$SANITIZE" = 1 ] && echo -san)}"
 BUILD_TYPE="${BUILD_TYPE:-Debug}"
 GIT_BASE="${GIT_BASE:-https://github.com/LIONant-depot}"
 DO_BUILD=0; DO_PACKAGES=1; DO_CLEAN=0; DO_UPDATE=0
 for a in "$@"; do
   case "$a" in
-    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;; --update) DO_UPDATE=1 ;;
+    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;; --update) DO_UPDATE=1 ;; --sanitize) ;;
     -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown option $a (see --help)"; exit 2 ;;
   esac
@@ -132,8 +135,12 @@ echo "== configure: $BUILD_DIR"
 [ "$DO_CLEAN" = 1 ] && rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/_deps"
 clone_at "$GIT_BASE/xcmake_tools.git" "$BUILD_DIR/_deps/xcmake_tools" main
+# ccache, when it is installed: a rebuild of what did not change (a build from scratch of the same sources) is a few minutes. ccache keys on the compiler, the flags and the preprocessed source (not
+# on file times), so a hit is the same object a compile would make. Its entries are compressed (zstd) and it is capped (4G): it can never take the disk. XLION_CCACHE=0 turns it off.
+CCACHE_ARGS() { if [ "${XLION_CCACHE:-1}" = 1 ] && command -v ccache >/dev/null 2>&1; then echo "-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; }
+export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-4G}"
 CC=clang-20 CXX=clang++-20 cmake -S "$ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-      -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON $([ "$SANITIZE" = 1 ] && echo -DXLION_SANITIZE=ON) $(CCACHE_ARGS)
 
 # What this build is made of: one line per repo (commit and name), the root repo first
 {

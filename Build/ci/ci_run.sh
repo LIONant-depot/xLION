@@ -11,21 +11,28 @@
 #   --scratch    delete the tree first: a clean checkout, a clean build, a clean resource cache
 #   --detect-only  only compare the repos with GitHub: writes changed.txt, prints "CHANGED <n>" (or "NOTREE"), builds nothing
 #   --force      (with the fast job) run even when nothing changed
+#   --sanitize   the sanitizer build (AddressSanitizer + UndefinedBehaviorSanitizer, Build/xLION.linux-san) and its tests: the verdict is the NEW sanitizer findings
+#                (Build/ci/sanitize_report.py), not the tests, which are slower and are only the way to exercise the code
 #
 # The tests run against the headless editor with a private socket, so it never meets another editor on the machine. Exit status is 0 unless the run itself could
 # not be made (build failure, no result); failing tests are reported in status.txt (GREEN, KNOWN failures only, NEW failures), not by the exit status.
 set -uo pipefail
 
-TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0
+TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0; SAN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --tier) TIER="$2"; shift 2 ;; --tree) TREE="$2"; shift 2 ;; --results) RESULTS="$2"; shift 2 ;;
-    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --force) FORCE=1; shift ;;
+    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --sanitize) SAN=1; shift ;; --force) FORCE=1; shift ;;
     *) echo "unknown argument $1"; exit 2 ;;
   esac
 done
 [ -n "$TREE" ] && [ -n "$RESULTS" ] || { echo "usage: ci_run.sh --tier fast|full --tree DIR --results DIR [--scratch] [--detect-only] [--force]"; exit 2; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BSUB="xLION.linux"; [ "$SAN" = 1 ] && BSUB="xLION.linux-san"
+# ccache (see Build/CreateProject.sh): one cache next to the trees, capped; the build from scratch of the FIRST week of a month runs with the cache off, so a cold, honest build is
+# made every month (the cache cannot hide a build that no longer works from nothing)
+export CCACHE_DIR="${CCACHE_DIR:-$(dirname "$TREE")/ccache}" CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-4G}"
+[ "$SCRATCH" = 1 ] && [ "$(date +%d | sed s/^0//)" -le 7 ] && export CCACHE_DISABLE=1
 BASE="$(dirname "$TREE")"
 GIT_BASE="${GIT_BASE:-https://github.com/LIONant-depot}"
 mkdir -p "$RESULTS" "$BASE"
@@ -59,6 +66,11 @@ finish() {                                      # always: the summary, whatever 
   python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux.txt" \
     --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER run $(date '+%F %T %z')" > /dev/null 2>&1 || true
   clean_project 2>/dev/null || true
+  if [ "$SAN" = 1 ]; then          # the verdict of a sanitizer run is its findings
+    python3 "$HERE/sanitize_report.py" --logs "$RESULTS/sanitizer" --out "$RESULTS" --baseline "$HERE/sanitizer_baseline.txt" || true
+    [ -f "$RESULTS/sanitizer_status.txt" ] && { cp "$RESULTS/sanitizer_status.txt" "$RESULTS/status.txt"; head -3 "$RESULTS/sanitizer.md" | tail -1 > "$RESULTS/description.txt"; cp "$RESULTS/sanitizer.md" "$RESULTS/summary.md"; }
+    tar -czf "$RESULTS/sanitizer_logs.tgz" -C "$RESULTS" sanitizer 2>/dev/null || true
+  fi
   [ -d "$TREE/source/Editors/LevelEditor/smoke/.logs" ] && tar -czf "$RESULTS/smoke_logs.tgz" -C "$TREE/source/Editors/LevelEditor/smoke" .logs 2>/dev/null || true
   [ -f "$TREE/Build/xLION.linux/manifest.txt" ] && cp "$TREE/Build/xLION.linux/manifest.txt" "$RESULTS/manifest.txt" || true
   echo; echo "status: $(cat "$RESULTS/status.txt" 2>/dev/null || echo unknown)"
@@ -98,7 +110,7 @@ update_tree() {
   else
     git -C "$TREE" fetch -q --depth 1 origin main && git -C "$TREE" reset -q --hard origin/main || return 1
   fi
-  ( cd "$TREE" && bash Build/CreateProject.sh --no-packages --update ) || return 1
+  ( cd "$TREE" && bash Build/CreateProject.sh --no-packages --update $([ "$SAN" = 1 ] && echo --sanitize) ) || return 1
   clean_project
 }
 if ! stage_run "update repos" update_tree; then echo "FAILED" > "$RESULTS/status.txt"; exit 1; fi
@@ -117,7 +129,7 @@ echo "repos changed since the last run: $(wc -l < "$RESULTS/changed.txt")"; head
 # build
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 build_all() {
-  cmake --build "$TREE/Build/xLION.linux" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1 &
+  cmake --build "$TREE/Build/$BSUB" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1 &
   local pid=$! n=0
   while kill -0 $pid 2>/dev/null; do                 # a line a minute, so the console shows it is alive (the full output is build.log)
     sleep 5; n=$((n + 5)); [ $((n % 60)) = 0 ] || continue
@@ -145,7 +157,14 @@ stage_run "python (pytest)" make_venv || { echo "FAILED" > "$RESULTS/status.txt"
 # (a cold cache is the long case: every resource is compiled; a warm one is seconds)
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 PROJECT="$TREE/example.lionprj"
-BIN="$TREE/Build/xLION.linux"
+if [ "$SAN" = 1 ]; then
+  mkdir -p "$RESULTS/sanitizer"; rm -f "$RESULTS/sanitizer"/*
+  # one log file per process; the editor stops at the first AddressSanitizer error (that is the finding), UndefinedBehaviorSanitizer reports and goes on; no leak report: an editor that is
+  # stopped is not asked to free everything
+  export ASAN_OPTIONS="detect_leaks=0:halt_on_error=1:abort_on_error=0:symbolize=1:handle_segv=0:log_path=$RESULTS/sanitizer/asan"
+  export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=0:symbolize=1:log_path=$RESULTS/sanitizer/ubsan"
+fi
+BIN="$TREE/Build/$BSUB"
 PIPE="$BASE/pipe-$TIER.sock"
 wait_compiles() {
   local log="$RESULTS/compile_wait.log"
