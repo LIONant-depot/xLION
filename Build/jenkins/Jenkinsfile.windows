@@ -33,7 +33,7 @@ powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -
 
     post {
         always {
-            junit testResults: 'results/suite.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            junit testResults: 'results/suite*.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
             archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
             script {
                 def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
