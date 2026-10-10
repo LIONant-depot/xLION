@@ -6,13 +6,14 @@ that the project is only written when it changed (its time says when it has to b
 """
 import re
 import subprocess
+import sys
 
 import pytest
 
-from harness import REPO
+from harness import REPO, compiler_exe
 from test_script_module_compiler import HEADER, Scratch
 
-GAME_COMPILER = REPO / "plugins" / "xgame.plugin" / "build" / "xgame_compiler.vs2022" / "Release" / "xgame_compiler.exe"
+GAME_COMPILER = compiler_exe("xgame")
 MODULE_TYPE = "8D3968CB1287FA04"
 GAME_TYPE = "A3F1D6C0452E9B17"
 
@@ -51,7 +52,7 @@ class GameScratch:
         (config / "Script.config.txt").write_text(f"{types}\n[ xProperties : {len(rows)} ]\n{{ Name:s Value:? }}\n//---- -----\n" + "\n".join(rows) + "\n")
 
     def compile(self) -> subprocess.CompletedProcess:
-        assert GAME_COMPILER.is_file(), f"the Game compiler is not built: run {GAME_COMPILER.parents[1].parent / 'CreateAndBuildProject.bat'}"
+        assert GAME_COMPILER.is_file(), f"the Game compiler is not built: {GAME_COMPILER} (Windows: plugins/xgame.plugin/build/CreateAndBuildProject.bat, Linux: ninja xlion_compilers)"
         return subprocess.run([str(GAME_COMPILER), "-PROJECT", str(self.project), "-OPTIMIZATION", "O1", "-DEBUG", "D0"
                                , "-DESCRIPTOR", str(self.desc.relative_to(self.project)), "-OUTPUT", str(self.out)]
                               , capture_output=True, text=True, timeout=60)
@@ -153,6 +154,7 @@ def test_the_compiled_resource_is_not_older_than_its_descriptor(game):
         assert stamp.is_file() and stamp.stat().st_mtime_ns >= (game.desc / "Descriptor.txt").stat().st_mtime_ns
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="configures the generated project with the Visual Studio 17 2022 generator (Windows only)")
 def test_the_project_configures_and_the_folders_of_the_modules_reach_visual_studio(game, tmp_path):
     assert game.compile().returncode == 0
     build = tmp_path / "build"

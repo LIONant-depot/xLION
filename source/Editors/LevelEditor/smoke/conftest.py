@@ -23,6 +23,8 @@ from harness import DEFAULT_EXE, GOLDEN_DIR, Editor, vulkan_messages_from_text
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "no_editor: the test needs no editor (it is not started for it)")
+    import harness
+    harness.DEFAULT_EXE = Path(config.getoption("--exe"))        # the tests that start other executables of the same build (sibling()) follow --exe
     config.addinivalue_line("markers", "needs_window: the test needs the graphical editor (a window, ImGui state, text and font rendering); skipped when --exe is a headless editor")
 
 

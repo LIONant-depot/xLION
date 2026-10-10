@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-from harness import DEFAULT_EXE, quote
+from harness import DEFAULT_EXE, quote, sibling
 
 
 def views(editor) -> dict:
@@ -54,7 +54,7 @@ def test_a_session_prefix_is_only_the_first_word(editor):
 
 
 def test_the_cli_sends_the_raw_command_line_not_the_argv(editor, clean_views):
-    cli = DEFAULT_EXE.with_name("xeditorcli.exe")
+    cli = sibling("xeditorcli")
     if not cli.is_file():
         pytest.skip("xeditorcli.exe is not built")
     # list2cmdline (what subprocess does on Windows) quotes each argument by the same rules: the editor must see the very value that was given

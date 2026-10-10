@@ -214,9 +214,16 @@ inline int _wcsnicmp(const wchar_t* a, const wchar_t* b, size_t n) noexcept { re
 inline errno_t localtime_s(std::tm* pOut, const std::time_t* pT) noexcept { return localtime_r(pT, pOut) ? 0 : EINVAL; }
 inline errno_t gmtime_s(std::tm* pOut, const std::time_t* pT) noexcept { return gmtime_r(pT, pOut) ? 0 : EINVAL; }
 inline errno_t fopen_s(FILE** ppF, const char* pName, const char* pMode) noexcept { *ppF = std::fopen(pName, pMode); return *ppF ? 0 : errno; }
-inline errno_t _dupenv_s(char** ppBuf, size_t* pLen, const char* pName) noexcept
+// getenv for the names Windows sets and Linux does not: USERNAME is USER (or LOGNAME), so a person's files (keymaps, logs) get a name on both
+inline const char* xlion_compat_getenv(const char* pName) noexcept
 {
     const char* p = std::getenv(pName);
+    if (!p && std::strcmp(pName, "USERNAME") == 0) { p = std::getenv("USER"); if (!p) p = std::getenv("LOGNAME"); }
+    return p;
+}
+inline errno_t _dupenv_s(char** ppBuf, size_t* pLen, const char* pName) noexcept
+{
+    const char* p = xlion_compat_getenv(pName);
     if (!p) { *ppBuf = nullptr; if (pLen) *pLen = 0; return 0; }
     *ppBuf = strdup(p); if (pLen) *pLen = std::strlen(p) + 1; return 0;
 }
@@ -328,7 +335,7 @@ inline errno_t getenv_s( std::size_t* pLen, char* pBuf, std::size_t Size, const 
 {
     if (pLen) *pLen = 0;
     if (pBuf && Size) pBuf[0] = 0;
-    const char* p = std::getenv(pName);
+    const char* p = xlion_compat_getenv(pName);
     if (!p) return 0;
     const std::size_t n = std::strlen(p) + 1;
     if (pLen) *pLen = n;

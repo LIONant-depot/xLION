@@ -305,7 +305,9 @@ namespace level_editor
                 char User[256] = {};
                 size_t UserLen = 0;
                 getenv_s(&UserLen, User, sizeof(User), "USERNAME");
-                ximgui::actions::ApplyKeymapLayers(Actions, std::format(L"{}\\Project.config\\Keymaps", xresource_editor::g_LibMgr.m_ProjectPath), User);
+                // no project open: no folder to keep a person's keymap in (an empty path would be the root of the drive), so no user file
+                const std::wstring& ProjectPath = xresource_editor::g_LibMgr.m_ProjectPath;
+                ximgui::actions::ApplyKeymapLayers(Actions, (std::filesystem::path(ProjectPath) / L"Project.config" / L"Keymaps").wstring(), ProjectPath.empty() ? std::string{} : User);
             }
         }
         EditorHost.m_IdleWork.m_OnRun.Register<&xresource_editor::source_control::ScanAllLibrariesWhenIdle>();

@@ -12,6 +12,9 @@ import pytest
 
 from harness import REPO, quote
 
+# the remote Logs pipe (xlog_remote.h) is Windows named pipes: elsewhere both ends are inert until it is ported to a Unix socket
+windows_only_for_now = pytest.mark.skipif(os.name != "nt", reason="the remote Logs pipe is Windows only for now (xlog_remote.h)")
+
 
 def tail(reply: str) -> tuple[dict, list[dict]]:
     """(header values, rows): the 'key=value' lines before the blank line, then a header row and tab-separated rows."""
@@ -309,6 +312,7 @@ def test_a_fatal_problem_is_counted_critical_whatever_was_done_to_it(editor):
     assert now["critical"] == before["critical"] + 1 and now["errors"] == before["errors"], "acknowledging stops it asking for attention, never hides that it is critical"
 
 
+@pytest.mark.needs_window
 def test_every_error_is_recorded_and_the_style_says_how_loudly_it_is_told(level):
     editor = level.ed
     token = secrets.token_hex(3)
@@ -338,6 +342,7 @@ def test_every_error_is_recorded_and_the_style_says_how_loudly_it_is_told(level)
     assert "-Style is modal, toast or badge" in level.cmd(f"RaiseError -Message x_{token} -Style shout")
 
 
+@pytest.mark.needs_window
 def test_a_toast_goes_away_by_itself_and_does_not_stack_a_repeat(level):
     import time
     token = secrets.token_hex(3)
@@ -352,6 +357,7 @@ def test_a_toast_goes_away_by_itself_and_does_not_stack_a_repeat(level):
     assert modal_state(level)["toasts"] == 0, "a toast expires"
 
 
+@pytest.mark.needs_window
 def test_the_badge_of_the_closed_drawer_opens_the_logs(level):
     import time
     editor = level.ed
@@ -604,8 +610,8 @@ import contextlib
 @contextlib.contextmanager
 def only_headless(editor):
     """One process owns the command pipe: the GUI editor steps aside while headless launches are made one after the other, and comes back."""
-    from harness import DEFAULT_EXE
-    if not DEFAULT_EXE.with_name("xLION_Headless.exe").is_file():
+    from harness import DEFAULT_EXE, sibling
+    if not sibling("xLION_Headless").is_file():
         pytest.skip("xLION_Headless.exe is not built")
     editor.stop()
     try:
@@ -616,8 +622,8 @@ def only_headless(editor):
 
 def launch(tag: str):
     from pathlib import Path
-    from harness import DEFAULT_EXE, Editor
-    ed = Editor(DEFAULT_EXE.with_name("xLION_Headless.exe"), log_dir=Path(__file__).parent / ".logs" / f"headless_{tag}")
+    from harness import DEFAULT_EXE, Editor, sibling
+    ed = Editor(sibling("xLION_Headless"), log_dir=Path(__file__).parent / ".logs" / f"headless_{tag}")
     ed.start()
     ed.wait_for("LogStatus", r"Import=done", timeout=90)          # the earlier launches have been read back
     return ed
@@ -651,7 +657,7 @@ def logs_dir(ed):
 
 def test_the_launch_is_written_to_disk_while_it_runs(editor):
     status = run(editor, "LogStatus")
-    assert re.search(r"Persistence: Directory=\S*\\\.logs\\sessions Written=\d+", status), status        # the harness points the launches at its own folder (XLOG_LOGS_DIR)
+    assert re.search(r"Persistence: Directory=\S*[\\/]\.logs[\\/]sessions Written=\d+", status), status        # the harness points the launches at its own folder (XLOG_LOGS_DIR)
     before = int(re.search(r"Written=(\d+)", status)[1])
     run(editor, f"LogEmit -Text {quote('kept on disk')} -Channel test.disk -Count 5")
     written(editor)
@@ -875,6 +881,7 @@ def test_the_about_lens_is_the_asset_or_the_operation_a_row_concerns(editor):
     assert titles(f"op:{op} about error") != [] and len(titles(f"op:{op}")) == 1
 
 
+@pytest.mark.needs_window
 def test_the_lens_command_edits_the_tokens_of_the_window_query(editor):
     run(editor, "LogShow -Query sev>=error")
     assert run(editor, "LogLens -Origin msbuild,pipe").strip() == "LogLens: Query=sev>=error origin:msbuild,pipe"
@@ -887,6 +894,7 @@ def test_the_lens_command_edits_the_tokens_of_the_window_query(editor):
     forget_the_way_back(editor)
 
 
+@pytest.mark.needs_window
 def test_the_two_lens_chips_open_their_menus_without_upsetting_the_editor(editor):
     import time
     run(editor, "LogShow -Query sev>=info")
@@ -911,6 +919,7 @@ def selected_problem(editor) -> str:
     return re.search(r"Selected=(\S+)", run(editor, "LogWindow"))[1]
 
 
+@pytest.mark.needs_window
 def test_f8_and_shift_f8_walk_the_problems_of_the_window_and_wrap(editor):
     channel = f"test.f8{secrets.token_hex(2)}"
     ids = []
@@ -934,6 +943,7 @@ def test_f8_and_shift_f8_walk_the_problems_of_the_window_and_wrap(editor):
     forget_the_way_back(editor)
 
 
+@pytest.mark.needs_window
 def test_f8_on_a_problem_with_a_source_that_is_not_there_does_not_upset_the_editor(editor):
     token = secrets.token_hex(3)
     op = simulate(editor, build_output(token), 1)          # its sites are files of another machine
@@ -999,6 +1009,7 @@ def test_the_harness_reads_a_vulkan_complaint_the_same_from_the_text_and_from_th
 GAME_SOURCE = REPO / "plugins" / "xscript_module.plugin" / "source" / "Runtime" / "xscript_game_entry.cpp"
 
 
+@pytest.mark.needs_window
 def test_a_real_game_build_is_an_operation_with_an_outcome(editor, game_level):
     if "the project has no script modules" in editor.log_text():
         pytest.skip("the example project has no script modules, so there is no Game.dll to build")
@@ -1182,6 +1193,7 @@ def test_a_successful_compile_with_warnings_succeeds_with_its_warnings(editor):
     assert not any("COMPILATION_SUCCESS" in e["Title"] for e in events), "the compiler's own end marker is not an event"
 
 
+@pytest.mark.needs_window
 def test_compiling_a_texture_in_its_editor_records_the_compile_and_feedback_opens_the_logs_on_it(editor):
     """The real thing, end to end: the library manager's compile notification becomes an asset.compile operation (no editor hook), and the editor's
     Feedback (F6) takes the person to the Logs with that operation as the filter."""
@@ -1259,6 +1271,7 @@ def forget_the_way_back(editor):
             break
 
 
+@pytest.mark.needs_window
 def test_back_and_forward_walk_the_views_and_a_new_view_ends_the_way_forward(editor):
     forget_the_way_back(editor)
     start = window_values(editor)                          # earlier tests may have left ways forward behind: depths are relative
@@ -1284,6 +1297,7 @@ def test_back_and_forward_walk_the_views_and_a_new_view_ends_the_way_forward(edi
     forget_the_way_back(editor)
 
 
+@pytest.mark.needs_window
 def test_clicking_back_and_forward_in_the_window_walks_the_views_and_never_crashes(editor):
     """The Back button was drawn with a tooltip that read the entry its own click had just removed: the third Back crashed the editor. This clicks the real
     buttons with the real pointer (see Editor.click), back and forward and all the way back, through the view that sent the person here."""
@@ -1346,6 +1360,7 @@ def test_copying_events_gives_plain_text_one_header_line_each_and_the_body_under
     assert "not a sequence" in editor.cmd("LogCopy -From abc")
 
 
+@pytest.mark.needs_window
 def test_each_event_opens_by_its_own_arrow_and_shift_click_selects_a_range(editor):
     import time
     channel = f"test.rows{secrets.token_hex(2)}"
@@ -1407,9 +1422,9 @@ def test_each_event_opens_by_its_own_arrow_and_shift_click_selects_a_range(edito
 def test_the_headless_host_answers_the_log_commands_too(editor):
     """The Logs live in the host, not in the UI: with no window the same store, ring and commands work (the host loop drains)."""
     from pathlib import Path
-    from harness import DEFAULT_EXE, Editor
+    from harness import DEFAULT_EXE, Editor, sibling
 
-    exe = DEFAULT_EXE.with_name("xLION_Headless.exe")
+    exe = sibling("xLION_Headless")
     if not exe.is_file():
         pytest.skip("xLION_Headless.exe is not built")
     editor.stop()                                          # one process owns the pipe; the next test restarts the editor
@@ -1468,6 +1483,7 @@ def test_a_time_range_selects_events_and_problems_seen_inside_it(editor):
     assert "time:" in run(editor, f'LogEvents -Query "channel:{channel} time:{cut}-"').splitlines()[1] or normalised, "the normalised query keeps the range"
 
 
+@pytest.mark.needs_window
 def test_dragging_across_the_ruler_selects_a_time_range_and_the_right_button_clears_it(editor):
     import time
     channel = f"test.drag{secrets.token_hex(2)}"
@@ -1503,6 +1519,7 @@ def test_dragging_across_the_ruler_selects_a_time_range_and_the_right_button_cle
 
 # ---- saved views and what the person decided (design 5.2, 6.6) ----------------------------------------------------------------------------------
 
+@pytest.mark.needs_window
 def test_a_saved_view_is_kept_listed_loaded_and_forgotten_and_each_edit_can_be_undone(editor):
     name = f"mine {secrets.token_hex(2)}"
     query = f"channel:test.views{secrets.token_hex(2)} sev>=warning"
@@ -1683,6 +1700,7 @@ def remote_pipe(editor) -> str:
     return m[1]
 
 
+@windows_only_for_now
 def test_a_remote_runtime_speaks_into_the_logs_over_the_pipe_with_its_operations(editor):
     import time
     token = secrets.token_hex(3)
@@ -1717,11 +1735,12 @@ def test_a_remote_runtime_speaks_into_the_logs_over_the_pipe_with_its_operations
     assert "Remote: Listening=true" in run(editor, "LogStatus")
 
 
+@windows_only_for_now
 def test_a_runtime_started_with_the_editors_pipe_sends_everything_it_says(editor):
     import ctypes, threading, time
     from ctypes import wintypes
     from pathlib import Path
-    from harness import DEFAULT_EXE, Editor, SMOKE_DIR
+    from harness import DEFAULT_EXE, Editor, SMOKE_DIR, sibling
     k32 = ctypes.windll.kernel32
     k32.CreateNamedPipeW.restype = wintypes.HANDLE
     k32.CreateNamedPipeW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID]
@@ -1744,7 +1763,7 @@ def test_a_runtime_started_with_the_editors_pipe_sends_everything_it_says(editor
     editor.stop()
     runtime = None
     try:
-        runtime = Editor(DEFAULT_EXE.with_name("xLION_Headless.exe"), log_dir=SMOKE_DIR / ".logs" / f"headless_runtime_{token}", extra_env={"XLOG_REMOTE_PIPE": name})
+        runtime = Editor(sibling("xLION_Headless"), log_dir=SMOKE_DIR / ".logs" / f"headless_runtime_{token}", extra_env={"XLOG_REMOTE_PIPE": name})
         runtime.start()
         run(runtime, f"LogEmit -Text {quote('said by the runtime ' + token)} -Channel game.remote -Code RT.{token.upper()}")
         for _ in range(100):

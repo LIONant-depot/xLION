@@ -125,6 +125,7 @@ def test_a_file_left_out_of_the_build_stays_in_the_module(module):
     assert name not in module.files()
 
 
+@pytest.mark.needs_window
 def test_a_file_has_one_viewer_ever_and_the_viewer_follows_a_rename(module):
     name, moved = f"View{secrets.token_hex(2)}.h", f"Viewed{secrets.token_hex(2)}.h"
     assert module.cmd(f"AddFile -Path {name}") == ""
@@ -146,6 +147,7 @@ def test_a_file_has_one_viewer_ever_and_the_viewer_follows_a_rename(module):
     module.undo(2)                                                  # the rename, the add
 
 
+@pytest.mark.needs_window
 def test_a_viewer_zooms_its_text_and_each_file_keeps_its_own_size(module):
     """Ctrl + the mouse wheel over the code changes the text's size; ZoomFile does the same for a script (one notch = one pixel, like the wheel)."""
     size = lambda f: float({r["Path"]: r for r in table(module.cmd("ListOpenFiles"))}[f]["FontSize"])
@@ -168,6 +170,7 @@ def test_a_viewer_zooms_its_text_and_each_file_keeps_its_own_size(module):
     module.cmd("CloseFile -Path soccer_game.cpp"); module.cmd("CloseFile -Path soccer_components.h")
 
 
+@pytest.mark.needs_window
 def test_ctrl_and_the_mouse_wheel_over_the_code_zoom_its_text_and_the_wheel_alone_does_not(module):
     """The real wheel, the real Ctrl key and the real pointer: what a person does."""
     row = lambda: {r["Path"]: r for r in table(module.cmd("ListOpenFiles"))}["soccer_game.cpp"]
@@ -274,6 +277,7 @@ def test_source_control_says_a_new_file_is_untracked(module):
         module.undo()
 
 
+@pytest.mark.needs_window
 def test_the_tree_lists_what_it_draws_and_a_double_click_opens_a_file(module):
     time.sleep(1.0)
     rows = module.tree()
@@ -296,6 +300,7 @@ def test_the_tree_lists_what_it_draws_and_a_double_click_opens_a_file(module):
     module.cmd("CloseFile -Path soccer_game.cpp")
 
 
+@pytest.mark.needs_window
 def test_select_file_selects_a_row_and_is_refused_for_what_is_not_there(module):
     time.sleep(0.8)
     assert module.cmd("SelectFile -Path soccer_common.h") == "SelectFile: selected"
@@ -327,6 +332,7 @@ def cmake_values(fragment, prefix: str, tmp_path) -> dict:
     return values
 
 
+@pytest.mark.needs_window
 def test_a_module_exports_as_a_cmake_file_that_a_project_without_the_editor_can_include(module, tmp_path):
     from pathlib import Path
     fragment = tmp_path / "elsewhere" / "soccer.cmake"                # not in the module's folder: its paths are relative to where it is
@@ -376,6 +382,7 @@ def test_an_exported_module_carries_its_libraries_defines_and_files_that_are_lef
             (MODULE_DIR / "module.cmake").unlink(missing_ok=True)
 
 
+@pytest.mark.needs_window
 def test_a_build_error_in_a_file_of_the_module_marks_its_line_and_f8_opens_it_in_the_viewer(module):
     token = secrets.token_hex(3)
     file = SOURCE_DB / "soccer_game.cpp"

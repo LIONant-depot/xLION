@@ -9,6 +9,8 @@ import pytest
 
 from test_resource_editors import RESOURCE_EDITOR_TYPES, _open_and_check, with_known_issues
 
+pytestmark = pytest.mark.needs_window          # the actions come from the ImGui layer: a headless editor says "No actions here: this build has no UI" (see conftest.py)
+
 
 def actions(editor) -> dict[str, tuple[str, str]]:
     """path -> (keys, 'ok' or the reason it cannot run)"""

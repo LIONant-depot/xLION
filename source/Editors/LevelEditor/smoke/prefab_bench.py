@@ -24,7 +24,9 @@ def build(debug: bool, src: Path = SRC) -> Path:
     """Compiles src (a standalone xECSV2 test with its own main) with the engine sources; returns the executable. test_prefab_storage.py builds its test with it too."""
     out = REPO / "Build" / "prefab_bench" / ("debug" if debug else "release") / src.stem
     out.mkdir(parents=True, exist_ok=True)
-    flags = "/MDd /Od /Zi /D_DEBUG" if debug else "/MD /O2 /DNDEBUG"
+    if os.name != "nt":
+        return build_linux(debug, src, out)
+    flags ="/MDd /Od /Zi /D_DEBUG" if debug else "/MD /O2 /DNDEBUG"
     incs = " ".join(f'/I"{REPO / i}"' for i in INCLUDES)
     srcs = " ".join(f'"{s}"' for s in [src, *SOURCES[1:]])
     exe = out / f"{src.stem}.exe"
@@ -34,6 +36,24 @@ def build(debug: bool, src: Path = SRC) -> Path:
     r = subprocess.run(["cmd", "/c", str(bat)], capture_output=True, text=True, cwd=out)
     if r.returncode != 0 or not exe.is_file():
         print(r.stdout[-4000:], r.stderr[-2000:])
+        raise SystemExit("the benchmark did not compile")
+    return exe
+
+
+def build_linux(debug: bool, src: Path, out: Path) -> Path:
+    """The same build with clang++: the flags of the editor's own build (Windows headers through the compat layer, MS extensions, x86-64-v3)."""
+    import harness                                   # DEFAULT_EXE follows --exe: the build folder holds the generated shim folder
+    shim_alias = harness.DEFAULT_EXE.parent / "linux_win32_shim_alias"
+    flags = ["-O0", "-g", "-D_DEBUG"] if debug else ["-O2", "-DNDEBUG"]
+    incs = [f"-I{REPO / 'source' / 'Platform' / 'linux_win32_shim'}"] + ([f"-I{shim_alias}"] if shim_alias.is_dir() else []) + [f"-I{REPO / i}" for i in INCLUDES]
+    exe = out / src.stem
+    platform = REPO / "source" / "Platform"
+    cmd = ["clang++", "-std=gnu++20", *flags, f"-include{platform / 'linux_win32_shim' / 'xlion_hide_posix_link.h'}",       # the programs have a type "link" (xecs): see that header
+           f"-include{platform / 'xlion_platform_compat_linux.h'}", "-fms-extensions", "-fdeclspec", "-march=x86-64-v3", "-fbracket-depth=2048", "-w",
+           *incs, str(src), *[str(s) for s in SOURCES[1:]], "-o", str(exe), "-lpthread"]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=out)
+    if r.returncode != 0 or not exe.is_file():
+        print(r.stdout[-4000:], r.stderr[-4000:])
         raise SystemExit("the benchmark did not compile")
     return exe
 

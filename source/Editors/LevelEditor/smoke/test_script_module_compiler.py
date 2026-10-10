@@ -9,12 +9,12 @@ import time
 
 import pytest
 
-from harness import REPO, quote
+from harness import REPO, compiler_exe, quote
 
 PROJECT = REPO / "example.lionprj"
 MODULE_GUID = "3849E1DE2402B1A5"
 MODULE_TYPE = "8D3968CB1287FA04"
-COMPILER = REPO / "plugins" / "xscript_module.plugin" / "build" / "xscript_module_compiler.vs2022" / "Release" / "xscript_module_compiler.exe"
+COMPILER = compiler_exe("xscript_module")
 HEADER = """
 [ DescriptorVersion ]
 { Major:d  Minor:d }
@@ -77,7 +77,7 @@ class Scratch:
         (self.desc / "Descriptor.txt").write_text(descriptor_text(files, libraries))
 
     def compile(self) -> subprocess.CompletedProcess:
-        assert COMPILER.is_file(), f"the ScriptModule compiler is not built: run {COMPILER.parents[1].parent / 'CreateAndBuildProject.bat'}"
+        assert COMPILER.is_file(), f"the ScriptModule compiler is not built: {COMPILER} (Windows: plugins/xscript_module.plugin/build/CreateAndBuildProject.bat, Linux: ninja xlion_compilers)"
         return subprocess.run([str(COMPILER), "-PROJECT", str(self.project), "-OPTIMIZATION", "O1", "-DEBUG", "D0"
                                , "-DESCRIPTOR", str(self.desc.relative_to(self.project)), "-OUTPUT", str(self.out)]
                               , capture_output=True, text=True, timeout=60)

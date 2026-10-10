@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from harness import DEFAULT_EXE, Editor, SMOKE_DIR
+from harness import DEFAULT_EXE, Editor, SMOKE_DIR, sibling
 from script_project import PROJECT
 
 
@@ -38,7 +38,7 @@ def test_a_project_asked_for_on_the_command_line_is_the_one_opened(editor):
 def test_a_folder_that_is_not_a_project_is_refused_with_the_reason(editor):
     """Run without a window and without the error box (the box is for a person: it waits for a click)."""
     env = {**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1"}
-    exe = DEFAULT_EXE.with_name("xLION_Headless.exe")
+    exe = sibling("xLION_Headless")
     with tempfile.TemporaryDirectory(prefix="xlion_not_a_project_") as folder:
         done = subprocess.run([str(exe), folder], capture_output=True, text=True, timeout=60, cwd=str(exe.parent), env=env)
         assert done.returncode == 1, "it does not start"

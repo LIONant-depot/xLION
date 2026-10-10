@@ -35,6 +35,19 @@ REPO = SMOKE_DIR.parents[3]
 DEFAULT_EXE = (REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe") if os.name == "nt" else (REPO / "Build" / "xLION.linux" / "xLION_Headless")
 
 
+def compiler_exe(plugin: str) -> Path:
+    """The resource compiler of plugins/<plugin>.plugin (xgame, xscript_module, ...): where the Windows build puts it, or the Linux one (ninja xlion_compilers)."""
+    folder = REPO / "plugins" / f"{plugin}.plugin"
+    if os.name == "nt":
+        return folder / "build" / f"{plugin}_compiler.vs2022" / "Release" / f"{plugin}_compiler.exe"
+    return folder / "Build" / f"{plugin}_compiler.linux" / "Release" / f"{plugin}_compiler"
+
+
+def sibling(name: str) -> Path:
+    """The executable next to the editor under test (xLION_Headless, xeditorcli): the Windows name has .exe, and conftest.py points DEFAULT_EXE at --exe."""
+    return DEFAULT_EXE.with_name(name + (".exe" if os.name == "nt" else ""))
+
+
 if os.name == "nt":
     _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     _k32.CreateFileW.restype = wintypes.HANDLE
