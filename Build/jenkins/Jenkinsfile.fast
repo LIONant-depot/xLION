@@ -1,12 +1,12 @@
 // xLION: the FAST smoke tests on Linux, for check-ins: the reliable, broad test files of Build/ci/fast_files.txt, in TWO LEGS that run at the same time on two agents:
-//   Debug   (agent label "linux && !release && !san"):   the Debug build, then the tests; the asserts of the engine exist only here.
-//   Release (agent label "linux && release"): the Release build, then the same tests; the optimizer exposes what Debug hides.
+//   Debug   (agent label "debug"):   the Debug build, then the tests; the asserts of the engine exist only here.
+//   Release (agent label "release"): the Release build, then the same tests; the optimizer exposes what Debug hides.
 // The check-in is green when both are. Each leg has its own results (results-Debug, results-Release) and its own known failures list (Build/ci/known_failures_linux[_release].txt).
 //
 // Create it in Jenkins as: New Item > Pipeline "xlion-fast" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.fast". It has no schedule of its own: the small job "xlion-poll" (Jenkinsfile.poll) starts it when any repo of the
 // project has a new commit, and it can be started by hand (FORCE). The result is the same kind of report as the full job: documentation/Linux/jenkins.md.
-// The agents: team39 "linux" (Debug leg), team37 "linux release" (Release leg), team38 "linux san" (the sanitizer jobs). A machine with both legs' labels would do them one after the other.
+// The agents and their labels: team39 "debug" (the Debug leg, the full run), team37 "release" (the Release leg), team38 "san" (the sanitizer jobs). A machine with both legs' labels would do them one after the other.
 
 def runLeg(String cfg, boolean scratch) {
     def flags = scratch ? '--scratch ' : ''
@@ -47,12 +47,12 @@ pipeline {
         stage('Debug and Release') {
             parallel {
                 stage('Debug') {
-                    agent { label 'linux && !release && !san' }          // a Linux agent that is neither the Release nor the sanitizer one (team39 today); it runs as a low-privilege user: see documentation/Linux/jenkins.md
+                    agent { label 'debug' }          // team39; the agent runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
                     steps { script { runLeg('Debug', params.SCRATCH) } }
                     post { always { script { collectLeg('Debug') } } }
                 }
                 stage('Release') {
-                    agent { label 'linux && release' }
+                    agent { label 'release' }
                     steps { script { runLeg('Release', params.SCRATCH) } }
                     post { always { script { collectLeg('Release') } } }
                 }

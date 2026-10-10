@@ -4,7 +4,7 @@
 //
 // Create it in Jenkins as: New Item > Pipeline "xlion-sanitize" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.sanitize".
 pipeline {
-    agent { label 'linux' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+    agent { label 'san' }       // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
 
     triggers { cron('TZ=Asia/Singapore\n0 10 * * *') }
 
