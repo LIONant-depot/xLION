@@ -1,7 +1,6 @@
 # The RELEASE sanitizer build (Build/jenkins/Jenkinsfile.sanitize_release). The sanitizer findings that are known and not fixed yet: one fingerprint per line, as in the sanitizer_all.txt a run writes (python Build/ci/sanitize_report.py ... --update-baseline
 # rewrites this file from a run). A run is only worth reading when it has a NEW finding. Delete a line when its finding is fixed (the report lists the ones that were not seen).
 391a2e4f9f5c  ubsan  reference binding to address ADDR with insufficient space for an object of type 'settings:  at  xlioncore_editor.cpp
-2613974bb643  asan:new-delete-type-mismatch  object passed to delete has wrong type:  at  xlioncore_editor.cpp
 0696eecd39fd  ubsan  reference binding to address ADDR with insufficient space for an object of type 'const set  at xproperty.h:1524
 0ed55e10e565  ubsan  reference binding to misaligned address ADDR for type 'const settings::data_memory' (aka '  at xproperty.h:1524
 6c20157f6c18  ubsan  store to misaligned address ADDR for type 'std::byte *', which requires N byte alignment  at xserializer.cpp:700
