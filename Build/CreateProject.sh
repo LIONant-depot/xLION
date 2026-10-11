@@ -7,6 +7,8 @@
 #   bash Build/CreateProject.sh --clean        delete the build dir first
 #   bash Build/CreateProject.sh --sanitize     a build with AddressSanitizer + UndefinedBehaviorSanitizer, in its own build dir Build/xLION.linux-san (the nightly CI job; see
 #                                              source/Platform/xlion_linux_flags.cmake)
+#   bash Build/CreateProject.sh --tsan         a build with ThreadSanitizer (cannot be mixed with ASan), in its own build dir Build/xLION.linux-tsan (the weekly TSan job,
+#                                              Build/jenkins/Jenkinsfile.tsan; kernel 6.8+ needs sysctl vm.mmap_rnd_bits=28 to run it)
 #   bash Build/CreateProject.sh --update       bring every repo that follows a branch (ours: main) to the newest commit first
 #                                              (third party stays on its pinned commit); the commit of every repo is written to
 #                                              <build dir>/manifest.txt, so a build says exactly what it was built from
@@ -23,17 +25,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SANITIZE=0; for a in "$@"; do [ "$a" = --sanitize ] && SANITIZE=1; done
+SANITIZE=0; SAN_MODE=address; for a in "$@"; do [ "$a" = --sanitize ] && SANITIZE=1; [ "$a" = --tsan ] && { SANITIZE=1; SAN_MODE=thread; }; done
 BUILD_TYPE="${BUILD_TYPE:-Debug}"
 SUFFIX=""
-if [ "$SANITIZE" = 1 ]; then SUFFIX="-san"; fi
+if [ "$SANITIZE" = 1 ]; then SUFFIX="-san"; [ "$SAN_MODE" = thread ] && SUFFIX="-tsan"; fi
 if [ "$BUILD_TYPE" = Release ]; then SUFFIX="$SUFFIX-release"; fi       # Debug: xLION.linux, Release: xLION.linux-release
 BUILD_DIR="${BUILD_DIR:-$ROOT/Build/xLION.linux$SUFFIX}"
 GIT_BASE="${GIT_BASE:-https://github.com/LIONant-depot}"
 DO_BUILD=0; DO_PACKAGES=1; DO_CLEAN=0; DO_UPDATE=0
 for a in "$@"; do
   case "$a" in
-    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;; --update) DO_UPDATE=1 ;; --sanitize) ;;
+    --build) DO_BUILD=1 ;; --no-packages) DO_PACKAGES=0 ;; --clean) DO_CLEAN=1 ;; --update) DO_UPDATE=1 ;; --sanitize|--tsan) ;;
     -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown option $a (see --help)"; exit 2 ;;
   esac
@@ -131,7 +133,7 @@ clone_at "$GIT_BASE/xcmake_tools.git" "$BUILD_DIR/_deps/xcmake_tools" main
 CCACHE_ARGS() { if [ "${XLION_CCACHE:-1}" = 1 ] && command -v ccache >/dev/null 2>&1; then echo "-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; fi; }
 export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-4G}"
 CC=clang-20 CXX=clang++-20 cmake -S "$ROOT" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-      -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON $([ "$SANITIZE" = 1 ] && echo -DXLION_SANITIZE=ON) $(CCACHE_ARGS)
+      -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON $([ "$SANITIZE" = 1 ] && echo -DXLION_SANITIZE=ON -DXLION_SANITIZE_MODE=$SAN_MODE) $(CCACHE_ARGS)
 
 # What this build is made of: one line per repo (commit and name), the root repo first
 {

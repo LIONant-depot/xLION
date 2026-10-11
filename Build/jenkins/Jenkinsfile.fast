@@ -1,12 +1,15 @@
 // xLION: the FAST smoke tests on Linux, for check-ins: the reliable, broad test files of Build/ci/fast_files.txt, in TWO LEGS that run at the same time on two agents:
 //   Debug   (agent label "debug"):   the Debug build, then the tests; the asserts of the engine exist only here.
-//   Release (agent label "release"): the Release build, then the same tests; the optimizer exposes what Debug hides.
+//   Release (agent label "light"):   the Release build, then the same tests; the optimizer exposes what Debug hides.
 // The check-in is green when both are. Each leg has its own results (results-Debug, results-Release) and its own known failures list (Build/ci/known_failures_linux[_release].txt).
 //
 // Create it in Jenkins as: New Item > Pipeline "xlion-fast" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main,
 // Script Path "Build/jenkins/Jenkinsfile.fast". It has no schedule of its own: the small job "xlion-poll" (Jenkinsfile.poll) starts it when any repo of the
 // project has a new commit, and it can be started by hand (FORCE). The result is the same kind of report as the full job: documentation/Linux/jenkins.md.
-// The agents and their labels: team38 "debug" (the Debug leg), team37 "release" (the Release leg), team39 "full san" (the poll, the full run, the sanitizer: once a day each, so the controller stays calm). A machine with both legs' labels would do them one after the other.
+// The agents and their labels: "light" (team37, team38, team39: the quick jobs), "heavy" (team37, team38: the full run and the sanitizer runs, which need the RAM and the swap), "debug" (team38).
+// The Debug leg stays PINNED to "debug" (team38): the poll (Jenkinsfile.poll, also on "debug") compares GitHub with the CI tree of its own machine, and the Debug leg is what keeps that
+// tree current; a Debug leg on another machine would leave it stale and the poll would start the fast job again every 5 minutes. The Release leg runs on any "light" machine.
+// A machine that gets both legs does them one after the other (one executor, one tree lock).
 
 def runLeg(String cfg, boolean scratch) {
     def flags = scratch ? '--scratch ' : ''
@@ -52,7 +55,7 @@ pipeline {
                     post { always { script { collectLeg('Debug') } } }
                 }
                 stage('Release') {
-                    agent { label 'release' }
+                    agent { label 'light' }          // any light machine (its own CI tree and build folder xLION.linux-release; first run there is a full build)
                     steps { script { runLeg('Release', params.SCRATCH) } }
                     post { always { script { collectLeg('Release') } } }
                 }

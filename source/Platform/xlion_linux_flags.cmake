@@ -32,8 +32,17 @@ endif()
 #  - vptr and function checks: the engine copies (xlevel_engine_copies.h) rename shared objects and load them side by side, so two copies of one type have two typeinfos on purpose;
 #  - leak detection (an editor that is stopped is not asked to free everything: ASAN_OPTIONS=detect_leaks=0 in the CI run).
 # The asset compilers (the plugins' own ExternalProjects) do not inherit these flags: they stay ordinary builds.
+# XLION_SANITIZE_MODE=thread (Build/CreateProject.sh --tsan, the weekly Build/jenkins/Jenkinsfile.tsan): ThreadSanitizer instead, for xscheduler and the lockless containers. TSan cannot
+# be mixed with ASan, so it is its own build (Build/xLION.linux-tsan) with its own baseline (Build/ci/sanitizer_baseline_tsan.txt) and suppressions (Build/ci/tsan_suppressions.txt).
 option(XLION_SANITIZE "Build the editors with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
-if(XLION_SANITIZE)
+set(XLION_SANITIZE_MODE "address" CACHE STRING "With XLION_SANITIZE: address (ASan + UBSan) or thread (TSan)")
+set_property(CACHE XLION_SANITIZE_MODE PROPERTY STRINGS address thread)
+if(XLION_SANITIZE AND XLION_SANITIZE_MODE STREQUAL "thread")
+  add_compile_options($<$<NOT:$<CONFIG:Debug>>:-gline-tables-only> -fsanitize=thread -fno-omit-frame-pointer "-fsanitize-ignorelist=${XLION_ROOT_DIR}/Build/ci/sanitizer_ignorelist.txt")
+  add_link_options(-fsanitize=thread)
+elseif(XLION_SANITIZE)
+  # Release has no debug info, so its reports could not be symbolized (functions only, no file: every finding looked new); line tables are enough and cost little
+  add_compile_options($<$<NOT:$<CONFIG:Debug>>:-gline-tables-only>)
   # -fsanitize-recover=address: AddressSanitizer reports and GOES ON (ASAN_OPTIONS halt_on_error=0 in the CI run), so one run lists every finding instead of one per run
   add_compile_options(-fsanitize=address,undefined -fsanitize-recover=address -fno-sanitize=vptr,function -fno-omit-frame-pointer
                       "-fsanitize-ignorelist=${XLION_ROOT_DIR}/Build/ci/sanitizer_ignorelist.txt")

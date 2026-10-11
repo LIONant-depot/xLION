@@ -1,0 +1,56 @@
+// xLION: the RELEASE SANITIZER run on Linux, every Sunday at 12:00 Singapore time: the editor built as Release with AddressSanitizer and UndefinedBehaviorSanitizer
+// (Build/xLION.linux-san-release, in its own tree tree-san-release) and the files of the fast tier run on it. Release finds what Debug hides (optimised code, no debug-only checks).
+// The verdict is the NEW findings against its own baseline, Build/ci/sanitizer_baseline_release.txt (Build/ci/sanitize_report.py), shown as SAN-GREEN / SAN-KNOWN / SAN-NEW;
+// the report is sanitizer.md in the artifacts. The sanitizer build compiles one file at a time (-j1) and needs the swap: the first build takes many hours.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-sanitize-release" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.sanitize_release".
+// It runs on an agent with the label 'heavy' (team37 or team38; tree-san-release is per machine, so the first run on each one builds everything).
+pipeline {
+    agent { label 'heavy' }     // an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+
+    triggers { cron('TZ=Asia/Singapore\n0 12 * * 0') }
+
+    options {
+        timestamps()
+        timeout(time: 16, unit: 'HOURS')        // the first run builds everything with the sanitizers, one compile at a time
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '200', artifactNumToKeepStr: '60'))
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE', defaultValue: false, description: 'Run even when no repo has a new commit')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                script {
+                    def flags = (params.SCRATCH ? '--scratch ' : '') + (params.FORCE ? '--force ' : '')
+                    timeout(activity: true, time: 20, unit: 'MINUTES') {   // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
+                    sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results"
+bash Build/ci/ci_run.sh --tier fast --sanitize --config Release --baseline Build/ci/sanitizer_baseline_release.txt --tree "\${CI_TREE_SAN_RELEASE:-\$HOME/xlion-ci/tree-san-release}" --results "\$WORKSPACE/results" ${flags}
+"""
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'SAN-NEW') { currentBuild.result = 'UNSTABLE' }
+                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

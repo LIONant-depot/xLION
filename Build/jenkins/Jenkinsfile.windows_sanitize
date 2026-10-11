@@ -1,0 +1,53 @@
+// xLION: the Windows SANITIZER run on the PC agent (label windows): the editor built with MSVC AddressSanitizer (/fsanitize=address, no UBSan on MSVC) in its own build folder
+// Build\xLION.vs2022-asan of the CI tree D:\xlion-ci\tree, and the fast tests run on it with the window editor. Nightly at 02:00 Singapore time on Debug, and on Sundays at 04:00 on
+// Release (CONFIG=auto picks Release on the Sunday run). The verdict is the NEW findings (Build/ci/sanitize_report.py against Build/ci/sanitizer_baseline_windows.txt, or
+// sanitizer_baseline_windows_release.txt), shown as SAN-GREEN / SAN-KNOWN / SAN-NEW; the report is sanitizer.md in the artifacts. See Build/ci/ci_run_windows.ps1 -Sanitize.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-windows-sanitize" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.windows_sanitize".
+// Needs the Visual Studio 2022 component "C++ AddressSanitizer" (Microsoft.VisualStudio.Component.VC.ASAN) on the PC.
+pipeline {
+    agent { label 'windows' }
+
+    triggers { cron('TZ=Asia/Singapore\n0 2 * * *\n0 4 * * 0') }     // nightly 02:00 (Debug); Sundays also at 04:00, the Release run (CONFIG=auto)
+
+    options {
+        timestamps()
+        timeout(time: 6, unit: 'HOURS')         // the first run builds everything with AddressSanitizer
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '100', artifactNumToKeepStr: '40'))
+    }
+
+    parameters {
+        choice(name: 'TIER', choices: ['fast', 'full'], description: 'fast (the standard, light run): the files of Build/ci/fast_files.txt. full: every test file')
+        choice(name: 'CONFIG', choices: ['auto', 'Debug', 'Release'], description: 'The configuration built and tested with AddressSanitizer. auto: Release on the Sunday run (from 03:00), Debug otherwise')
+        choice(name: 'TESTS', choices: ['auto', 'debug', 'both', 'no'], description: 'Which builds are tested. debug: the Debug build. both: Debug and Release. no: no tests at all, only the builds (no Python needed). auto: debug, and both on the Sunday 12:00 run')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                powershell """
+New-Item -ItemType Directory -Force "\$env:WORKSPACE\\results" | Out-Null
+powershell -NoProfile -File Build\\ci\\ci_run_windows.ps1 -Tier ${params.TIER} -Tests ${params.TESTS} -Sanitize -Config ${params.CONFIG} -Tree D:\\xlion-ci\\tree -Results "\$env:WORKSPACE\\results" ${params.SCRATCH ? '-Scratch' : ''}
+"""
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite*.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'SAN-NEW') { currentBuild.result = 'UNSTABLE' }
+                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

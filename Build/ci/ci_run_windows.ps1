@@ -1,6 +1,11 @@
 # xLION CI on Windows (the Jenkins agent "pc-agent"): update the repos, build the editor with MSBuild, run the smoke tests with the window editor (the agent must run in a logged-in desktop session).
 #
-#   powershell -File Build\ci\ci_run_windows.ps1 -Tier fast|full -Tree D:\xlion-ci\tree -Results <dir> [-Scratch] [-Force]
+#   powershell -File Build\ci\ci_run_windows.ps1 -Tier fast|full -Tree D:\xlion-ci\tree -Results <dir> [-Scratch] [-Force] [-Sanitize [-Config auto|Debug|Release]]
+#
+# -Sanitize: the MSVC AddressSanitizer build (Build/jenkins/Jenkinsfile.windows_sanitize) in its own build folder Build\xLION.vs2022-asan of the same tree: /fsanitize=address /Zi,
+# no /RTC1, /INCREMENTAL:NO (Build\ci\msvc_asan.cmake, given to the configure as CMAKE_PROJECT_xLION_INCLUDE), the AddressSanitizer runtime DLLs copied next to the exes. One
+# configuration is built and tested (-Config; auto = Release on the Sunday run, from 03:00 Singapore time, Debug otherwise). The verdict is the NEW findings (Build/ci/sanitize_report.py
+# against sanitizer_baseline_windows[_release].txt). MSVC has no UBSan and no -fsanitize-recover: the first report ends that process (one asan.<pid> log per process).
 #
 # Writes the same results as Build/ci/ci_run.sh (status.txt, description.txt, summary.md, suite.xml, stages.tsv, changed.txt), so the job pages look the same.
 # No tree lock: the PC has one executor. The known-failure list is shared with Linux only where a test fails on both; Windows has none of its own yet.
@@ -10,7 +15,9 @@ param(
     [Parameter(Mandatory)][string]$Results,
     [ValidateSet('auto', 'debug', 'both', 'no')][string]$Tests = 'auto',     # which builds are tested: debug; both (Debug and Release); no (no tests at all: only the builds, no Python needed); auto = debug, and both on the Sunday run that starts at 11:00 or later (Singapore time, the 12:00 job)
     [switch]$Scratch,
-    [switch]$Force
+    [switch]$Force,
+[switch]$Sanitize,
+[ValidateSet('auto', 'Debug', 'Release')][string]$Config = 'auto'
 )
 $ErrorActionPreference = 'Continue'
 $GitBase = if ($env:GIT_BASE) { $env:GIT_BASE } else { 'https://github.com/LIONant-depot' }
@@ -18,6 +25,9 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Base = Split-Path -Parent $Tree
 New-Item -ItemType Directory -Force $Results, $Base | Out-Null
 $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
+$BDir = if ($Sanitize) { 'xLION.vs2022-asan' } else { 'xLION.vs2022' }          # the build folder under Build\
+$sgNow = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
+$SanCfg = if ($Config -ne 'auto') { $Config } elseif ($sgNow.DayOfWeek -eq 'Sunday' -and $sgNow.Hour -ge 3) { 'Release' } else { 'Debug' }
 $MSBuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $MSBuild) { $MSBuild = 'D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' }
 
@@ -41,6 +51,17 @@ function Finish {
     $py = if (Test-Path "$Base\venv\Scripts\python.exe") { "$Base\venv\Scripts\python.exe" } else { 'python' }
     & $py "$Here\summarize.py" --junit "$Results\suite.xml" --out $Results --tier $Tier --known "$Here\known_failures_windows.txt" `
         --changed "$Results\changed.txt" --stages $Stages --title "xLION windows $Tier run $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" *> $null
+    $buildFailed = [bool](Select-String -Path $Stages -Pattern "^(update repos|build)`t.*`tFAILED" -Quiet)
+    if ($Sanitize -and -not $buildFailed) {             # the verdict of a sanitizer run is its findings (a run whose update or build FAILED stays FAILED)
+        $bl = "$Here\sanitizer_baseline_windows$(if ($SanCfg -eq 'Release') { '_release' }).txt"
+        & $py "$Here\sanitize_report.py" --logs "$Results\sanitizer" --out $Results --baseline $bl
+        if (Test-Path "$Results\sanitizer_status.txt") {
+            Copy-Item "$Results\sanitizer_status.txt" "$Results\status.txt" -Force
+            (Get-Content "$Results\sanitizer.md")[2] | Set-Content "$Results\description.txt"
+            Copy-Item "$Results\sanitizer.md" "$Results\summary.md" -Force
+        }
+        if (Test-Path "$Results\sanitizer") { tar -czf "$Results\sanitizer_logs.tgz" -C $Results sanitizer 2>$null }
+    }
     Write-Host "`nstatus: $(if (Test-Path "$Results\status.txt") { Get-Content "$Results\status.txt" } else { 'unknown' })"
     if (Test-Path "$Results\summary.md") { Get-Content "$Results\summary.md" }
 }
@@ -68,7 +89,7 @@ $ok = Stage 'update repos' {
     if ($Scratch -and (Test-Path $Tree)) { Remove-Item -Recurse -Force $Tree }
     if (-not (Test-Path "$Tree\.git")) { git clone -q --depth 1 --branch main "$GitBase/xLION.git" $Tree; if ($LASTEXITCODE -ne 0) { return $false } }
     $dirs = @($Tree, "$Tree\example.lionprj") + @(Get-ChildItem "$Tree\example.lionprj\Cache\dependencies", "$Tree\example.lionprj\Cache\Plugins" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
-    $dirs += "$Tree\Build\xLION.vs2022\_deps\xcmake_tools"        # the CMake helpers: an old copy would not know the pinned commits of Build\third_party.txt
+    $dirs += "$Tree\Build\$BDir\_deps\xcmake_tools"        # the CMake helpers: an old copy would not know the pinned commits of Build\third_party.txt
     $dirs | ForEach-Object { Update-Repo $_ }
     # the example project is shared by every run: put it back exactly as GitHub has it (Cache/ is never touched)
     if (Test-Path "$Tree\example.lionprj\.git") { git -C "$Tree\example.lionprj" clean -fdq -- Descriptors Project.config Assets }
@@ -82,18 +103,20 @@ Write-Host "repos changed since the last run: $($changed.Count)"; $changed | Sel
 $ok = Stage 'build' {
     # configured = the marker that is written when a configure ENDED WELL. A failed configure still leaves xLION.sln and half the projects on the disk (the xLION target without its
     # ImGui sources: the link then fails with hundreds of unresolved ImGui:: symbols), which is not a configured tree.
-    $Marker = "$Tree\Build\xLION.vs2022\.configured_ok"
+    $Marker = "$Tree\Build\$BDir\.configured_ok"
     # the marker holds what the configure was made with: the pinned third party commits and the xcmake_tools commit. A change of either means the configure runs again (it fetches the pinned commits and patches them).
-    function Get-Stamp { "v2 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\xLION.vs2022\_deps\xcmake_tools" rev-parse HEAD 2>$null)" }
+    function Get-Stamp { "v2 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null)$(if ($Sanitize) { ' asan' })" }
     if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
-        Push-Location "$Tree\Build"; cmake ../ -G 'Visual Studio 17 2022' -A x64 -B xLION.vs2022 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
+        Push-Location "$Tree\Build"; $sanArgs = if ($Sanitize) { @('-DXLION_SANITIZE=ON', "-DCMAKE_PROJECT_xLION_INCLUDE=$($Here -replace '\\', '/')/msvc_asan.cmake") } else { @() }
+        cmake ../ -G 'Visual Studio 17 2022' -A x64 -B $BDir @sanArgs 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
         Set-Content $Marker (Get-Stamp)
     }
-    foreach ($cfg in 'Debug', 'Release') {                  # both are the standard builds: both are built, the tests run on Debug
+    $buildCfgs = if ($Sanitize) { @($SanCfg) } else { @('Debug', 'Release') }
+    foreach ($cfg in $buildCfgs) {                         # both are the standard builds: both are built, the tests run on Debug (the sanitizer run: its one configuration)
         $out = "$Results\build_${cfg}_console.log"
-        $p = Start-Process -FilePath $MSBuild -PassThru -NoNewWindow -RedirectStandardOutput $out -ArgumentList "`"$Tree\Build\xLION.vs2022\xLION.sln`" /t:xLION;xLION_Headless;xeditorcli /p:Configuration=$cfg /m /nologo /v:m /flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
+        $p = Start-Process -FilePath $MSBuild -PassThru -NoNewWindow -RedirectStandardOutput $out -ArgumentList "`"$Tree\Build\$BDir\xLION.sln`" /t:xLION;xLION_Headless;xeditorcli /p:Configuration=$cfg /m /nologo /v:m /flp:logfile=$Results\build_$cfg.log;verbosity=minimal"
         $null = $p.Handle                              # without this a process started with -PassThru can report an empty ExitCode (which is not 0: the build would be called failed)
         $n = 0
         while (-not $p.WaitForExit(60000)) {          # a line a minute, so the console shows it is alive: the projects finished so far and the last one (the full output is build_<config>.log)
@@ -104,6 +127,14 @@ $ok = Stage 'build' {
         Get-Content $out -Tail 8 | ForEach-Object { Write-Host $_ }
         Write-Host "build ${cfg}: MSBuild exit code [$($p.ExitCode)]"
         if ($p.ExitCode -ne 0) { Copy-Item "$Results\build_$cfg.log" "$Results\build.log" -Force -ErrorAction SilentlyContinue; return $false }
+        if ($Sanitize) {                                # the AddressSanitizer runtime next to the exes (Debug /MDd uses the _dbg_ one): from the bin folder of the cl.exe the configure chose
+            $cc = Get-ChildItem "$Tree\Build\$BDir\CMakeFiles\*\CMakeCXXCompiler.cmake" | Select-Object -First 1     # the Visual Studio generator does not cache the compiler path
+            $cl = (Select-String -Path $cc.FullName -Pattern 'set\(CMAKE_CXX_COMPILER "([^"]+)"').Matches[0].Groups[1].Value
+            $dlls = @(Get-ChildItem "$(Split-Path -Parent $cl)\clang_rt.asan*_dynamic-x86_64.dll")
+            if (-not $dlls) { Write-Host "no AddressSanitizer runtime next to $cl (the VS component 'C++ AddressSanitizer' is not installed)"; return $false }
+            $dlls | Copy-Item -Destination "$Tree\Build\$BDir\$cfg" -Force
+            Write-Host "copied $($dlls.Name -join ', ') to $Tree\Build\$BDir\$cfg"
+        }
     }
     $true
 }
@@ -141,9 +172,13 @@ $ok = Stage 'python (pytest)' {
 if (-not $ok) { Fail 'python failed' }
 
 # ---------------------------------------------------------------------------------------------------------------- resources
+if ($Sanitize) {        # one log per process (asan.<pid>); the path is quoted: AddressSanitizer splits its options at every colon, the one of D: included
+    New-Item -ItemType Directory -Force "$Results\sanitizer" | Out-Null; Remove-Item "$Results\sanitizer\*" -Force -ErrorAction SilentlyContinue
+    $env:ASAN_OPTIONS = "log_path='$Results\sanitizer\asan':symbolize=1:print_cmdline=1"
+}
 # let the resources compile first: an editor on the project until the compile queue is empty, so the tests do not fight over it (a cold cache is the long case, a warm one is seconds)
 $null = Stage 'resources compile' {
-    $bin = "$Tree\Build\xLION.vs2022\Debug"; $log = "$Results\compile_wait.log"
+    $bin = "$Tree\Build\$BDir\$(if ($Sanitize) { $SanCfg } else { 'Debug' })"; $log = "$Results\compile_wait.log"
     $env:XEDITOR_NO_ASSERT_DIALOG = '1'
     $ed = Start-Process -FilePath "$bin\xLION_Headless.exe" -ArgumentList "`"$Tree\example.lionprj`"" -PassThru -RedirectStandardOutput "$Results\compile_editor.log" -RedirectStandardError "$Results\compile_editor_err.log"
     $idle = 0; $polls = 0; $start = Get-Date
@@ -166,8 +201,9 @@ $null = Stage 'resources compile' {
 $sg = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
 $configs = @('Debug')                         # the daily smoke tests run on Debug only (asserts exist only there); Release is built, so a Release-only compile or link error is caught
 if ($Tests -eq 'both' -or ($Tests -eq 'auto' -and $sg.DayOfWeek -eq 'Sunday' -and $sg.Hour -ge 11)) { $configs += 'Release' }
+if ($Sanitize) { $configs = @($SanCfg) }      # the sanitizer run tests the configuration it built
 foreach ($cfg in $configs) {
-$Bin = "$Tree\Build\xLION.vs2022\$cfg"
+$Bin = "$Tree\Build\$BDir\$cfg"
 $Xml = if ($cfg -eq 'Debug') { "$Results\suite.xml" } else { "$Results\suite_release.xml" }     # the verdict and the summary follow Debug; Release is reported next to it
 $null = Stage "tests ($Tier, $cfg)" {
     $smoke = "$Tree\source\Editors\LevelEditor\smoke"

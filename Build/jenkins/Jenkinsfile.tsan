@@ -1,0 +1,56 @@
+// xLION: the THREADSANITIZER run on Linux, every Saturday at 12:00 Singapore time: the editor built with ThreadSanitizer (Build/xLION.linux-tsan, its own tree tree-tsan; TSan
+// cannot be mixed with ASan) and the files of the fast tier run on it, for xscheduler and the lockless containers. The verdict is the NEW data races / lock-order inversions against
+// Build/ci/sanitizer_baseline_tsan.txt (Build/ci/sanitize_report.py), shown as SAN-GREEN / SAN-KNOWN / SAN-NEW; suppressions (each with its reason): Build/ci/tsan_suppressions.txt.
+// The machine needs vm.mmap_rnd_bits=28 on kernel 6.8+ (/etc/sysctl.d/99-tsan.conf on team37), or every TSan process dies at start.
+//
+// Create it in Jenkins as: New Item > Pipeline "xlion-tsan" > Pipeline script from SCM > Git > https://github.com/LIONant-depot/xLION.git, branch */main, Script Path "Build/jenkins/Jenkinsfile.tsan".
+// It runs on 'heavy && san2' = team37 only: the TSan sysctl (vm.mmap_rnd_bits=28) is set there. Once team38 has it too, the label can be just 'heavy'.
+pipeline {
+    agent { label 'heavy && san2' }   // team37 (has the TSan sysctl); an agent that runs as a low-privilege user (not the Jenkins server's own node): see documentation/Linux/jenkins.md
+
+    triggers { cron('TZ=Asia/Singapore\n0 12 * * 6') }
+
+    options {
+        timestamps()
+        timeout(time: 16, unit: 'HOURS')        // the first run builds everything with TSan, one compile at a time
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '200', artifactNumToKeepStr: '60'))
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE', defaultValue: false, description: 'Run even when no repo has a new commit')
+        booleanParam(name: 'SCRATCH', defaultValue: false, description: 'Delete the checkout and the build and start from nothing')
+    }
+
+    stages {
+        stage('Update, build, test') {
+            steps {
+                script {
+                    def flags = (params.SCRATCH ? '--scratch ' : '') + (params.FORCE ? '--force ' : '')
+                    timeout(activity: true, time: 20, unit: 'MINUTES') {   // the scripts print a heartbeat every minute: 20 minutes of nothing means the script itself is stuck
+                    sh """#!/bin/bash
+mkdir -p "\$WORKSPACE/results"
+bash Build/ci/ci_run.sh --tier fast --tsan --tree "\${CI_TREE_TSAN:-\$HOME/xlion-ci/tree-tsan}" --results "\$WORKSPACE/results" ${flags}
+"""
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit testResults: 'results/suite.xml', allowEmptyResults: true, skipMarkingBuildUnstable: true
+            archiveArtifacts artifacts: 'results/**', allowEmptyArchive: true
+            script {
+                def status = fileExists('results/status.txt') ? readFile('results/status.txt').trim() : 'FAILED'
+                def desc   = fileExists('results/description.txt') ? readFile('results/description.txt').trim().replace('\n', ' | ') : 'no result: see the console log'
+                currentBuild.displayName = "#${env.BUILD_NUMBER} ${status}"
+                currentBuild.description = desc
+                if (status == 'SAN-NEW') { currentBuild.result = 'UNSTABLE' }
+                if (status == 'FAILED') { currentBuild.result = 'FAILURE' }
+                if (fileExists('results/summary.md')) { echo readFile('results/summary.md') }
+            }
+        }
+    }
+}

@@ -1,0 +1,3 @@
+# ThreadSanitizer suppressions (TSAN_OPTIONS suppressions=, set by Build/ci/ci_run.sh --tsan). Only for reports that are NOT ours to fix (third party, the system,
+# the driver) or that are proven benign: every line has a comment with the reason. A real race of ours goes to Build/ci/sanitizer_baseline_tsan.txt, not here.
+# Format: <kind>:<pattern> with kind = race, race_top, mutex, deadlock, signal, thread, called_from_lib (https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions)

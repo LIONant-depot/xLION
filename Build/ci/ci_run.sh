@@ -13,22 +13,31 @@
 #   --force      (with the fast job) run even when nothing changed
 #   --sanitize   the sanitizer build (AddressSanitizer + UndefinedBehaviorSanitizer, Build/xLION.linux-san) and its tests: the verdict is the NEW sanitizer findings
 #                (Build/ci/sanitize_report.py), not the tests, which are slower and are only the way to exercise the code
+#   --tsan       the ThreadSanitizer build instead (Build/xLION.linux-tsan; it cannot be mixed with ASan): TSAN_OPTIONS with Build/ci/tsan_suppressions.txt, baseline
+#                Build/ci/sanitizer_baseline_tsan.txt by default
+#   --config     Debug (default) or Release: its own build folder (xLION.linux[-san|-tsan]-release)
+#   --baseline   the sanitizer baseline of this job (default Build/ci/sanitizer_baseline.txt, or sanitizer_baseline_tsan.txt with --tsan); the Release sanitizer job passes
+#                Build/ci/sanitizer_baseline_release.txt
+#   A sanitizer build compiles with ONE job (-j1): an instrumented compile needs about twice the memory, and the CI machines have 2 cores and 3.8 GB
 #
 # The tests run against the headless editor with a private socket, so it never meets another editor on the machine. Exit status is 0 unless the run itself could
 # not be made (build failure, no result); failing tests are reported in status.txt (GREEN, KNOWN failures only, NEW failures), not by the exit status.
 set -uo pipefail
 
-TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0; SAN=0; CONFIG=Debug
+TIER=full; TREE=; RESULTS=; SCRATCH=0; DETECT=0; FORCE=0; SAN=0; TSAN=0; BASELINE=; CONFIG=Debug
 while [ $# -gt 0 ]; do
   case "$1" in
     --tier) TIER="$2"; shift 2 ;; --tree) TREE="$2"; shift 2 ;; --results) RESULTS="$2"; shift 2 ;;
-    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --sanitize) SAN=1; shift ;; --force) FORCE=1; shift ;; --config) CONFIG="$2"; shift 2 ;;
+    --scratch) SCRATCH=1; shift ;; --detect-only) DETECT=1; shift ;; --sanitize) SAN=1; shift ;; --tsan) SAN=1; TSAN=1; shift ;; --baseline) BASELINE="$2"; shift 2 ;; --force) FORCE=1; shift ;; --config) CONFIG="$2"; shift 2 ;;
     *) echo "unknown argument $1"; exit 2 ;;
   esac
 done
-[ -n "$TREE" ] && [ -n "$RESULTS" ] || { echo "usage: ci_run.sh --tier fast|full --tree DIR --results DIR [--config Debug|Release] [--scratch] [--detect-only] [--force]"; exit 2; }
+[ -n "$TREE" ] && [ -n "$RESULTS" ] || { echo "usage: ci_run.sh --tier fast|full --tree DIR --results DIR [--config Debug|Release] [--sanitize|--tsan] [--baseline FILE] [--scratch] [--detect-only] [--force]"; exit 2; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BSUB="xLION.linux"; [ "$SAN" = 1 ] && BSUB="xLION.linux-san"; [ "$CONFIG" = Release ] && BSUB="$BSUB-release"; export BUILD_TYPE="$CONFIG"      # --config Debug|Release: its own build folder
+[ -n "$BASELINE" ] && BASELINE="$(cd "$(dirname "$BASELINE")" && pwd)/$(basename "$BASELINE")"      # absolute: the run changes directory
+[ -n "$BASELINE" ] || BASELINE="$HERE/sanitizer_baseline$([ "$TSAN" = 1 ] && echo _tsan).txt"
+JOBS=$([ "$SAN" = 1 ] && echo 1 || nproc)        # a sanitizer build: one compile at a time (see the usage above), or the machine swaps itself to a stall
+BSUB="xLION.linux"; [ "$SAN" = 1 ] && BSUB="xLION.linux-san"; [ "$TSAN" = 1 ] && BSUB="xLION.linux-tsan"; [ "$CONFIG" = Release ] && BSUB="$BSUB-release"; export BUILD_TYPE="$CONFIG"      # --config Debug|Release: its own build folder
 # ccache (see Build/CreateProject.sh): one cache next to the trees, capped; the build from scratch of the FIRST week of a month runs with the cache off, so a cold, honest build is
 # made every month (the cache cannot hide a build that no longer works from nothing)
 export CCACHE_DIR="${CCACHE_DIR:-$(dirname "$TREE")/ccache}" CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-4G}"
@@ -68,8 +77,8 @@ finish() {                                      # always: the summary, whatever 
   python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux$([ "$CONFIG" = Release ] && echo _release).txt" \
     --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER $CONFIG run $(date '+%F %T %z')" > /dev/null 2>&1 || true
   clean_project 2>/dev/null || true
-  if [ "$SAN" = 1 ]; then          # the verdict of a sanitizer run is its findings
-    python3 "$HERE/sanitize_report.py" --logs "$RESULTS/sanitizer" --out "$RESULTS" --baseline "$HERE/sanitizer_baseline.txt" || true
+  if [ "$SAN" = 1 ] && ! grep -q -E "^(update repos|build)"$'\t'".*"$'\t'"(FAILED|STALLED)" "$STAGES" 2>/dev/null; then    # the verdict of a sanitizer run is its findings (a run whose update or build failed stays FAILED)
+    python3 "$HERE/sanitize_report.py" --logs "$RESULTS/sanitizer" --out "$RESULTS" --baseline "$BASELINE" || true
     [ -f "$RESULTS/sanitizer_status.txt" ] && { cp "$RESULTS/sanitizer_status.txt" "$RESULTS/status.txt"; head -3 "$RESULTS/sanitizer.md" | tail -1 > "$RESULTS/description.txt"; cp "$RESULTS/sanitizer.md" "$RESULTS/summary.md"; }
     tar -czf "$RESULTS/sanitizer_logs.tgz" -C "$RESULTS" sanitizer 2>/dev/null || true
   fi
@@ -118,7 +127,7 @@ update_tree() {
   else
     git -C "$TREE" fetch -q --depth 1 origin main && git -C "$TREE" reset -q --hard origin/main || return 1
   fi
-  ( cd "$TREE" && bash Build/CreateProject.sh --no-packages --update $([ "$SAN" = 1 ] && echo --sanitize) ) || return 1
+  ( cd "$TREE" && bash Build/CreateProject.sh --no-packages --update $([ "$TSAN" = 1 ] && echo --tsan || { [ "$SAN" = 1 ] && echo --sanitize; }) ) || return 1
   clean_project
 }
 if ! stage_run "update repos" update_tree; then echo "FAILED" > "$RESULTS/status.txt"; exit 1; fi
@@ -138,7 +147,7 @@ echo "repos changed since the last run: $(wc -l < "$RESULTS/changed.txt")"; head
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 build_all() {
   # the heartbeat (watch.sh) shows the last line of build.log every minute; the full output is build.log
-  cmake --build "$TREE/Build/$BSUB" --target xlion_compilers xLION_Headless xeditorcli -- -j"$(nproc)" > "$RESULTS/build.log" 2>&1
+  cmake --build "$TREE/Build/$BSUB" --target xlion_compilers xLION_Headless xeditorcli -- -j"$JOBS" > "$RESULTS/build.log" 2>&1
   local rc=$?; tail -5 "$RESULTS/build.log"; return $rc
 }
 export WATCH_TAIL="$RESULTS/build.log" WATCH_FILES="$RESULTS/build.log"
@@ -164,10 +173,18 @@ stage_run "python (pytest)" make_venv || { echo "FAILED" > "$RESULTS/status.txt"
 PROJECT="$TREE/example.lionprj"
 if [ "$SAN" = 1 ]; then
   mkdir -p "$RESULTS/sanitizer"; rm -f "$RESULTS/sanitizer"/*
+  # symbolize=0: no llvm-symbolizer inside the editor (about 1 GB each, and the editor waits for it: with one finding repeated hundreds of times the tests timed out on 3.8 GB);
+  # sanitize_report.py symbolizes the logs once, after the run.
   # one log file per process; both sanitizers report and go on (the build has -fsanitize-recover=address), so one run lists every finding; no leak report: an editor that is
   # stopped is not asked to free everything
-  export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:symbolize=1:handle_segv=0:log_path=$RESULTS/sanitizer/asan"
-  export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=0:symbolize=1:log_path=$RESULTS/sanitizer/ubsan"
+  if [ "$TSAN" = 1 ]; then
+    # ThreadSanitizer: report and go on, one log per process; the suppressions (with the reason of each) are Build/ci/tsan_suppressions.txt. Kernel 6.8 and newer need
+    # vm.mmap_rnd_bits=28 on the machine (/etc/sysctl.d/99-tsan.conf), or every TSan process dies at start with "unexpected memory mapping"
+    export TSAN_OPTIONS="halt_on_error=0:second_deadlock_stack=1:report_signal_unsafe=0:history_size=4:symbolize=0:suppressions=$HERE/tsan_suppressions.txt:log_path=$RESULTS/sanitizer/tsan"
+  else
+    export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:symbolize=0:handle_segv=0:log_path=$RESULTS/sanitizer/asan"
+    export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=0:symbolize=0:log_path=$RESULTS/sanitizer/ubsan"
+  fi
 fi
 BIN="$TREE/Build/$BSUB"
 PIPE="$BASE/pipe-$TIER.sock"
@@ -180,8 +197,11 @@ wait_compiles() {
   local i
   for i in $(seq 1 180); do [ -S "$PIPE" ] && break; kill -0 $ed 2>/dev/null || { echo "the editor exited at startup" | tee -a "$log"; return 1; }; sleep 1; done
   local idle=0 polls=0 start; start=$(date +%s)
-  while [ $(( $(date +%s) - start )) -lt 2700 ]; do          # at most 45 minutes
-    local s; s=$(timeout 60 "$BIN/xeditorcli" CompileStatus 2>&1 | head -1)
+  # a sanitizer editor is several times slower: at most 90 minutes, and 180 s for one status answer (xlion-sanitize #1 on team39: every 60 s poll timed out, so the
+  # queue was never seen idle and the 45 minutes ran out)
+  local cap=2700 ask=60; [ "$SAN" = 1 ] && cap=5400 ask=180
+  while [ $(( $(date +%s) - start )) -lt $cap ]; do          # at most 45 minutes (90 sanitized)
+    local s; s=$(timeout $ask "$BIN/xeditorcli" CompileStatus 2>&1 | head -1)
     polls=$((polls + 1)); echo "$(date +%T) $s" | cut -c1-200 >> "$log"
     if echo "$s" | grep -q "^Compiling=0 Waiting=0"; then idle=$((idle + 1)); else idle=0; fi
     [ $idle -ge 3 ] && break
@@ -206,7 +226,7 @@ run_tests() {
     while read -r line; do line="${line%%#*}"; line="$(echo "$line" | xargs)"; [ -n "$line" ] && files+=("$line"); done < "$HERE/fast_files.txt"
     # tests left out of the fast tier for now (a failure nobody has explained yet): one node id per line, '#' comments
     while read -r line; do line="${line%%#*}"; line="$(echo "$line" | xargs)"; [ -n "$line" ] && desel+=(--deselect "$line"); done < "$HERE/fast_deselect.txt"
-    cap=1500
+    cap=1500; [ "$SAN" = 1 ] && cap=5400      # the whole tier, not one test (each test keeps --timeout=300): sanitized it takes several times longer and was cut at 1500 s
   else
     files=(.)           # the whole folder, named: pytest with no argument does not find this folder's pytest.ini and conftest.py ("unrecognized arguments: --exe")
     cap=7200

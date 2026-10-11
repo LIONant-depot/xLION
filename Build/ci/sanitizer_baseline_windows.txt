@@ -1,0 +1,4 @@
+# The Windows MSVC AddressSanitizer Debug build (Build/jenkins/Jenkinsfile.windows_sanitize). The sanitizer findings that are known and not fixed yet: one fingerprint per line, as in the sanitizer_all.txt a run writes (python Build/ci/sanitize_report.py ... --update-baseline
+# rewrites this file from a run). A run is only worth reading when it has a NEW finding. Delete a line when its finding is fixed (the report lists the ones that were not seen).
+b765ef8c0f82  asan:heap-buffer-overflow  READ of size 4194308 at ADDR thread T0  at xgpu::vulkan::texture::Initialize xgpu_vulkan_texture.cpp
+9c116d0992e7  asan:new-delete-type-mismatch  object passed to delete has wrong type:  at xlioncore::game::DestroyWorld xlioncore_game.h
