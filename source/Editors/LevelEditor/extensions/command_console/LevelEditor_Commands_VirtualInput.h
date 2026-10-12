@@ -7,8 +7,10 @@
 // mouse. The input is read by the editor's next frame: wait for it with InputFrames before looking at its effect.
 //
 //      VirtualInput -On true                 the machine's mouse and keys are ignored from now on; -On false gives them back
-//      MouseMove -X 640 -Y 360               the virtual mouse, in pixels of the main window
-//      MouseButton -Button left -Down true   left, right or middle; -Down false releases it
+//      MouseMove -X 640 -Y 360               the virtual mouse, in pixels of the main window; -Screen true: X/Y are screen pixels (what ImGui and the
+//                                            editor's queries report, also over a window ImGui pulled out of the main one)
+//      MouseButton -Button left -Down true   left, right or middle; -Down false releases it; -Clicks 2 with -Down true: pressed, released and pressed
+//                                            again a frame apart (a double click, too quick for one command per change)
 //      MouseWheel -Delta 1                   a turn of the wheel (positive: away from you)
 //      Key -Key F2 -Down true                a key by name (the xgpu key without KEY_: A, RETURN, LCONTROL, F2, LEFT) or -Code N; -Down false releases it
 //      Text -Text "Soccer"                   typed, one character per frame
@@ -71,24 +73,42 @@ namespace level_editor::commands
     struct mouse_move_cmd : virtual_input_command
     {
         mouse_move_cmd(xundo::system& System, void*) noexcept : virtual_input_command(System, "MouseMove", nullptr) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Moves the virtual mouse, in pixels of the main window. Usage: MouseMove -X 640 -Y 360"; }
-        void RegisterArguments() noexcept override { m_hX = m_Parser.addOption("X", "Pixels from the left of the window", true, 1); m_hY = m_Parser.addOption("Y", "Pixels from the top of the window", true, 1); }
+        const char* getCommandHelp() const noexcept override { return "Moves the virtual mouse, in pixels of the main window (or of the screen with -Screen true). Usage: MouseMove -X 640 -Y 360 [-Screen true]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hX      = m_Parser.addOption("X", "Pixels from the left of the window", true, 1);
+            m_hY      = m_Parser.addOption("Y", "Pixels from the top of the window", true, 1);
+            m_hScreen = m_Parser.addOption("Screen", "true: X and Y are screen pixels (ImGui's coordinates), not the main window's", false, 1);
+        }
         std::string Query() noexcept override
         {
             if (!xgpu::virtual_input::Active()) return kNotActive();
-            std::string X, Y; float Fx = 0, Fy = 0;
+            std::string X, Y, Screen; float Fx = 0, Fy = 0; bool bScreen = false;
             if (!Arg(m_hX, X) || !Arg(m_hY, Y) || !ToFloat(X, Fx) || !ToFloat(Y, Fy)) return "MouseMove: -X and -Y are required (numbers)";
+            if (Arg(m_hScreen, Screen) && !ToBool(Screen, bScreen)) return std::format("MouseMove: -Screen '{}' is not true or false", Screen);
+            if (bScreen)
+            {
+                // The main viewport's position is the main window's client origin on the screen: the virtual mouse is in its pixels
+                const ImVec2 Origin = ImGui::GetMainViewport()->Pos;
+                Fx -= Origin.x;
+                Fy -= Origin.y;
+            }
             xgpu::virtual_input::MoveTo(Fx, Fy);
             return std::format("MouseMove: {:.0f},{:.0f}", Fx, Fy);
         }
-        xcmdline::parser::handle m_hX, m_hY;
+        xcmdline::parser::handle m_hX, m_hY, m_hScreen;
     };
 
     struct mouse_button_cmd : virtual_input_command
     {
         mouse_button_cmd(xundo::system& System, void*) noexcept : virtual_input_command(System, "MouseButton", nullptr) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "Presses or releases a button of the virtual mouse. Usage: MouseButton -Button left|right|middle -Down true|false"; }
-        void RegisterArguments() noexcept override { m_hButton = m_Parser.addOption("Button", "left, right or middle", true, 1); m_hDown = m_Parser.addOption("Down", "true: press, false: release", true, 1); }
+        const char* getCommandHelp() const noexcept override { return "Presses or releases a button of the virtual mouse. Usage: MouseButton -Button left|right|middle -Down true|false [-Clicks 2]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hButton = m_Parser.addOption("Button", "left, right or middle", true, 1);
+            m_hDown   = m_Parser.addOption("Down", "true: press, false: release", true, 1);
+            m_hClicks = m_Parser.addOption("Clicks", "with -Down true: that many presses, one frame apart (2: a double click); the last stays down", false, 1);
+        }
         std::string Query() noexcept override
         {
             if (!xgpu::virtual_input::Active()) return kNotActive();
@@ -99,10 +119,20 @@ namespace level_editor::commands
             else if (Button == "right") Index = static_cast<int>(xgpu::mouse::digital::BTN_RIGHT);
             else if (Button == "middle") Index = static_cast<int>(xgpu::mouse::digital::BTN_MIDDLE);
             if (Index < 0) return std::format("MouseButton: '{}' is not left, right or middle", Button);
-            xgpu::virtual_input::SetButton(Index, bDown);
-            return std::format("MouseButton: {} {}", Button, bDown ? "down" : "up");
+
+            std::string Clicks; float nClicks = 1;
+            if (Arg(m_hClicks, Clicks) && (!ToFloat(Clicks, nClicks) || nClicks < 1 || !bDown)) return "MouseButton: -Clicks is a number from 1, with -Down true";
+            if (nClicks <= 1) { xgpu::virtual_input::SetButton(Index, bDown); return std::format("MouseButton: {} {}", Button, bDown ? "down" : "up"); }
+
+            // Queued, one change per frame: down, up, down, ... (the frames come from the editor, not from command round trips)
+            for (int i = 0; i < static_cast<int>(nClicks); ++i)
+            {
+                if (i) xgpu::virtual_input::QueueButton(Index, false);
+                xgpu::virtual_input::QueueButton(Index, true);
+            }
+            return std::format("MouseButton: {} x{} down", Button, static_cast<int>(nClicks));
         }
-        xcmdline::parser::handle m_hButton, m_hDown;
+        xcmdline::parser::handle m_hButton, m_hDown, m_hClicks;
     };
 
     struct mouse_wheel_cmd : virtual_input_command

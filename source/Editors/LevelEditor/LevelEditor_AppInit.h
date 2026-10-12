@@ -115,7 +115,22 @@ namespace level_editor
                 return xgpu::getErrorInt(Err);
             }
             xeditor::diagnostics::Log("startup: creating main window");
-            if (auto Err = Device.Create(MainWindow, {}); Err)
+            // XEDITOR_VIRTUAL_INPUT (what the smoke tests set): the editor is driven by commands only - virtual input is on from the first
+            // frame (the machine's mouse and keys are ignored) and the window never takes the focus, so it does not fight the person at
+            // the computer. VirtualInput -On false still hands the real input back.
+            const bool bVirtualInput = [&]() noexcept
+            {
+#if defined(_MSC_VER)
+                char* p = nullptr; std::size_t n = 0;
+                const bool b = _dupenv_s(&p, &n, "XEDITOR_VIRTUAL_INPUT") == 0 && p != nullptr;
+                std::free(p);
+                return b;
+#else
+                return std::getenv("XEDITOR_VIRTUAL_INPUT") != nullptr;
+#endif
+            }();
+            if (bVirtualInput) xgpu::virtual_input::SetActive(true);
+            if (auto Err = Device.Create(MainWindow, { .m_bFocus = !bVirtualInput }); Err)
             {
                 xeditor::diagnostics::Log("startup: main window creation failed");
                 xeditor::diagnostics::RemoveCrtReportHook();

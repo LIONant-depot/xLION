@@ -40,13 +40,22 @@ def virtual(editor):
     assert editor.cmd("VirtualInput -On true") == "VirtualInput: on"
     wait_frames(editor)
     yield editor
-    editor.cmd("VirtualInput -On false")
+    editor.cmd("VirtualInput -On false")       # off and back on: drops this test's held buttons/keys
+    editor.cmd("VirtualInput -On true")         # the harness keeps the editor on virtual input (XEDITOR_VIRTUAL_INPUT): never hand it the real mouse
+
+
+def test_the_editor_starts_on_virtual_input(editor):
+    """The harness starts the editor with XEDITOR_VIRTUAL_INPUT: the machine's mouse and keys never reach a test editor."""
+    assert editor.cmd("VirtualInput") == "VirtualInput: on"
 
 
 def test_the_commands_say_so_when_virtual_input_is_off(editor):
-    assert editor.cmd("VirtualInput -On false") == "VirtualInput: off"
-    assert "VirtualInput -On true" in editor.cmd("MouseMove -X 10 -Y 10"), "an input command explains how to turn it on"
-    assert "not true or false" in editor.cmd("VirtualInput -On maybe")
+    try:
+        assert editor.cmd("VirtualInput -On false") == "VirtualInput: off"
+        assert "VirtualInput -On true" in editor.cmd("MouseMove -X 10 -Y 10"), "an input command explains how to turn it on"
+        assert "not true or false" in editor.cmd("VirtualInput -On maybe")
+    finally:
+        editor.cmd("VirtualInput -On true")
 
 
 def test_the_virtual_mouse_moves_the_mouse_imgui_sees(virtual):
@@ -102,5 +111,13 @@ def test_turning_it_off_gives_the_machine_its_input_back_and_clears_what_was_hel
     assert editor.cmd("VirtualInput -On false") == "VirtualInput: off"
     editor.cmd("VirtualInput -On true")
     s = editor.cmd("InputState")
-    editor.cmd("VirtualInput -On false")
     assert "buttons=---" in s, "a fresh start: nothing stays pressed from before"
+
+
+def test_clicks_queues_a_double_click_the_editor_plays_a_frame_apart(virtual):
+    """-Clicks 2: press, release, press one frame apart (command round trips are too slow for ImGui's double-click time); the last press stays down."""
+    assert virtual.cmd("MouseButton -Button left -Down true -Clicks 2") == "MouseButton: left x2 down"
+    wait_frames(virtual, 5)
+    assert "buttons=L" in virtual.cmd("InputState")
+    virtual.cmd("MouseButton -Button left -Down false")
+    assert "with -Down true" in virtual.cmd("MouseButton -Button left -Down false -Clicks 2")

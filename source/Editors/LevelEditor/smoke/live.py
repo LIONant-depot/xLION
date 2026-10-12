@@ -66,7 +66,7 @@ def start(window: bool) -> int:
     shutil.copy2(original, live)
     LOG_FILE.parent.mkdir(exist_ok=True)
     proc = subprocess.Popen([str(live)], cwd=str(live.parent), stdout=open(LOG_FILE, "wb"), stderr=subprocess.STDOUT
-                            , env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1"}
+                            , env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XEDITOR_VIRTUAL_INPUT": "1"}   # never takes the focus or the real mouse/keys
                             , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
     PID_FILE.write_text(str(proc.pid))
     for _ in range(120):

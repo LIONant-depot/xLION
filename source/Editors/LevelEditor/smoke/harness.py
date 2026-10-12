@@ -188,7 +188,7 @@ class Editor:
             # Linux: run the editor under gdb so a crash leaves its backtrace in the editor log (there is no crash handler writing LevelEditor.trace.log)
             argv = ["gdb", "-q", "-batch", "-ex", "handle SIGPIPE nostop noprint", "-ex", "run", "-ex", "bt 30", "--args", *argv]
         self.proc = subprocess.Popen(argv, cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
-                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
+                                     env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XEDITOR_VIRTUAL_INPUT": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
             while time.monotonic() < deadline:
@@ -375,17 +375,21 @@ class Editor:
             import pytest
             pytest.skip("posts Win32 window messages to the editor's window (Windows only)")
 
-    def post_key(self, vk: int, hold: float = 0.15, sys: bool = False, while_down=None):
-        """A real key press for the editor's window: WM_KEYDOWN / WM_KEYUP posted to it, so it goes through the Win32 key table, xGPU's
-        keyboard and ImGui like a keystroke would (PressKeys skips all of that). Needs no focus. vk is a Win32 virtual-key code (VK_F1 = 0x70).
-        sys=True posts the SYS variants, which is how Windows delivers Alt (VK_MENU = 0x12) and every key pressed while Alt is held.
-        while_down, if given, is called once the key has been down for the hold time (before it is released); its result is returned."""
-        self._need_win32_window()
+    # The input helpers below drive the editor with its virtual mouse and keyboard (XEDITOR_VIRTUAL_INPUT, the VirtualInput commands): they
+    # never move the person's pointer, press their keys or take the focus. Points are SCREEN pixels, what ImGui and the editor's queries
+    # report; MouseMove -Screen true converts them in the editor (the main window's origin), so nothing here looks at the machine's windows.
+
+    # Win32 virtual-key code -> the xgpu key name the Key command takes (the keys the tests press; add more as tests need them)
+    _VK_TO_KEY = {0x08: "BACK", 0x09: "TAB", 0x0D: "RETURN", 0x10: "LSHIFT", 0x11: "LCONTROL", 0x12: "LMENU", 0x1B: "ESCAPE", 0x20: "SPACE",
+                  0x25: "LEFT", 0x26: "UP", 0x27: "RIGHT", 0x28: "DOWN", 0x2E: "DELETE",
+                  **{0x70 + i: f"F{i + 1}" for i in range(12)}, **{c: chr(c) for c in range(0x41, 0x5B)}}
+
+    def _windows(self) -> list[int]:
+        """The editor's visible, titled windows (the main one and any ImGui pulled out of it: they all have the same title)."""
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
-        pid = self.proc.pid
-        found: list[int] = []
+        pid, found = self.proc.pid, []
 
         @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
         def each(hwnd, _):
@@ -397,122 +401,122 @@ class Editor:
 
         user32.EnumWindows(each, 0)
         if not found:
-            raise AssertionError("post_key: the editor has no visible window")
-        scan = user32.MapVirtualKeyW(vk, 0)
-        for hwnd in found:
-            user32.PostMessageW(hwnd, 0x0104 if sys else 0x0100, vk, 1 | (scan << 16))      # WM_KEYDOWN / WM_SYSKEYDOWN
-        time.sleep(hold)                                                                    # a few frames, so ImGui sees it down
-        result = while_down() if while_down else None
-        for hwnd in found:
-            user32.PostMessageW(hwnd, 0x0105 if sys else 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31)) # WM_KEYUP / WM_SYSKEYUP
-        time.sleep(0.1)
+            raise AssertionError("the editor has no visible window")
+        return found
+
+    def _move(self, x: float, y: float) -> None:
+        """The virtual mouse to the SCREEN point (x, y): the editor converts it (its main window's origin), also over a window ImGui pulled out."""
+        self._virtual(f"MouseMove -X {int(x)} -Y {int(y)} -Screen true")
+
+    def _frames(self, n: int = 3, timeout: float = 10.0) -> None:
+        """Waits until the editor has drawn n more frames (so ImGui has seen what the virtual input did)."""
+        def frames() -> int:
+            reply = self.cmd("InputFrames")
+            digits = "".join(c if c.isdigit() else " " for c in reply).split()
+            return int(digits[0]) if digits else 0
+        start, deadline = frames(), time.monotonic() + timeout
+        while frames() < start + n:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"the editor drew no {n} frames in {timeout}s")
+            time.sleep(0.02)
+
+    def _virtual(self, line: str) -> None:
+        reply = self.cmd(line)
+        if "virtual input is off" in reply:
+            raise AssertionError(f"{line}: {reply} (the harness starts the editor with XEDITOR_VIRTUAL_INPUT; a test turned it off?)")
+
+    def _key(self, name: str, down: bool) -> None:
+        self._virtual(f"Key -Key {name} -Down {'true' if down else 'false'}")
+
+    def post_key(self, vk: int, hold: float = 0.15, sys: bool = False, while_down=None, win32: bool = False):
+        """A key press: down for the hold time, then up. vk is a Win32 virtual-key code (VK_F1 = 0x70). while_down, if given, is called once the
+        key has been down for the hold time (before it is released); its result is returned.
+        Normally a virtual key (the Key command). win32=True instead posts WM_KEYDOWN / WM_KEYUP to the editor's window - sys=True the SYS
+        variants, which is how Windows delivers Alt and every key pressed while Alt is held - for the tests of that path itself
+        (test_keyboard_modifiers); messages posted to the editor's window touch nothing of the person's, but the editor only reads them while
+        virtual input is off, so it is off for the press."""
+        if not win32:
+            name = self._VK_TO_KEY.get(vk)
+            if name is None:
+                raise AssertionError(f"post_key: no xgpu key name for VK 0x{vk:02X} (add it to Editor._VK_TO_KEY)")
+            self._key(name, True)
+            self._frames()
+            time.sleep(hold)
+            result = while_down() if while_down else None
+            self._key(name, False)
+            self._frames()
+            return result
+
+        self._need_win32_window()
+        import ctypes
+        user32 = ctypes.windll.user32
+        windows = self._windows()
+        self.cmd("VirtualInput -On false")
+        try:
+            scan = user32.MapVirtualKeyW(vk, 0)
+            for hwnd in windows:
+                user32.PostMessageW(hwnd, 0x0104 if sys else 0x0100, vk, 1 | (scan << 16))      # WM_KEYDOWN / WM_SYSKEYDOWN
+            time.sleep(hold)                                                                     # a few frames, so ImGui sees it down
+            result = while_down() if while_down else None
+            for hwnd in windows:
+                user32.PostMessageW(hwnd, 0x0105 if sys else 0x0101, vk, 1 | (scan << 16) | (1 << 30) | (1 << 31)) # WM_KEYUP / WM_SYSKEYUP
+            time.sleep(0.1)
+        finally:
+            self.cmd("VirtualInput -On true")
         return result
 
     def double_click(self, x: float, y: float) -> None:
-        """Two quick left clicks at the SCREEN point (x, y): what ImGui calls a double click (the pointer is placed once, the presses come 60 ms apart)."""
+        """Two quick left clicks at the SCREEN point (x, y): what ImGui calls a double click."""
         self.click(x, y, double=True)
 
     def wheel(self, x: float, y: float, notches: int, ctrl: bool = False) -> None:
-        """The real mouse wheel turned by `notches` (positive = away from the person, the way that scrolls up) with the pointer at the SCREEN point (x, y), Ctrl held if asked.
-        Like click: the window is brought forward and the real pointer goes there, then back."""
+        """The (virtual) mouse wheel turned by `notches` (positive = away from the person, the way that scrolls up) with the pointer at the SCREEN
+        point (x, y), Ctrl held if asked."""
         self._need_win32_window()
-        import ctypes
-        from ctypes import wintypes
-        user32 = ctypes.windll.user32
+        self._move(x, y)
+        self._frames()
+        if ctrl:
+            self._key("LCONTROL", True)
+            self._frames()
         try:
-            user32.SetProcessDPIAware()
-        except Exception:
-            pass
-        pid = self.proc.pid
-        found: list[int] = []
-
-        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        def each(hwnd, _):
-            owner = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
-            if owner.value == pid and user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
-                found.append(hwnd)
-            return True
-
-        user32.EnumWindows(each, 0)
-        if not found:
-            raise AssertionError("wheel: the editor has no visible window")
-        if user32.GetForegroundWindow() != found[0]:
-            user32.SetForegroundWindow(found[0])
-            time.sleep(0.6)
-        old = wintypes.POINT()
-        user32.GetCursorPos(ctypes.byref(old))
-        try:
-            user32.SetCursorPos(int(x), int(y))
-            time.sleep(0.4)
-            if ctrl: user32.keybd_event(0x11, 0, 0, 0)                  # VK_CONTROL down
-            time.sleep(0.1)
             for _ in range(abs(notches)):
-                user32.mouse_event(0x0800, 0, 0, (120 if notches > 0 else -120) & 0xFFFFFFFF, 0)   # MOUSEEVENTF_WHEEL, one notch
-                time.sleep(0.15)
-            if ctrl: user32.keybd_event(0x11, 0, 2, 0)                  # VK_CONTROL up (KEYEVENTF_KEYUP)
-            time.sleep(0.3)
+                self._virtual(f"MouseWheel -Delta {1 if notches > 0 else -1}")
+                self._frames()
         finally:
-            user32.SetCursorPos(old.x, old.y)
+            if ctrl:
+                self._key("LCONTROL", False)
+                self._frames()
 
     def drag(self, x: float, y: float, to_x: float, to_y: float) -> None:
-        """Press at the screen point (x, y), move to (to_x, to_y) in steps, release: a drag with the real pointer (see click)."""
+        """Press at the SCREEN point (x, y), move to (to_x, to_y) in steps, release (see click)."""
         self.click(x, y, to=(to_x, to_y))
 
     def click(self, x: float, y: float, hold: float = 0.15, shift: bool = False, right: bool = False, to: tuple[float, float] | None = None, double: bool = False) -> None:
-        """A real left click at the SCREEN point (x, y) - the coordinates ImGui and the editor's queries (LogWindow's BackAt...) report. It uses the real pointer: xGPU only
-        hands ImGui a pointer position while Windows says the pointer is over the window, which messages posted to it cannot keep true. So the editor's window is brought
-        forward (a click focuses a window, and ImGui ignores the pointer of one that is not focused), the pointer goes there, presses and releases, and returns to where the
-        person had it."""
+        """A left (or right) click at the SCREEN point (x, y) - the coordinates ImGui and the editor's queries (LogWindow's BackAt...) report - with the
+        virtual mouse: it goes there, frames pass with it over the item, it presses and releases. Shift held if asked; `to` makes it a drag."""
         self._need_win32_window()
-        import ctypes
-        from ctypes import wintypes
-        user32 = ctypes.windll.user32
+        button = "right" if right else "left"
+        self._move(x, y)
+        self._frames()                                            # frames pass with the pointer over the item
+        if shift:
+            self._key("LSHIFT", True)
+            self._frames()
         try:
-            user32.SetProcessDPIAware()                           # the coordinates are physical pixels, as ImGui's are
-        except Exception:
-            pass
-        pid = self.proc.pid
-        found: list[int] = []
-
-        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        def each(hwnd, _):
-            owner = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
-            if owner.value == pid and user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
-                found.append(hwnd)
-            return True
-
-        user32.EnumWindows(each, 0)
-        if not found:
-            raise AssertionError("click: the editor has no visible window")
-        if user32.GetForegroundWindow() != found[0]:
-            user32.SetForegroundWindow(found[0])
-            time.sleep(0.6)
-        old = wintypes.POINT()
-        user32.GetCursorPos(ctypes.byref(old))
-        try:
-            user32.SetCursorPos(int(x), int(y))
-            time.sleep(0.4)                                       # frames pass with the pointer over the item
-            if shift: user32.keybd_event(0x10, 0, 0, 0)           # VK_SHIFT down
-            time.sleep(0.1)
-            user32.mouse_event(0x0008 if right else 0x0002, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTDOWN / RIGHTDOWN
+            # A double click: the editor plays press, release, press a frame apart (inside ImGui's 0.3 s; command round trips are slower)
+            self._virtual(f"MouseButton -Button {button} -Down true" + (" -Clicks 2" if double else ""))
+            self._frames(5 if double else 3)
             time.sleep(hold)
-            if double:
-                user32.mouse_event(0x0004, 0, 0, 0, 0)
-                time.sleep(0.06)
-                user32.mouse_event(0x0002, 0, 0, 0, 0)
-                time.sleep(hold)
             if to:
                 for i in range(1, 11):                            # a drag: the pointer travels, frames pass on the way
-                    user32.SetCursorPos(int(x + (to[0] - x) * i / 10), int(y + (to[1] - y) * i / 10))
-                    time.sleep(0.08)
-                time.sleep(0.2)
-            user32.mouse_event(0x0010 if right else 0x0004, 0, 0, 0, 0)    # MOUSEEVENTF_LEFTUP / RIGHTUP
-            if shift: user32.keybd_event(0x10, 0, 2, 0)           # VK_SHIFT up (KEYEVENTF_KEYUP)
-            time.sleep(0.3)
+                    self._move(x + (to[0] - x) * i / 10, y + (to[1] - y) * i / 10)
+                    self._frames(1)
+                self._frames()
         finally:
-            user32.SetCursorPos(old.x, old.y)
+            self._virtual(f"MouseButton -Button {button} -Down false")
+            self._frames()
+            if shift:
+                self._key("LSHIFT", False)
+                self._frames()
 
     def wait_for(self, line: str, pattern: str, *, timeout: float = 60.0, poll: float = 0.25) -> str:
         """Poll a query until its reply matches the regex."""
