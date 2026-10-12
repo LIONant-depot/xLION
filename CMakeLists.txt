@@ -352,7 +352,6 @@ set(FRAG_SHADER_SOURCES
   "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_frag.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_wireframe_frag.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_frag.glsl"
-  "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_preview_fallback_frag.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_wedge_fill_frag.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_shadow_generation_frag.glsl"
   "plugins/xfont.plugin/source/Editor/shaders/xfont_msdf_frag.glsl"
