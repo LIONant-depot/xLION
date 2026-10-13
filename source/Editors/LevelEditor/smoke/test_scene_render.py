@@ -64,8 +64,8 @@ def test_a_mesh_without_a_geometry_is_not_drawn_and_nothing_breaks(made):
 
 
 def test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget(made):
-    """An Environment with GI on: the Police Station's surfels are baked once, and each frame traces at most the ray budget (a big mesh is
-    updated in slices across frames)."""
+    """An Environment with GI on: the Police Station's surfels (baked by its GeomStatic compiler, saved in the geometry) are loaded, and each
+    frame traces at most the ray budget (a big mesh is updated in slices across frames)."""
     level = made
     e = entity(level, "5CE00021", "Transform,Mesh")
     level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
