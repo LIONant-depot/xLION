@@ -27,6 +27,7 @@
     ["dependencies/xLIONCore/src/physics|dependencies/xLIONCore/src/demo|xlioncore_transform", ["test_physics_events.py", "test_soccer_goals.py", "test_physics_contact_events.py", "test_play.py", "test_play_more.py", "test_components.py", "test_system_order.py", "test_render_transform.py"]],
     ["dependencies/xLIONCore/", ["test_engine_copies.py", "test_entities.py", "test_play.py", "test_system_order.py", "test_ecs_gate.py"]],
     ["dependencies/xLIONRender/", ["test_engine_copies.py", "test_play.py"]],
+    ["xlionrender_scene_|xlionrender_system|xlionrender_api|xlevel_session|dependencies/xLIONCore/src/resources/|xlevel_commands_text|xgpu_vulkan_device", ["test_scene_render.py"]],
     ["dependencies/xLIONRender/src/xlionrender_text|xlionrender_api|xlionrender_system|dependencies/xGPU/|dependencies/xLIONCore/src/resources/|xlevel_commands_text|dependencies/xproperty/source/xcore/my_properties", ["test_text_layout.py", "test_text_render.py"]],
     ["xscene_system_usage|LevelEditor_Panel_SystemRegistry|xlevel_commands_workspace|xlioncore_physics.h|xecs_event|xecs_system_mgr_inline|xecs_game_mgr|xecs_system", ["test_event_handlers.py", "test_system_order.py", "test_system_constraints.py"]],
     ["xPropertyImGuiInspector|xlevel_session", ["test_shutdown.py"]],

@@ -776,6 +776,7 @@ if(XLION_ECS_LINK_GATE)
   target_compile_definitions(xLION_ecs_gate PRIVATE EDITOR XLION_EDITOR IMGUI_DEFINE_MATH_OPERATORS NOMINMAX
                              XECS_BUILD_SHARED XLIONCORE_BUILD_SHARED XLIONRENDER_BUILD_SHARED)
   target_link_libraries(xLION_ecs_gate PRIVATE OpenMP::OpenMP_CXX)
+  target_link_libraries(xLION_ecs_gate PRIVATE xLIONRender_lib)       # the renderer the exe compiles itself (the previews): not taken from LIONRender.dll
   if(WIN32)
     target_link_libraries(xLION_ecs_gate PRIVATE Advapi32.lib)
   endif()

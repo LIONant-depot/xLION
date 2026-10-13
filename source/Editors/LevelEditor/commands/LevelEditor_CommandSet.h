@@ -29,6 +29,7 @@ namespace level_editor
         xscene::commands::get_property_query_cmd            CmdGetProperty;
         xlevel::commands::describe_text_query_cmd           CmdDescribeText;
         xlevel::commands::describe_text_draw_query_cmd      CmdDescribeTextDraw;
+        xlevel::commands::describe_scene_query_cmd          CmdDescribeScene;
         xlevel::commands::pick_ray_query_cmd                CmdPickRay;
         xlevel::commands::get_world_pose_query_cmd          CmdGetWorldPose;
         xscene::commands::snapshot_edit_cmd                 CmdSnapshotEdit;
@@ -138,6 +139,7 @@ namespace level_editor
         , CmdGetProperty(Level, pScene)
         , CmdDescribeText(Level, pEditor)
         , CmdDescribeTextDraw(Level, pEditor)
+        , CmdDescribeScene(Level, pEditor)
         , CmdPickRay(Level, pEditor)
         , CmdGetWorldPose(Level, pEditor)
         , CmdSnapshotEdit(Level, pScene)
