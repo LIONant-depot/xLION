@@ -78,6 +78,26 @@ def test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget(made):
     assert 0 < got["GIRays"] <= 4096, f"the GI holds its ray budget: {got}"
 
 
+def test_gi_survives_flying_far_and_back(made):
+    """The camera goes far (the Police Station's GI drops to its parent surfels) and comes back: no surfel's light may go bad. A buried
+    surfel's validity used to decay into denormals; the reads at the ray hits divided by them into inf, then NaN that spread through the
+    bounces until the whole mesh drew black (seen flying around the Police Level)."""
+    level = made
+    e = entity(level, "5CE00041", "Transform,Mesh")
+    level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
+    entity(level, "5CE00042", "Transform,LightSun")
+    env = entity(level, "5CE00043", "Transform,Environment")
+    level.ok(f"SetProperty -Scene {level.scene} -Id {env} -Component Environment -Path Environment/GI -After true")
+    scene(level, lambda g: g.get("GIMeshes", 0) >= 1, timeout=90)
+    for distance, seconds in ((20, 15), (250, 8), (20, 8), (250, 6), (20, 6)):
+        assert level.cmd(f"SetCamera -Target 0,0,0 -Distance {distance}") == "SetCamera: done"
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            got = scene(level, lambda g: "GIBad" in g, timeout=5)
+            assert got.get("GIBad", -1) == 0, f"surfels went bad at distance {distance}: {got}"
+            time.sleep(0.5)
+
+
 def test_a_mesh_is_picked_by_its_bounds(made):
     """A click on a Mesh selects it: the ray against the box of its geometry, placed by the entity (moved here, so nothing else is in the way)."""
     level = made
