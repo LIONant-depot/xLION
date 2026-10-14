@@ -2,6 +2,7 @@
 
     python gi_baseline.py <label>          -> Build/gi_baseline/<label>/   (baseline.json, the images, the surfel dumps)
     python gi_baseline.py <label> <ref>    -> the same, then compared with Build/gi_baseline/<ref>/
+    --debug                                -> the Debug editor (most work is done in Debug: it must be fast there too)
 
 What it records:
   identity   the repos' commits (and whether they have changes), hashes of the shader sources and of the compiled
@@ -19,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from harness import Editor  # noqa: E402
 
 ROOT  = Path(__file__).resolve().parents[4]
-EXE   = ROOT / "Build/xLION.vs2022/Release/xLION.exe"
+CONFIG = "Debug" if "--debug" in sys.argv else "Release"
+EXE   = ROOT / f"Build/xLION.vs2022/{CONFIG}/xLION.exe"
 OUT   = ROOT / "Build/gi_baseline"
 LEVEL, SCENE, ENV_ID = "EF31687D49834DD9", "EF19AB610AD85421", "00000003"      # the Police Level, its scene, the Environment entity
 VIEWS = {   # name: SetCamera arguments
@@ -28,7 +30,7 @@ VIEWS = {   # name: SetCamera arguments
 }
 MODES = [   # name, GIDebug, GIPerPixel
     ("light_pixel", "LIGHT", "true"), ("light_vertex", "LIGHT", "false"),
-    ("surfels", "SURFELS", "true"), ("surface_color", "SURFACE_COLOR", "true"), ("final", "NONE", "true"),
+    ("surfels", "SURFELS", "true"), ("surface_color", "SURFACE_COLOR", "true"), ("coverage", "COVERAGE", "true"), ("final", "NONE", "true"),
 ]
 CROP  = (468, 57, 935, 420)     # the viewport in the window capture
 GI_PROPS = ["GI", "GIRayBudget", "GIRaysPerSurfel", "GIMoments", "GIFilterPasses", "GIEmissiveScale", "GIDebug", "GIPerPixel"]
@@ -105,21 +107,50 @@ def image_stats(im: Image.Image) -> dict:
     return {"mean": round(ImageStat.Stat(g).mean[0], 2), "local_contrast": round(ImageStat.Stat(ImageChops.difference(g, shifted)).mean[0], 3)}
 
 
+def derived(out: Path) -> dict:
+    """Per view, from the images: the blotches as the gap between the per-pixel and the vertex-only LIGHT images (mean |difference| over
+    the vertex image's mean: the vertex read is smooth, so what the pixel read adds is detail and blotches), and the COVERAGE view's
+    shares (tone-mapped: by the dominant channel; the rest is the editor's ground grid, the sky, the UI): the pixel read (green), the vertex read (blue), unsupported (magenta)."""
+    d = {}
+    for view in VIEWS:
+        f = {m: out / f"{view}_{m}.png" for m in ("light_pixel", "light_vertex", "coverage")}
+        r = {}
+        if f["light_pixel"].exists() and f["light_vertex"].exists():
+            a, b = Image.open(f["light_pixel"]).convert("L"), Image.open(f["light_vertex"]).convert("L")
+            r["pixel_vertex_gap"] = round(ImageStat.Stat(ImageChops.difference(a, b)).mean[0] / max(ImageStat.Stat(b).mean[0], 1e-6), 4)
+        if f["coverage"].exists():
+            px = list(Image.open(f["coverage"]).convert("RGB").get_flattened_data())
+            n = max(len(px), 1)
+            r["coverage_pixel"] = round(sum(1 for c in px if c[1] > c[0] + 80 and c[1] > c[2] + 80) / n, 4)
+            r["coverage_vertex"] = round(sum(1 for c in px if c[2] > c[0] + 80 and c[2] > c[1] + 80) / n, 4)
+            r["coverage_unsupported"] = round(sum(1 for c in px if c[0] > c[1] + 60 and c[2] > c[1] + 60) / n, 4)
+        d[view] = r
+    return d
+
+
 def run(label: str) -> dict:
     out = OUT / label
     out.mkdir(parents=True, exist_ok=True)
-    rec = {"label": label, "date": time.strftime("%Y-%m-%d %H:%M:%S"), "identity": identity(), "views": VIEWS}
+    rec = {"label": label, "config": CONFIG, "date": time.strftime("%Y-%m-%d %H:%M:%S"), "views": VIEWS}
     ed = Editor(EXE)
-    ed.start()
+    ed.start(ready_timeout=600)
     try:
+        # The resources compiled first (a shader change recompiles every material at the start): nothing compiling or waiting for 5 s
+        t0, quiet = time.time(), 0
+        while time.time() - t0 < 900 and quiet < 5:
+            quiet = quiet + 1 if "Compiling=0 Waiting=0" in ed.cmd("CompileStatus", timeout=120) else 0
+            time.sleep(1)
+        rec["compile_wait_s"] = round(time.time() - t0, 1)
+        rec["identity"] = identity()
         name = dict(ed.levels())[LEVEL]
         ed.cmd("Close -Save 0")
         t0 = time.time()
-        ed.cmd(f"OpenLevel -Level {LEVEL} -Save 0")
-        ed.wait_for("GetPlayState", r"Building=false", timeout=400)
+        ed.cmd(f"OpenLevel -Level {LEVEL} -Save 0", timeout=600)
+        while "Building=false" not in ed.cmd("GetPlayState", timeout=900):     # (Debug: the GI's load blocks the editor for a while)
+            time.sleep(0.5)
         t_open = time.time() - t0
         ed.cmd(f"{name}\\SetCamera {VIEWS['blinds']}")
-        while time.time() - t0 < 600 and describe(ed, name).get("GICapturing", "1") != "0":
+        while time.time() - t0 < 900 and not (lambda d: d.get("GICapturing") == "0" and d.get("GIMeshes", "0") != "0")(describe(ed, name)):     # loaded, then captured
             time.sleep(0.5)
         t_captured = time.time() - t0
         env = lambda p: ed.cmd(f"{name}\\GetProperty -Scene {SCENE} -Id {ENV_ID} -Component Environment -Path Environment/{p}").strip()
@@ -129,6 +160,7 @@ def run(label: str) -> dict:
         for d in ("dump_a", "dump_b"):
             rec[d] = ed.cmd(f"{name}\\DumpGI -File {out / (d + '.csv')}").replace("\n", " ")
             if d == "dump_a": time.sleep(10)
+        if not (out / "dump_a.csv").exists(): raise RuntimeError(f"DumpGI wrote nothing: {rec['dump_a']}")
         rec["surfels"] = dump_stats(read_dump(out / "dump_a.csv"), read_dump(out / "dump_b.csv"))
         rec["images"] = {}
         setp = lambda p, v: ed.cmd(f"{name}\\SetProperty -Scene {SCENE} -Id {ENV_ID} -Component Environment -Path Environment/{p} -After {v}")
@@ -138,6 +170,7 @@ def run(label: str) -> dict:
                 setp("GIDebug", debug); setp("GIPerPixel", perpixel)
                 time.sleep(3)
                 rec["images"][f"{view}/{mode}"] = image_stats(shot(ed, out / f"{view}_{mode}.png"))
+        rec["derived"] = derived(out)
     finally:
         ed.cmd("Close -Save 0")
         ed.stop()
@@ -152,10 +185,17 @@ def compare(cur: dict, ref: dict) -> None:
     for k, v in cur["images"].items():
         r = ref["images"].get(k)
         if r: print(f"  {k:28s} mean {r['mean']} -> {v['mean']}, local contrast {r['local_contrast']} -> {v['local_contrast']}")
+    rd = derived(OUT / ref["label"])
+    for view, v in cur["derived"].items():
+        for k, x in v.items(): print(f"  {view + '/' + k:28s} {rd.get(view, {}).get(k, '-')} -> {x}")
+    for k in ("GIMs", "GILoadMs", "GIUnsupported"):
+        print(f"  {k:28s} {ref['timings']['describe'].get(k, '-')} -> {cur['timings']['describe'].get(k, '-')}")
 
 
 if __name__ == "__main__":
+    sys.argv = [a for a in sys.argv if a != "--debug"]
     rec = run(sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d_%H%M"))
     print(json.dumps({k: rec[k] for k in ("timings", "settings", "surfels")}, indent=2))
     for k, v in rec["images"].items(): print(f"  {k:28s} {v}")
+    print(json.dumps(rec["derived"], indent=2))
     if len(sys.argv) > 2: compare(rec, json.loads((OUT / sys.argv[2] / "baseline.json").read_text()))
