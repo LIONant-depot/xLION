@@ -291,6 +291,7 @@ namespace level_editor
         EditorHost.provide(ChatLog);
         EditorHost.provide(ExitState);
         EditorHost.provide(ResourceEditors);
+        EditorHost.provide(ResourceUpdates);
         EditorHost.provide(AssetBrowser);
         if (!bHeadless)
         {

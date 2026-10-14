@@ -159,6 +159,9 @@ namespace level_editor
         ++FrameNumber;
         xeditor::diagnostics::Log("frame %llu begin", static_cast<unsigned long long>(FrameNumber));
 
+        // The resources compiled again since the last frame: their references move to the new data as they are asked for this frame
+        ResourceUpdates.Apply();
+
         // No manual "Reload Game" button - recompiling is something the editor just does for you. Two automatic
         // triggers only: the window regaining OS focus, and the Play button itself (see xlevel::RequestPlay).
 #if defined(XECS_BUILD_SHARED)

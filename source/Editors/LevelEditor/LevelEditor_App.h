@@ -53,6 +53,7 @@
 
 #include "source/Tools/Editor/xeditor_resource_tab.h"
 #include "source/Tools/Editor/xeditor_compile_logs.h"
+#include "source/Tools/Editor/xeditor_resource_updates.h"
 
 #include "dependencies/xeditor/include/xeditor/diagnostics.h"
 #include "dependencies/xeditor/include/xeditor/gpu_log.h"
@@ -207,6 +208,7 @@ namespace level_editor
         xeditor::shortcut_labels          ShortcutLabels;          // menus ask the host which key an action has (xeditor/shortcuts.h)
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
         xeditor::compile_log_bridge       CompileLogs;             // every asset compile as an operation of the Logs (what the resource editors' Feedback shows)
+        xeditor::resource_updates         ResourceUpdates;         // a resource compiled again: the references to it move to the new data (xresource::mgr::MarkUpdated)
 
         std::unique_ptr<xlevel::session>  IdleLevel;               // a Level editor without a Level, never shown: what the workspace commands act on while no Level is open
         xlevel::level_context*            LastLevelTarget = nullptr;
