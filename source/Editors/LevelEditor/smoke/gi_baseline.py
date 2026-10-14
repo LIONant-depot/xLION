@@ -2,6 +2,7 @@
 
     python gi_baseline.py <label>          -> Build/gi_baseline/<label>/   (baseline.json, the images, the surfel dumps)
     python gi_baseline.py <label> <ref>    -> the same, then compared with Build/gi_baseline/<ref>/
+    Name=Value ...                         -> Environment overrides for the run (GIFilterPasses=2): the Level is not saved
     --debug                                -> the Debug editor (most work is done in Debug: it must be fast there too)
 
 What it records:
@@ -21,6 +22,7 @@ from harness import Editor  # noqa: E402
 
 ROOT  = Path(__file__).resolve().parents[4]
 CONFIG = "Debug" if "--debug" in sys.argv else "Release"
+SETS   = [a.split("=", 1) for a in sys.argv if "=" in a and not a.startswith("-")]     # Environment overrides for this run: GIFilterPasses=2 ...
 EXE   = ROOT / f"Build/xLION.vs2022/{CONFIG}/xLION.exe"
 OUT   = ROOT / "Build/gi_baseline"
 LEVEL, SCENE, ENV_ID = "EF31687D49834DD9", "EF19AB610AD85421", "00000003"      # the Police Level, its scene, the Environment entity
@@ -154,6 +156,8 @@ def run(label: str) -> dict:
             time.sleep(0.5)
         t_captured = time.time() - t0
         env = lambda p: ed.cmd(f"{name}\\GetProperty -Scene {SCENE} -Id {ENV_ID} -Component Environment -Path Environment/{p}").strip()
+        for k, v in SETS:                                   # (before the solve settles: a changed setting re-solves)
+            ed.cmd(f"{name}\\SetProperty -Scene {SCENE} -Id {ENV_ID} -Component Environment -Path Environment/{k} -After {v}")
         rec["settings"] = {p: env(p) for p in GI_PROPS}
         time.sleep(60)                                      # the solve settles
         rec["timings"] = {"open_s": round(t_open, 1), "captured_s": round(t_captured, 1), "describe": describe(ed, name)}
@@ -193,7 +197,7 @@ def compare(cur: dict, ref: dict) -> None:
 
 
 if __name__ == "__main__":
-    sys.argv = [a for a in sys.argv if a != "--debug"]
+    sys.argv = [a for a in sys.argv if a != "--debug" and not ("=" in a and not a.startswith("-"))]
     rec = run(sys.argv[1] if len(sys.argv) > 1 else time.strftime("%Y%m%d_%H%M"))
     print(json.dumps({k: rec[k] for k in ("timings", "settings", "surfels")}, indent=2))
     for k, v in rec["images"].items(): print(f"  {k:28s} {v}")
