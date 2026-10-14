@@ -372,6 +372,8 @@ set(VERT_SHADER_SOURCES
   "dependencies/xeditor_tools/src/shaders/xeditor_tools_grid_vert.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_wireframe_vert.glsl"
   "plugins/xgeom_static.plugin/source/Editor/shaders/xgeom_static_debug_normal_vert.glsl"
+  "plugins/xgeom_skin.plugin/source/Editor/shaders/xgeom_skin_wireframe_vert.glsl"
+  "plugins/xgeom_skin.plugin/source/Editor/shaders/xgeom_skin_debug_normal_vert.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_wedge_fill_vert.glsl"
   "plugins/xskeleton.plugin/source/Editor/shaders/xskeleton_shadow_generation_vert.glsl"
   "plugins/xfont.plugin/source/Editor/shaders/xfont_msdf_vert.glsl"
