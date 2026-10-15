@@ -1,9 +1,9 @@
-"""A skin with "Import the skeleton and the animations" on (GeomSkin/ImportAnimation) makes a virtual Skeleton and a virtual Anim Package of
-its model, like the imported materials: the skin compiler binds its bones with the bone manifest it builds itself (xskeleton_merge.h, the
+"""A skin with ImportSkeletonAndAnimation on (GeomSkin/ImportSkeletonAndAnimation, the default) makes a virtual Skeleton and a virtual Anim Package of
+its model, like the imported materials, and its SkeletonRef and AnimationRef (read-only in the editor) are those two: the skin compiler binds its bones with the bone manifest it builds itself (xskeleton_merge.h, the
 Skeleton compiler's own code), since the skeleton compiles after it. Here the three compilers run in the pipeline's order on a project of
 their own (the example project's Walking.fbx): the skin binds without a compiled skeleton, the generated skeleton and package compile on
 it, and a second compile makes the same resources. No editor: the
-SkeletonRef's override arrow and the preview's default animation are drawn by the skin editor.
+read-only rows and the preview's animation (the AnimationRef) are drawn by the skin editor.
 (The compilers are their own executables: build plugins/xgeom_skin.plugin, xskeleton.plugin and xanim_package.plugin first when they changed.)
 """
 import re
@@ -70,11 +70,13 @@ def virtual(prj: Path, type_name: str) -> list[Path]:
 
 
 def test_the_skin_makes_its_skeleton_and_animations_and_binds_to_the_same_bones(project):
-    compile_one(project, "xgeom_skin", "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc")
+    out = compile_one(project, "xgeom_skin", "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc")
 
     skeletons, packages = virtual(project, "Skeleton"), virtual(project, "AnimPackage")
     assert len(skeletons) == 1 and len(packages) == 1, "one generated skeleton and one generated anim package"
     skeleton_guid = skeletons[0].name.removesuffix(".desc")
+    package_guid  = packages[0].name.removesuffix(".desc")
+    assert f"SkeletonRef {skeleton_guid} AnimationRef {package_guid}" in out, "the compiled skin carries the guids of the generated skeleton and package"
     package_text  = (packages[0] / "Descriptor.txt").read_text()
     assert "Walking.fbx" in (skeletons[0] / "Descriptor.txt").read_text()
     assert "Walking.fbx" in package_text
@@ -114,3 +116,14 @@ def test_the_edits_of_the_generated_skeleton_and_package_survive_a_recompile(pro
     assert re.search(r'"Skeleton/PreTransform/Scale/X"\s+;f32\s+#40000000', text), "the pre-transform is the user's"
     assert skeleton.stat().st_mtime_ns == skeleton_stamp, "the skeleton was not written: nothing of it changed"
     assert re.search(rf'"AnimPackage/SkeletonRef"\s+;full_guid\s+#{skeleton_guid} ', package.read_text()), "the skeleton of the package is the skin's"
+
+
+def test_a_skin_that_does_not_import_has_no_generated_resources_and_needs_its_own_skeleton(project):
+    desc = project / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc") / "Descriptor.txt"
+    desc.write_text(desc.read_text().replace("xProperties : 4", "xProperties : 5").replace('"GeomSkin/ImportMaterials/bImport" ;bool 0','"GeomSkin/ImportMaterials/bImport" ;bool 0\n  "GeomSkin/ImportSkeletonAndAnimation" ;bool 0'))
+    exe = compiler_exe("xgeom_skin")
+    run = subprocess.run([str(exe), "-PROJECT", str(project), "-OPTIMIZATION", "O1", "-DEBUG", "D0", "-DESCRIPTOR", "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+                         , "-OUTPUT", str(project / "Cache/Resources/Platforms")], capture_output=True, text=True, timeout=300)
+    assert "[COMPILATION_SUCCESS]" not in run.stdout + run.stderr, "no skeleton: the skin does not compile"
+    assert "skeleton reference is NULL" in run.stdout + run.stderr
+    assert virtual(project, "Skeleton") == [] and virtual(project, "AnimPackage") == [], "and nothing was generated"

@@ -173,7 +173,29 @@ Original list:
 
 A command on the owner's editors (static geom, skin, font if it has one), undoable, listed in each plugin's `documentation/editor.md`.
 
-## Phase 4 — skin: one flag, read-only references, AnimationRef in the resource
+## Phase 4 — skin: one flag, read-only references, AnimationRef in the resource — DONE (2026-10-17, uncommitted)
+
+- Descriptor (`xgeom_skin_descriptor.h`): `ImportAnimation{bSkeleton,bAnimations}` is gone; `ImportSkeletonAndAnimation` (bool, default on) sits right after
+  `ImportAsset`; `SkeletonRef` is read-only while it is on (dynamic flags), new `AnimationRef` (`xrsc::anim_package`) is hidden while it is off and read-only
+  while on. `SyncImportedAnimation(owner, bHasAnimations)` (replaces `SyncSkeletonSlot`/`isImportedSkeleton`): on -> SkeletonRef = generated skeleton,
+  AnimationRef = generated package or empty when the model has no clips; off -> AnimationRef empty, the generated skeleton let go. `details` has
+  `HasAnimations` (the compiler fills it) so the editor knows without reading the model.
+- Compiled skin: `geom::m_AnimationRef` next to `m_SkeletonRef`, serialized, `xserializer_version_v` 3, `getAnimationRef()`; the compiler sets it (empty +
+  warning, not a failure, when the model has no clips) and logs `SkeletonRef <hex> AnimationRef <hex>` (what the test reads). Every skin recompiles.
+- Editor: the SkeletonRef override arrow (`RegisterSkeletonRowLabel`, `m_SkeletonRowLabel`) is gone; `SyncImported()` runs every frame (marks the document
+  dirty only when something changed); the preview's `PreviewAnimRef` is read-only and set to the skin's AnimationRef while the flag is on
+  (`render_settings::m_bAnimFromSkin`, not saved); `PreviewAnim()` is just the setting.
+- Example project: the two skins have `ImportSkeletonAndAnimation 0` (their own skeleton `D472...`; the earlier test-made 1D0F skin edits are reverted); the
+  generated Skeleton `EB6B3E509816D15` and Anim Package `8684134A47E00C95` that an earlier run left are removed (staged `git rm`).
+- Docs: `xgeom_skin.plugin/documentation/editor.md`. Impact map: a row for the skin/skeleton/anim-package compilers -> `test_imported_skeleton.py`,
+  `test_skin_import.py`.
+- Tests (pass): `test_imported_skeleton.py` (single flag; the compiled skin carries the skeleton and package guids; package/skeleton edits survive; flag off
+  without a skeleton fails validation and makes nothing), new `test_skin_import.py` (editor: after a compile SkeletonRef/AnimationRef are the generated ones;
+  turning the flag off empties both). Not covered: the read-only rendering of the rows and the preview actually playing (ImGui/GPU only).
+- Left as agreed: animation events do not exist yet.
+
+Original list:
+
 
 User decisions (do not offer choices):
 - Replace `ImportAnimation{bSkeleton,bAnimations}` with **one bool `ImportSkeletonAndAnimation`**, placed **right after `ImportAsset`** in the
