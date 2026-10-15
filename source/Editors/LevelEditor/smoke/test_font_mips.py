@@ -9,7 +9,7 @@ from harness import REPO
 PROJECT = REPO / "example.lionprj"
 FONT_DESC = PROJECT / "Descriptors/Font/01/00/5549D8C8E9220001.desc/Descriptor.txt"          # Arial, MTSDF
 FONT_LOG = PROJECT / "Cache/Resources/Logs/Font/01/00/5549D8C8E9220001.log/Log.txt"
-TEXTURE_DESC = PROJECT / "Cache/Descriptors/Texture/93/EB/D28D2B241BAFEB93.desc/Descriptor.txt"   # the atlas, a virtual resource of the font
+TEXTURE_DESC = PROJECT / "Descriptors/Texture/93/EB/D28D2B241BAFEB93.desc/Descriptor.txt"   # the atlas, a virtual resource of the font
 
 
 def test_the_atlas_of_a_distance_field_font_has_mips_and_the_padding_they_need(level):

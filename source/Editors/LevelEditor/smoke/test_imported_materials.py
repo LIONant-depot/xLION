@@ -2,7 +2,7 @@
 Instance per material of its model, with virtual Textures in its PBR slots (plugins/xmaterial_instance.plugin/source/Compiler/
 xmaterial_instance_import_compiler.h). The static geom compiler is run here on a project of its own (a model of three materials written by
 the test: one textured with a normal map, one cut out by an opacity map, one plain color whose emissive color makes it a light), and what
-it wrote in Cache/Descriptors is read back. No editor: the editor half (override arrows, SetImportMaterials, DuplicateImportedMaterial) is
+it wrote in Descriptors (the virtual resources are descriptors like the others) is read back. No editor: the editor half (override arrows, SetImportMaterials, DuplicateImportedMaterial) is
 drawn by the geometry editors.
 (The compiler is its own executable: build plugins/xgeom_static.plugin/build/xgeom_static_compiler.vs2022 first when it changed.)
 """
@@ -149,7 +149,7 @@ def compile_geom(prj: Path) -> str:
 def virtual(prj: Path, type_name: str) -> dict[str, tuple[str, str]]:
     """name -> (folder name, descriptor text) of every virtual resource of a type"""
     found = {}
-    for info in (prj / "Cache/Descriptors" / type_name).rglob("Info.txt"):
+    for info in (prj / "Descriptors" / type_name).rglob("Info.txt"):
         name = re.search(r'"Info/Name"\s+;string\s+"([^"]*)"', info.read_text())[1]
         found[name] = (info.parent.name.removesuffix(".desc"), (info.parent / "Descriptor.txt").read_text())
     return found
@@ -188,8 +188,8 @@ def test_each_material_of_the_model_becomes_a_pbr_instance_with_its_textures(pro
 def test_folders_are_named_without_leading_zeros(project):
     """xresource_mgr loads by {:X}: a virtual resource whose folder had a leading zero could never be loaded."""
     compile_geom(project)
-    assert (project / "Cache/Descriptors/MaterialInstance/9F/C0/5DD7F9D9C42C09F.desc").is_dir(), "the stone instance, named by {:X}"
-    for folder in (project / "Cache/Descriptors").rglob("*.desc"):
+    assert (project / "Descriptors/MaterialInstance/9F/C0/5DD7F9D9C42C09F.desc").is_dir(), "the stone instance, named by {:X}"
+    for folder in (project / "Descriptors").rglob("*.desc"):
         guid = folder.name[:-len(".desc")]
         assert guid == f"{int(guid, 16):X}", folder
 
@@ -197,9 +197,9 @@ def test_folders_are_named_without_leading_zeros(project):
 def test_recompiling_rewrites_nothing_that_did_not_change(project):
     """The virtual descriptors keep their time: a recompile of the geometry does not recompile its textures."""
     compile_geom(project)
-    before = {p: p.stat().st_mtime_ns for p in (project / "Cache/Descriptors").rglob("*.txt")}
+    before = {p: p.stat().st_mtime_ns for p in (project / "Descriptors").rglob("*.txt")}
     compile_geom(project)
-    after = {p: p.stat().st_mtime_ns for p in (project / "Cache/Descriptors").rglob("*.txt")}
+    after = {p: p.stat().st_mtime_ns for p in (project / "Descriptors").rglob("*.txt")}
     assert before == after
 
 
@@ -214,4 +214,80 @@ def test_with_the_import_off_nothing_is_made(project):
     desc = guid_folder(project / "Descriptors", "GeomStatic", GEOM_GUID) / "Descriptor.txt"
     desc.write_text(desc.read_text().replace('"GeomStatic/ImportMaterials/bImport" ;bool 1', '"GeomStatic/ImportMaterials/bImport" ;bool 0'))
     compile_geom(project)
-    assert not (project / "Cache/Descriptors").exists() or not list((project / "Cache/Descriptors").rglob("*.desc"))
+    for type_name in ("MaterialInstance", "Texture"):
+        assert not (project / "Descriptors" / type_name).exists() or not list((project / "Descriptors" / type_name).rglob("*.desc")), type_name
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+# The virtual resources are the user's to edit: a compile updates only what the generator owns (xresource_pipeline_virtual.h)
+
+def descriptor_of(prj: Path, type_name: str, folder: str) -> Path:
+    return guid_folder(prj / "Descriptors", type_name, folder) / "Descriptor.txt"
+
+
+def use_another_diffuse_map(prj: Path) -> None:
+    """The model's color map of "stone" is another file now"""
+    png(prj / "Assets/model/textures/stone_diff2.png", (200, 90, 90, 255))
+    mtl = prj / "Assets/model/model.mtl"
+    mtl.write_text(mtl.read_text().replace("stone_diff.png", "stone_diff2.png"))
+
+
+def test_the_edits_of_a_generated_texture_survive_a_recompile(project):
+    compile_geom(project)
+    folder, text = virtual(project, "Texture")["stone_diff (color)"]
+    path = descriptor_of(project, "Texture", folder)
+    path.write_text(text.replace('"RGB_BC1"', '"RGBA_BC7"'))
+    info = path.with_name("Info.txt")
+    info.write_text(info.read_text().replace("stone_diff (color)", "My stone color"))
+    compile_geom(project)
+    assert '"RGBA_BC7"' in path.read_text(), "the compression is the user's"
+    stamp = path.stat().st_mtime_ns                                   # (the first compile wrote the text as the serializer does: an editor's save would)
+
+    compile_geom(project)
+    assert path.stat().st_mtime_ns == stamp, "and nothing is written any more: the texture is not compiled again"
+    assert "My stone color" in info.read_text(), "the name too"
+
+
+def test_a_slot_that_still_holds_what_the_model_made_follows_the_model(project):
+    compile_geom(project)
+    old = texture_of(virtual(project, "MaterialInstance")["stone"][1], 1)
+
+    use_another_diffuse_map(project)
+    compile_geom(project)
+    new = texture_of(virtual(project, "MaterialInstance")["stone"][1], 1)
+    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
+    assert new != old and new == textures["stone_diff2 (color)"], "the albedo is the texture of the new file"
+    assert old in textures.values(), "the old texture stays on disk with its edits, unused"
+    assert re.search(r'"Texture/Input/Filename"\s+;wstring\s+"Assets\\\\model\\\\textures\\\\stone_diff2.png"', descriptor_of(project, "Texture", new).read_text())
+
+
+def test_a_slot_the_user_pointed_at_another_texture_is_kept(project):
+    compile_geom(project)
+    instances = virtual(project, "MaterialInstance")
+    mine = "ABCDEF0123456789"                                         # a texture the geometry did not make
+    folder, text = instances["stone"]
+    generated = texture_of(text, 1)
+    path = descriptor_of(project, "MaterialInstance", folder)
+    path.write_text(text.replace(f"#{generated} ", f"#{mine} ", 1))
+
+    use_another_diffuse_map(project)                                  # the generator has something else to say about that slot
+    compile_geom(project)
+    after = virtual(project, "MaterialInstance")["stone"][1]
+    assert texture_of(after, 1) == mine, "the user's choice stays"
+    assert f"#{PBR} " in after, "the base material is the generator's"
+
+
+def test_the_geometry_lists_what_it_made_and_without_a_list_the_slots_still_follow(project):
+    compile_geom(project)
+    lists = list((project / "Descriptors/GeomStatic").rglob("Virtual.txt"))
+    assert len(lists) == 1, "one list, in the descriptor folder of the geometry"
+    made = set(re.findall(r"full_guid\s+#([0-9A-F]+) ", lists[0].read_text()))
+    every = {folder for type_name in ("MaterialInstance", "Texture") for folder, _ in virtual(project, type_name).values()}
+    assert made == every, "every virtual resource of the geometry is on it"
+
+    lists[0].unlink()                                                  # a project from before the lists
+    use_another_diffuse_map(project)
+    compile_geom(project)
+    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
+    assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 1) == textures["stone_diff2 (color)"], "the Info links tell what the geometry made"
+    assert lists[0].exists(), "and the list is written again"
