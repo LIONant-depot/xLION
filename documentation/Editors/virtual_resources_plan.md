@@ -142,6 +142,14 @@ follow), `test_imported_skeleton.py` + 1 (skeleton pre-transform survives, the p
 (`Virtual: yes` for generated resources, `no` for the owner). Not tested: the picker lists themselves (ImGui only, no command reads them).
 Compilers rebuilt Debug + Release (xfont, xgeom_skin, xgeom_static), editor Debug.
 
+- Follow-up (2026-10-17): a generated Texture is fully the user's once it exists (its guid is made from its input, so the same guid never needs another input;
+  the font atlas keeps updating its input and mips); `EmitDescriptor` never replaces a descriptor that exists and cannot be read (a merge conflict, a broken
+  save): it is left as it is, with a warning in the compile log (`Tolerate` for a descriptor that reads but cross-checks a skeleton that is not compiled).
+
+- Follow-up (2026-10-17): `ImportMaterials` has `AlbedoCompression` (BC1), `AlbedoAlphaCompression` (BC7), `NormalCompression` (BC5), `ORMECompression` (BC7), used when a
+  texture is made (textures of a constant stay uncompressed); a texture that exists is not changed by them. `ApplyImportCompressions` (undoable, a button in the
+  Description panel with a confirmation) sets the generated textures to the settings by what they hold (usage, sRGB, constants), overwriting the user's choice.
+
 Original list:
 
 

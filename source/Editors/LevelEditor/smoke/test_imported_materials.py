@@ -236,11 +236,11 @@ def test_the_edits_of_a_generated_texture_survive_a_recompile(project):
     compile_geom(project)
     folder, text = virtual(project, "Texture")["stone_diff (color)"]
     path = descriptor_of(project, "Texture", folder)
-    path.write_text(text.replace('"RGB_BC1"', '"RGBA_BC7"'))
+    path.write_text(text.replace('"RGB_BC1"', '"RGBA_BC7"').replace("stone_diff.png", "stone_ddn.png"))      # its compression and its source file
     info = path.with_name("Info.txt")
     info.write_text(info.read_text().replace("stone_diff (color)", "My stone color"))
     compile_geom(project)
-    assert '"RGBA_BC7"' in path.read_text(), "the compression is the user's"
+    assert '"RGBA_BC7"' in path.read_text() and "stone_ddn.png" in path.read_text(), "the compression and the source file are the user's (a texture has its guid from its input: the same guid never needs another)"
     stamp = path.stat().st_mtime_ns                                   # (the first compile wrote the text as the serializer does: an editor's save would)
 
     compile_geom(project)
@@ -291,3 +291,42 @@ def test_the_geometry_lists_what_it_made_and_without_a_list_the_slots_still_foll
     textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
     assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 1) == textures["stone_diff2 (color)"], "the Info links tell what the geometry made"
     assert lists[0].exists(), "and the list is written again"
+
+
+def test_a_generated_descriptor_that_cannot_be_read_is_left_alone_with_a_warning(project):
+    """The user's file is never replaced by a fresh one: a half-edited descriptor (a merge conflict, a broken save) stays as it is until it is fixed."""
+    compile_geom(project)
+    folder, _ = virtual(project, "Texture")["stone_diff (color)"]
+    path = descriptor_of(project, "Texture", folder)
+    path.write_text("<<<<<<< merge conflict\n")
+    out = compile_geom(project)
+    assert path.read_text() == "<<<<<<< merge conflict\n", "it is left as it is"
+    assert "could not be read: it is left as it is" in out
+
+
+def compression_of(text: str) -> str:
+    return re.search(r'"Texture/Compression"\s+;enum\s+"([A-Z0-9_]+)"', text)[1]
+
+
+def test_the_import_settings_choose_the_compression_of_the_textures_made_from_now_on(project):
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert compression_of(textures["stone_diff (color)"][1]) == "RGB_BC1", "a color map: BC1 by default"
+    assert compression_of(textures["stone_ddn (normal)"][1]) == "RG_BC5", "a normal map: BC5"
+    assert compression_of(textures["leaf_diff (color, cut out)"][1]) == "RGBA_BC7", "a color map that cuts out: BC7"
+
+    desc = guid_folder(project / "Descriptors", "GeomStatic", GEOM_GUID) / "Descriptor.txt"
+    desc.write_text(desc.read_text().replace("xProperties : 5", "xProperties : 7").replace('"GeomStatic/ImportMaterials/bImport" ;bool 1'
+        , '"GeomStatic/ImportMaterials/bImport" ;bool 1\n  "GeomStatic/ImportMaterials/AlbedoCompression" ;enum "RGB_BC7"\n  "GeomStatic/ImportMaterials/NormalCompression" ;enum "RGBA_BC7"'))
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert compression_of(textures["stone_diff (color)"][1]) == "RGB_BC1", "a texture that exists is the user's: the setting is not applied to it"
+
+    stone = guid_folder(project / "Descriptors", "Texture", textures["stone_diff (color)"][0])
+    normal = guid_folder(project / "Descriptors", "Texture", textures["stone_ddn (normal)"][0])
+    import shutil
+    shutil.rmtree(stone); shutil.rmtree(normal)
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert compression_of(textures["stone_diff (color)"][1]) == "RGBA_BC7", "made again, it takes the setting"
+    assert compression_of(textures["stone_ddn (normal)"][1]) == "RGBA_BC7"

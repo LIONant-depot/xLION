@@ -4,6 +4,7 @@ not compiled. Turned on again, the same resources are used. A virtual resource n
 (library_db::m_Chain, dependencies/xresource_pipeline_v2/source/editor/xresource_editor_virtual_chain.h)
 The geometry is made by the test from a model it writes (two plain-colored materials); the project guard removes its descriptor.
 """
+import re
 import secrets
 import shutil
 import time
@@ -225,3 +226,38 @@ def test_the_font_editor_has_the_command_too(editor):
         assert "nothing is unused" in editor.cmd(command), "and nothing else is left"
     finally:
         editor.cmd(f"CloseResourceEditor -Asset {font}")
+
+
+def test_apply_import_compressions_sets_the_generated_textures_and_undo_puts_them_back(editor, geometry):
+    """ApplyImportCompressions (xmaterial_instance_import_editor.h): the textures a geometry made take the compressions of its ImportMaterials settings
+    (a color map: AlbedoCompression, ...); a texture of a constant stays as it is; an undo writes the descriptors back."""
+    from test_imported_materials import png
+    lib, asset = geometry
+    png(ASSET_DIR / "red.png", (200, 30, 30, 255))
+    (ASSET_DIR / "model.mtl").write_text(MTL.replace("newmtl red\nKd 0.8 0.1 0.1", "newmtl red\nKd 0.8 0.1 0.1\nmap_Kd red.png"))
+    _compile(editor, asset, True)
+    command  = f"ResourceEditorCommand -Asset {asset} -Cmd ApplyImportCompressions"
+    made     = _children(editor, lib, asset)
+    textures = sorted({t for m in made for t in _children(editor, lib, m)})
+    paths    = [_folder(PROJECT / "Descriptors", "Texture", g[:16]) / f"{int(g[:16], 16):X}.desc" / "Descriptor.txt" for g in textures]
+    def compressions():
+        deadline = time.time() + 15
+        while True:
+            try:
+                return sorted(re.search(r'"Texture/Compression"\s+;enum\s+"([A-Z0-9_]+)"', p.read_text())[1] for p in paths)
+            except OSError:                                          # the file watcher has a file open for a moment
+                assert time.time() < deadline
+                time.sleep(0.3)
+    start = compressions()
+    assert "RGB_BC1" in start, "the color map of the red material is BC1"
+    assert "already have" in editor.cmd(command), "the textures were made with the settings"
+
+    editor.ok(f"ResourceEditorCommand -Asset {asset} -Cmd {quote('SetProperty -Path ' + quote('GeomStatic/ImportMaterials/AlbedoCompression') + ' -Value RGB_BC7')}")
+    editor.ok(command)
+    changed = compressions()
+    assert "RGB_BC1" not in changed and changed.count("RGBA_BC7") == start.count("RGBA_BC7") + 1, "only the color map took the new compression; the textures of constants stayed"
+
+    assert "Undo: done" in editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Undo")       # the last command is the apply
+    assert compressions() == start, "the descriptors came back as they were"
+    assert "Undo: done" in editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Undo")       # then the setting
+    assert editor.alive()
