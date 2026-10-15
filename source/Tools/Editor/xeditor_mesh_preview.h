@@ -196,6 +196,15 @@ namespace xeditor
         // The camera's numbers, for the camera commands: the preview always looks at the mesh, so there is no target
         xeditor::camera_access Camera() noexcept { return { &m_Angles, &m_Distance, nullptr, [this] { m_Angles = {}; m_Distance = 2; } }; }
 
+        // The preview into a render pass that is already open (the panel's, or a thumbnail's own target). Without the background the pass's clear
+        // colour shows around the mesh.
+        void Draw(xgpu::cmd_buffer& CmdBuffer, float ViewW, float ViewH, bool bBackground = true) noexcept
+        {
+            if (!m_bReady || ViewW <= 1.f || ViewH <= 1.f) return;
+            if (bBackground) DrawBackground(CmdBuffer, ViewW, ViewH);
+            if (hasMaterial()) DrawMesh(CmdBuffer, ViewW, ViewH);
+        }
+
     private:
         static bool Ok(xgpu::device::error* pErr) noexcept
         {
@@ -204,10 +213,8 @@ namespace xeditor
             return false;
         }
 
-        void Draw(xgpu::cmd_buffer& CmdBuffer, float ViewW, float ViewH) noexcept
+        void DrawBackground(xgpu::cmd_buffer& CmdBuffer, float ViewW, float ViewH) noexcept
         {
-            if (!m_bReady || ViewW <= 1.f || ViewH <= 1.f) return;
-
             push_const2D Background;
             Background.m_Scale       = { (150 * 2.0f) / ViewW, (150 * 2.0f) / ViewH };
             Background.m_Translation.setup(0);
@@ -215,9 +222,10 @@ namespace xeditor
             CmdBuffer.setPipelineInstance(m_Background);
             CmdBuffer.setPushConstants(Background);
             m_Meshes.Rendering(CmdBuffer, e19::mesh_manager::model::PLANE2D);
+        }
 
-            if (!hasMaterial()) return;
-
+        void DrawMesh(xgpu::cmd_buffer& CmdBuffer, float ViewW, float ViewH) noexcept
+        {
             m_View.setViewport({ 0, 0, static_cast<int>(ViewW), static_cast<int>(ViewH) });
 
             // Keep the object inside the view

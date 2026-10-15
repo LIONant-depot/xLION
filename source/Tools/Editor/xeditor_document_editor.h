@@ -85,7 +85,8 @@ namespace xeditor
             std::ifstream In(std::filesystem::path(Tmp), std::ios::binary);
             std::stringstream Text; Text << In.rdbuf();
             In.close();
-            std::filesystem::remove(Tmp);
+            std::error_code Ec;                         // the project's file watcher may have it open: the file is left for the next snapshot to overwrite
+            std::filesystem::remove(Tmp, Ec);
             return Text.str();
         }
 
@@ -96,7 +97,8 @@ namespace xeditor
             const std::wstring Tmp = SnapshotPath();
             { std::ofstream Out(std::filesystem::path(Tmp), std::ios::binary | std::ios::trunc); Out << Text; }
             const bool bOk = ReplaceFromFile(Tmp);
-            std::filesystem::remove(Tmp);
+            std::error_code Ec;
+            std::filesystem::remove(Tmp, Ec);
             if (!bOk) return false;
             m_bDirty = true;
             if (m_OnReplaced) m_OnReplaced();
