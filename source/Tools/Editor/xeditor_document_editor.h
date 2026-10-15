@@ -648,6 +648,22 @@ namespace xeditor
             return std::ranges::any_of(m_Panels, [&](const panel& P) { return P.m_Where == Where; });
         }
 
+        // The dock node of a panel of the same side as P that is docked (left_bottom and bottom fall back to left and center); 0: none
+        ImGuiID SiblingDockId(const panel& P) const noexcept
+        {
+            const auto DockOf = [&](dock Where) -> ImGuiID
+            {
+                for (const auto& Q : m_Panels)
+                    if (&Q != &P && Q.m_Where == Where)
+                        if (const auto* pWindow = ImGui::FindWindowByName(Q.m_Title.c_str()); pWindow && pWindow->DockId) return pWindow->DockId;
+                return 0;
+            };
+            if (const ImGuiID Id = DockOf(P.m_Where); Id) return Id;
+            if (P.m_Where == dock::left_bottom) return DockOf(dock::left);
+            if (P.m_Where == dock::bottom)      return DockOf(dock::center);
+            return 0;
+        }
+
         void RenderPanels() noexcept
         {
             const auto WindowClass = DockClassForResource(m_Document.m_Guid);
@@ -682,6 +698,10 @@ namespace xeditor
             for (auto& P : m_Panels)
             {
                 ImGui::SetNextWindowClass(&WindowClass);
+                // A panel with no saved place (added to the editor after its layout was saved: the dock space above is not built again) joins a
+                // panel of its side, as a tab, instead of floating small in a corner
+                if (ImGui::FindWindowSettingsByID(ImHashStr(P.m_Title.c_str())) == nullptr && ImGui::FindWindowByName(P.m_Title.c_str()) == nullptr)
+                    if (const ImGuiID Sibling = SiblingDockId(P); Sibling != 0) ImGui::SetNextWindowDockID(Sibling, ImGuiCond_Always);
                 if (BeginEditorWindow(P.m_Title.c_str(), nullptr, P.m_Flags)) P.m_Render();      // the keys are live while this panel has the focus
                 ImGui::End();
             }
