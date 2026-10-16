@@ -345,6 +345,7 @@ namespace level_editor
             Camera.m_pAngles   = &Session.m_Camera.m_Angles;
             Camera.m_pDistance = &Session.m_Camera.m_Distance;
             Camera.m_pTarget   = &Session.m_Camera.m_Target;
+            Camera.m_pState    = &Session.m_Camera.m_State;
             Session.m_ShellCommands = std::make_shared<level_command_set>
                 (Session.m_Undo, static_cast<xscene::scene_context*>(&Session.m_CmdContext), &Session.m_CmdContext, Camera);
         };

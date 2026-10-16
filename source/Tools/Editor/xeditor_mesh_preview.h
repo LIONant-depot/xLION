@@ -6,6 +6,8 @@
 // preview with. The editor gives it the material's fragment shader and texture bindings (SetMaterial); the panel calls Render every frame.
 #include "source/Examples/E19_MaterialEditor/E19_mesh_manager.h"
 #include "source/Tools/Editor/xeditor_camera.h"
+#include "source/Tools/Editor/xeditor_camera_toolbar.h"
+#include "dependencies/xeditor_tools/src/xeditor_tools_camera.h"
 #include "source/Tools/xgpu_imgui_breach.h"
 #include "source/Tools/xgpu_view.h"
 #include "source/Tools/xgpu_xcore_bitmap_helpers.h"
@@ -156,6 +158,12 @@ namespace xeditor
         // The panel: a mesh picker over the preview. Right drag turns the object, the wheel zooms.
         void Render() noexcept
         {
+            if (!m_bToolbar) { m_bToolbar = true; m_CameraToolbar.Init(reinterpret_cast<std::uint64_t>(this)); }
+            m_CameraToolbar.Render(ImGui::GetContentRegionAvail(), m_CameraState, [this] { RenderBody(); });
+        }
+
+        void RenderBody() noexcept
+        {
             if (!m_bReady) { ImGui::TextDisabled("Preview needs a GPU device (open from LevelEditor)."); return; }
 
             static constexpr const char* s_Names[] = { "Cube", "Sphere", "Capsule", "Cylinder" };      // keep in step with s_ModelNames
@@ -170,22 +178,19 @@ namespace xeditor
             const ImVec2 Avail = ImGui::GetContentRegionAvail();
             const ImVec2 Min   = ImGui::GetCursorScreenPos();
             ImGui::InvisibleButton("##MeshPreviewCanvas", Avail, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-            if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            // The shared camera (xeditor_tools_camera.h): Orbit or Fly, F switches
             {
-                auto& io = ImGui::GetIO();
-                if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
-                {
-                    m_Angles.m_Pitch.m_Value -= 0.01f * io.MouseDelta.y;
-                    m_Angles.m_Yaw.m_Value   -= 0.01f * io.MouseDelta.x;
-                }
-                m_Distance += m_Distance * -0.2f * io.MouseWheel;
+                const xeditor_tools::camera_rig Rig{ m_CameraState, m_View, m_Angles, m_Distance, m_Target };
+                xeditor_tools::HandleCameraInput(Rig);
                 m_Distance = std::max(m_Distance, 0.2f);
+                if (m_CameraState.m_bFrame) { m_CameraState.m_bFrame = false; m_Distance = 2; m_Target = {}; }        // F in Fly: back on the mesh
             }
 
             // The callback draws into the clip rectangle it is added with: the canvas
             ImGui::PushClipRect(Min, ImVec2(Min.x + Avail.x, Min.y + Avail.y), true);
             xgpu::tools::imgui::AddCustomRenderCallback([this, Avail](xgpu::cmd_buffer& CmdBuffer, const ImVec2&, const ImVec2&) { Draw(CmdBuffer, Avail.x, Avail.y); });
             ImGui::PopClipRect();
+            xeditor_tools::DrawCameraOverlay({ m_CameraState, m_View, m_Angles, m_Distance, m_Target });
         }
 
     public:     // what the commands of the preview reach
@@ -193,8 +198,8 @@ namespace xeditor
 
         static constexpr const char* s_ModelNames[] = { "Cube", "Sphere", "Capsule", "Cylinder" };
 
-        // The camera's numbers, for the camera commands: the preview always looks at the mesh, so there is no target
-        xeditor::camera_access Camera() noexcept { return { &m_Angles, &m_Distance, nullptr, [this] { m_Angles = {}; m_Distance = 2; } }; }
+        // The camera's numbers, for the camera commands
+        xeditor::camera_access Camera() noexcept { return { &m_Angles, &m_Distance, &m_Target, [this] { m_Angles = {}; m_Distance = 2; m_Target = {}; }, &m_CameraState }; }
 
         // The preview into a render pass that is already open (the panel's, or a thumbnail's own target). Without the background the pass's clear
         // colour shows around the mesh.
@@ -234,7 +239,7 @@ namespace xeditor
             const float Radius      = 0.5f;
             const float HFov        = 2.0f * std::atan(Aspect * std::tan(VerticalFov / 2.0f));
             const float Distance    = Radius / std::tan(std::min(VerticalFov, HFov) / 2.0f);
-            m_View.LookAt(m_Distance + Distance - 1, m_Angles, { 0, 0, 0 });
+            m_View.LookAt(m_Distance + Distance - 1, m_Angles, m_Target);
 
             push_constants PushConst;
             PushConst.m_L2W = xmath::fmat4::fromScale({ 2.f });
@@ -268,6 +273,10 @@ namespace xeditor
         xgpu::pipeline_instance         m_Instance;
         xgpu::tools::view               m_View;
         xmath::radian3                  m_Angles;
+        xmath::fvec3                    m_Target = xmath::fvec3(0, 0, 0);    // what the camera looks at: the mesh, until the user moves it
+        xeditor_tools::camera_state     m_CameraState;                       // Orbit or Fly
+        xeditor::camera_toolbar         m_CameraToolbar;
+        bool                            m_bToolbar = false;
         float                           m_Distance = 2;
     };
 

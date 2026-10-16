@@ -6,6 +6,7 @@
 // drag moves the target). A preview gives access to the numbers of its own camera; angles are in degrees on the command line. View state: the
 // commands are queries, not undoable, and never dirty a document.
 #include "dependencies/xeditor/include/xeditor/commands.h"
+#include "dependencies/xeditor_tools/src/xeditor_tools_camera.h"
 #include "source/Tools/Editor/xeditor_document_editor.h"
 
 #include <functional>
@@ -18,6 +19,7 @@ namespace xeditor
         float*                  m_pDistance = nullptr;
         xmath::fvec3*           m_pTarget   = nullptr;          // null: the view always looks at the subject's center
         std::function<void()>   m_Frame;                        // fits the camera to the subject
+        xeditor_tools::camera_state* m_pState = nullptr;        // the mode (Orbit / Fly) and the fly speed; null: the view has only the orbit
     };
 
     // A 2D view (a picture the wheel zooms and dragging pans): SetView names which one
@@ -68,13 +70,15 @@ namespace xeditor
         {
             camera_access m_Camera;
             set_cmd(xundo::system& System, camera_access Camera) noexcept : query_command_base(System, "SetCamera", nullptr), m_Camera(std::move(Camera)) { RegisterArguments(); }
-            const char* getCommandHelp() const noexcept override { return "Places the preview camera. Usage: SetCamera [-Yaw degrees] [-Pitch degrees] [-Distance d] [-Target x,y,z]"; }
+            const char* getCommandHelp() const noexcept override { return "Places the preview camera. Usage: SetCamera [-Yaw degrees] [-Pitch degrees] [-Distance d] [-Target x,y,z] [-Mode orbit|fly] [-Speed metersPerSecond]"; }
             void RegisterArguments() noexcept override
             {
                 m_hYaw      = m_Parser.addOption("Yaw",      "Degrees around the vertical axis",  false, 1);
                 m_hPitch    = m_Parser.addOption("Pitch",    "Degrees above the horizon",         false, 1);
                 m_hDistance = m_Parser.addOption("Distance", "How far from the target",           false, 1);
                 m_hTarget   = m_Parser.addOption("Target",   "What the camera looks at: x,y,z",   false, 1);
+                m_hMode     = m_Parser.addOption("Mode",     "orbit or fly (F in the view)",      false, 1);
+                m_hSpeed    = m_Parser.addOption("Speed",    "Fly speed in meters per second",    false, 1);
             }
 
             static bool Number(const std::string& Text, float& Out) noexcept
@@ -88,7 +92,13 @@ namespace xeditor
                 std::string Yaw, Pitch, Distance, Target;
                 const bool bYaw = cmd_util::GetArg(m_Parser, m_hYaw, Yaw), bPitch = cmd_util::GetArg(m_Parser, m_hPitch, Pitch);
                 const bool bDistance = cmd_util::GetArg(m_Parser, m_hDistance, Distance), bTarget = cmd_util::GetArg(m_Parser, m_hTarget, Target);
-                if (!bYaw && !bPitch && !bDistance && !bTarget) return "SetCamera: nothing to change";
+                std::string Mode, Speed;
+                const bool bMode = cmd_util::GetArg(m_Parser, m_hMode, Mode), bSpeed = cmd_util::GetArg(m_Parser, m_hSpeed, Speed);
+                if (!bYaw && !bPitch && !bDistance && !bTarget && !bMode && !bSpeed) return "SetCamera: nothing to change";
+                if ((bMode || bSpeed) && !m_Camera.m_pState) return "SetCamera: this view has no fly camera";
+                float fSpeed = 0;
+                if (bMode && Mode != "orbit" && Mode != "fly") return "SetCamera: Mode is orbit or fly";
+                if (bSpeed && (!Number(Speed, fSpeed) || fSpeed <= 0.0f)) return "SetCamera: Speed takes a number above 0";
 
                 float fYaw = 0, fPitch = 0, fDistance = 0;
                 xmath::fvec3 vTarget(0, 0, 0);
@@ -109,22 +119,25 @@ namespace xeditor
                 if (bPitch)    m_Camera.m_pAngles->m_Pitch.m_Value = fPitch * ToRadians;
                 if (bDistance) *m_Camera.m_pDistance = fDistance;
                 if (bTarget)   *m_Camera.m_pTarget = vTarget;
+                if (bMode)     m_Camera.m_pState->m_Mode  = Mode == "fly" ? xeditor_tools::camera_mode::FLY : xeditor_tools::camera_mode::ORBIT;
+                if (bSpeed)    m_Camera.m_pState->m_Speed = std::clamp(fSpeed, 0.05f, 2000.0f);
                 return "SetCamera: done";
             }
-            xcmdline::parser::handle m_hYaw, m_hPitch, m_hDistance, m_hTarget;
+            xcmdline::parser::handle m_hYaw, m_hPitch, m_hDistance, m_hTarget, m_hMode, m_hSpeed;
         };
 
         struct get_cmd : xundo::query_command_base
         {
             camera_access m_Camera;
             get_cmd(xundo::system& System, camera_access Camera) noexcept : query_command_base(System, "GetCamera", nullptr), m_Camera(std::move(Camera)) {}
-            const char* getCommandHelp() const noexcept override { return "The preview camera: yaw and pitch in degrees, distance, target. Usage: GetCamera"; }
+            const char* getCommandHelp() const noexcept override { return "The preview camera: yaw and pitch in degrees, distance, target, mode (orbit or fly) and fly speed in meters per second. Usage: GetCamera"; }
             void RegisterArguments() noexcept override {}
             std::string Query() noexcept override
             {
                 constexpr float ToDegrees = 180.0f / 3.14159265358979f;
                 std::string Text = std::format("yaw: {:.2f}\npitch: {:.2f}\ndistance: {:.4f}\n", m_Camera.m_pAngles->m_Yaw.m_Value * ToDegrees, m_Camera.m_pAngles->m_Pitch.m_Value * ToDegrees, *m_Camera.m_pDistance);
                 if (m_Camera.m_pTarget) Text += std::format("target: {:.4f},{:.4f},{:.4f}\n", m_Camera.m_pTarget->m_X, m_Camera.m_pTarget->m_Y, m_Camera.m_pTarget->m_Z);
+                if (m_Camera.m_pState)  Text += std::format("mode: {}\nspeed: {:.3f}\n", m_Camera.m_pState->m_Mode == xeditor_tools::camera_mode::FLY ? "fly" : "orbit", m_Camera.m_pState->m_Speed);
                 return Text;
             }
         };
