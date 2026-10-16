@@ -196,6 +196,7 @@ namespace level_editor
             xeditor::RequestIdleWorkCancel();
         }
         EditorHost.pump_services();
+        EditorHost.m_GIAllowance.NewFrame();
 
         // Keys pressed this frame go to the actions that were live in the last one; this frame's panels register theirs as they draw.
         Actions.NewFrame();
