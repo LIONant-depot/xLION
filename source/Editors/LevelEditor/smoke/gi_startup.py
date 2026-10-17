@@ -58,6 +58,8 @@ def analyse(tag):
         return rows, fr
 
     lum = lambda x: 0.2126 * float(x["er"]) + 0.7152 * float(x["eg"]) + 0.0722 * float(x["eb"])
+    # The GI time without the frames the earlier dumps froze (a DumpGI is a frame of about 1 s in Debug: the GI makes no progress in it)
+    Effective = lambda fr: (float(fr[-1]["TimeMs"]) - sum(float(x["UpdateGIMs"]) for x in fr if float(x["UpdateGIMs"]) > 100)) / 1000
     Ref, _ = load(K[-2]); Ref2, _ = load(K[-1])
     G = collections.defaultdict(list)
     for k, x in Ref.items():
@@ -89,22 +91,24 @@ def analyse(tag):
     print(f"{tag}: {sum(len(v) for v in G.values())} level 0 surfels in {nG} parent groups ({100 * (nG - sum(Coh.values())) / nG:.0f}% with normals over ~37 deg apart)")
     b, w, _ = split(Ref2)
     print(f"  the reference's own change (its last two dumps): between groups {b:.1%}, within {w:.1%}")
+    print("  t: GI seconds without the frames the dumps froze")
     print("  t (GI s)  between  within  mean/ref  coherent: between, within  warm-up  watching")
     for k in K[:-2]:
         D, fr = load(k)
         if not fr: continue
-        t = float(fr[-1]["TimeMs"]) / 1000
+        t = Effective(fr)
         l0 = [x for x in D.values() if x["level"] == "0"]
         b, w, mr = split(D); bc, wc, _ = split(D, True)
         print(f"  {t:7.2f}  {b:7.1%} {w:7.1%}  {mr:7.3f}   {bc:7.1%} {wc:7.1%}         {sum(int(x['n']) < 16 for x in l0) / len(l0):6.1%}  {sum(x['watch'] == '1' for x in l0) / len(l0):6.1%}")
     _, fr = load(K[-3] if len(K) > 2 else K[-1])
-    cum, marks, low, n = 0, {}, 0, 0
+    cum, marks, low, n, frozen = 0, {}, 0, 0, 0.0
     for x in fr:
-        t = float(x["TimeMs"]) / 1000; cum += int(x["Rays"])
+        if float(x["UpdateGIMs"]) > 100: frozen += float(x["UpdateGIMs"]) / 1000     # (a dump's frame)
+        t = float(x["TimeMs"]) / 1000 - frozen; cum += int(x["Rays"])
         for m in (1, 3, 5, 9, 15):
             if t >= m and m not in marks: marks[m] = cum
         if 2 < t < 15: n += 1; low += int(x["Rays"]) < 5000
-    caps = [float(x["TimeMs"]) / 1000 for x in fr if float(x["CaptureMs"]) > 0.05]
+    caps = [Effective(fr[:k + 1]) for k, x in enumerate(fr) if float(x["CaptureMs"]) > 0.05]
     print("  rays by GI time: " + ", ".join(f"{v / 1e6:.1f}M at {m} s" for m, v in sorted(marks.items()))
           + f"; frames under 5k rays (2-15 s): {low}/{n}; the last capture at {caps[-1] if caps else float('nan'):.2f} s")
 
