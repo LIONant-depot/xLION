@@ -21,9 +21,11 @@
 #include "dependencies/xbmp_tools/src/xbmp_tools.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr.h"
 
+#include <atomic>
 #include <filesystem>
 #include <future>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -63,6 +65,7 @@ namespace xeditor
             if (!ThumbnailRendererFactories().contains(Guid.m_Type)) return {};   // this type never opted in
 
             EnsureAtlas(Device);
+            InvalidateCompiled();
 
             if (auto It = m_Cells.find(Guid); It != m_Cells.end())
             {
@@ -78,10 +81,17 @@ namespace xeditor
             const std::wstring Path = DiskPath(Guid);
             if (Path.empty()) return {};
 
-            // A thumbnail older than the compiled resource shows an older version of it (the compile finished while the editor was not looking: at startup by the
-            // compiler-newer rule, from outside the session, ...): it counts as missing, so a fresh one is drawn and written over it.
+            // A thumbnail older than the compiled resource, or than any resource it is drawn with (a material instance's material and textures), shows an
+            // older version of it (the compile finished while the editor was not looking: at startup by the compiler-newer rule, from outside the session, ...;
+            // or a texture compiled after the thumbnail was drawn, which drew the preview's default texture in its place): it counts as missing, so a fresh
+            // one is drawn and written over it.
             std::filesystem::file_time_type ResourceTime = std::filesystem::file_time_type::min();
-            xresource_editor::g_LibMgr.getNodeInfo(Guid, [&](const xresource_editor::library_db::info_node& Node) { if (Node.m_bHasResource) ResourceTime = Node.m_ResourceTime; });
+            const auto Newer = [&](xresource::full_guid G)
+            {
+                xresource_editor::g_LibMgr.getNodeInfo(G, [&](const xresource_editor::library_db::info_node& Node) { if (Node.m_bHasResource && Node.m_ResourceTime > ResourceTime) ResourceTime = Node.m_ResourceTime; });
+            };
+            Newer(Guid);
+            ForEachDependency(Guid, Newer);
 
             m_InFlight.emplace(Guid, in_flight{ .m_DiskLoad = std::async(std::launch::async, [Path, ResourceTime]() noexcept -> xbitmap
                 {
@@ -99,7 +109,7 @@ namespace xeditor
         }
 
         // Drops a resource's cached thumbnail (disk + the atlas cell, if it holds one) so the next request
-        // regenerates fresh. Wired to xresource_editor::g_LibMgr.m_OnCompilationState in Init() below.
+        // regenerates fresh. Reached from xresource_editor::g_LibMgr.m_OnCompilationState (Init() below) through InvalidateCompiled.
         void Invalidate(xresource::full_guid Guid) noexcept
         {
             std::error_code Ec;
@@ -140,7 +150,72 @@ namespace xeditor
             std::future<xbitmap>       m_DiskLoad;                  // valid while checking disk
             bool                       m_bDiskMissed    = false;    // m_DiskLoad already .get() once and came up empty - a future can only be consumed once, never touch m_DiskLoad again after this flips true
             bool                       m_bStarted       = false;    // disk missed - already made at least one Render() call (counts once against the generation budget, further polls are free)
+            bool                       m_bRedo          = false;    // a resource it is drawn with compiled while it was being drawn: the render it hands back is thrown away and a new one made
         };
+
+        // Every resource Guid is drawn with, all the way down (a geom's material instances, their materials and textures), as its compiles recorded them in
+        // their dependency files. Each is visited once (a dependency shared by several, or a cycle, ends there).
+        template<typename T_CALLBACK>
+        static void ForEachDependency(xresource::full_guid Guid, T_CALLBACK&& CallBack) noexcept
+        {
+            std::vector<xresource::full_guid>        Pending{ Guid };
+            std::unordered_set<xresource::full_guid> Visited{ Guid };
+            while (!Pending.empty())
+            {
+                const auto Current = Pending.back();
+                Pending.pop_back();
+
+                std::vector<xresource::full_guid> Dependencies;
+                xresource_editor::g_LibMgr.getNodeInfo(Current, [&](const xresource_editor::library_db::info_node& Node)
+                {
+                    Dependencies = Node.m_Dependencies.m_Resources;
+                    Dependencies.insert(Dependencies.end(), Node.m_Dependencies.m_VirtualResources.begin(), Node.m_Dependencies.m_VirtualResources.end());
+                });
+                for (const auto& D : Dependencies)
+                {
+                    if (!Visited.insert(D).second) continue;
+                    CallBack(D);
+                    Pending.push_back(D);
+                }
+            }
+        }
+
+        static bool DependsOn(xresource::full_guid Guid, xresource::full_guid Dependency) noexcept
+        {
+            bool bFound = false;
+            ForEachDependency(Guid, [&](xresource::full_guid D) { bFound = bFound || D == Dependency; });
+            return bFound;
+        }
+
+        // On the UI thread (from RequestThumbnail): the resources the compiler finished since the last call drop their own thumbnails and the ones of every
+        // resource drawn with them (a material instance drawn while its textures were not compiled yet drew the preview's default texture in their place).
+        // The compile notification itself only queues: it comes from a compiling thread, which may hold the compiled resource's info node, while this reads
+        // the info nodes of others and the atlas, which the browser uses.
+        void InvalidateCompiled() noexcept
+        {
+            if (!m_bCompiled.load(std::memory_order_acquire)) return;
+            std::vector<xresource::full_guid> Compiled;
+            {
+                std::scoped_lock Lock(m_CompiledMutex);
+                Compiled.swap(m_Compiled);
+                m_bCompiled.store(false, std::memory_order_release);
+            }
+
+            for (const auto& Guid : Compiled)
+            {
+                Invalidate(Guid);
+
+                std::vector<xresource::full_guid> Dependents;
+                for (const auto& [Resident, Cell] : m_Cells) if (DependsOn(Resident, Guid)) Dependents.push_back(Resident);
+                for (auto& [Pending, Flight] : m_InFlight)
+                {
+                    if (!DependsOn(Pending, Guid)) continue;
+                    if (Flight.m_bStarted) Flight.m_bRedo = true;      // its renderer is busy with it: dropping it would leave that render to the next request
+                    else                   Dependents.push_back(Pending);
+                }
+                for (const auto& D : Dependents) Invalidate(D);
+            }
+        }
 
         xresource_editor::plugin_icon_ref CellRef(int Cell) noexcept
         {
@@ -262,6 +337,7 @@ namespace xeditor
 
                 xbitmap Bmp;
                 if (!pRenderer->Render(Device, *m_pWindow, Guid, Bmp)) { ++It; continue; }   // not ready yet - poll again next tick
+                if (Flight.m_bRedo) { Flight.m_bRedo = false; ++It; continue; }               // drawn with an older dependency - the next poll draws it again
 
                 InsertBitmap(Device, Guid, Bmp);
 
@@ -286,7 +362,11 @@ namespace xeditor
             xcontainer::lock::scope Lock(*Log);
             using result = xresource_editor::compilation::historical_entry::result;
             const auto R = Log->get().m_Result;
-            if (R == result::SUCCESS || R == result::SUCCESS_WARNINGS) Invalidate(Guid);
+            if (R != result::SUCCESS && R != result::SUCCESS_WARNINGS) return;
+
+            std::scoped_lock CompiledLock(m_CompiledMutex);     // see InvalidateCompiled
+            m_Compiled.push_back(Guid);
+            m_bCompiled.store(true, std::memory_order_release);
         }
 
         xgpu::window*                                                            m_pWindow = nullptr;
@@ -297,6 +377,9 @@ namespace xeditor
         std::unordered_map<xresource::full_guid, in_flight>                      m_InFlight;
         std::unordered_map<xresource::type_guid, std::unique_ptr<thumbnail_renderer>> m_Renderers; // one persistent renderer per type
         bool                                                                      m_bCompileHookRegistered = false;
+        std::mutex                                                                m_CompiledMutex;
+        std::vector<xresource::full_guid>                                         m_Compiled;      // compiled since the last InvalidateCompiled (guarded by m_CompiledMutex)
+        std::atomic<bool>                                                         m_bCompiled = false;
     };
 
     inline thumbnail_cache g_ThumbnailCache;
