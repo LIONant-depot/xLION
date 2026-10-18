@@ -120,6 +120,26 @@ def test_the_edits_of_the_generated_skeleton_and_package_survive_a_recompile(pro
     assert re.search(rf'"AnimPackage/SkeletonRef"\s+;full_guid\s+#{skeleton_guid} ', package.read_text()), "the skeleton of the package is the skin's"
 
 
+def size_of(out: str) -> list[float]:
+    return [float(v) for v in re.search(r"Size (\S+) (\S+) (\S+)", out).groups()]
+
+
+def test_the_skeleton_is_the_master_the_skin_takes_its_scale(project):
+    """The skin has no transform or units of its own: a new skeleton has no pre-transform (the mesh in the model's units), and the PreTransform the user gives the
+    skeleton is what the skin's mesh is compiled in (its bind poses and the mesh agree)."""
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    before = size_of(compile_one(project, "xgeom_skin", skin))
+    skeleton = virtual(project, "Skeleton")[0] / "Descriptor.txt"
+    text = skeleton.read_text()
+    assert len(re.findall(r'"Skeleton/PreTransform/Scale/[XYZ]"\s+;f32\s+#3F800000', text)) == 3, "a new skeleton: no pre-transform"
+
+    text, n = re.subn(r'("Skeleton/PreTransform/Scale/[XYZ]"\s+;f32\s+)#3F800000', r"\1#3C23D70A", text)       # 0.01: the model is in cm
+    assert n == 3
+    skeleton.write_text(text)
+    after = size_of(compile_one(project, "xgeom_skin", skin))
+    assert all(abs(a - b * 0.01) <= b * 0.0002 + 1e-4 for a, b in zip(after, before)), f"the mesh takes the skeleton's scale: {before} -> {after}"
+
+
 def test_a_skin_that_does_not_import_has_no_generated_resources_and_needs_its_own_skeleton(project):
     desc = project / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc") / "Descriptor.txt"
     desc.write_text(desc.read_text().replace("xProperties : 4", "xProperties : 5").replace('"GeomSkin/ImportMaterials/bImport" ;bool 0','"GeomSkin/ImportMaterials/bImport" ;bool 0\n  "GeomSkin/ImportSkeletonAndAnimation" ;bool 0'))

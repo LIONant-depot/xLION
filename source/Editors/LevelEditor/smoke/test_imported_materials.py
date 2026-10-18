@@ -179,6 +179,7 @@ def test_each_material_of_the_model_becomes_a_pbr_instance_with_its_textures(pro
     lamp_albedo = by_folder[texture_of(instances["lamp"][1], 1)]
     assert "CUSTOM_CONSTANT" in lamp_albedo[1] and re.search(r'"Texture/SRGB"\s+;bool\s+0', lamp_albedo[1]), "a plain color is a linear constant texture"
     lamp_orme = by_folder[texture_of(instances["lamp"][1], 2)]
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"INTENSITY"', lamp_orme[1]), "the ORME is data (an intensity texture), not a color with alpha"
     assert re.search(r'Mixes\[G:3\]/Copy To"\s+;enum\s+"A"\s*\n\s*"Texture/Input/Mixes\[G:3\]/FileName"\s+;wstring\s+""\s*\n\s*"Texture/Input/Mixes\[G:3\]/Constant"\s+;f32\s+#3F800000', lamp_orme[1]), "an emissive color makes the material emit (ORME.a = 1)"
 
     # Shared: the flat-normal texture of the two materials without a normal map is one resource
@@ -208,6 +209,63 @@ def test_a_missing_texture_warns_and_the_material_still_gets_an_instance(project
     out = compile_geom(project)
     assert "stone_diff.png not found" in out
     assert "stone" in virtual(project, "MaterialInstance")
+
+
+def test_a_texture_next_to_the_model_under_a_copys_name_is_found(project):
+    """The model names stone_diff.png, the folder holds "stone_diff - Copy.png" (a file manager's copy): the last search finds it, it is not magenta."""
+    textures = project / "Assets/model/textures"
+    (textures / "stone_diff.png").rename(textures / "stone_diff - Copy.png")
+    out = compile_geom(project)
+    assert "stone_diff.png not found" not in out, out[-3000:]
+    assert "stone_diff.png found as" in out and "stone_diff - Copy.png" in out
+    assert "Missing texture" not in virtual(project, "Texture"), "no placeholder"
+
+
+def test_a_glossiness_map_is_the_roughness_upside_down(project):
+    """map_Ns is FBX's glossiness: the ORME takes it into G inverted (roughness = 1 - glossiness) instead of a constant."""
+    obj = project / "Assets/model"
+    png(obj / "textures/stone_gloss.png", (200, 200, 200, 255))
+    mtl = obj / "model.mtl"
+    mtl.write_text(mtl.read_text().replace("map_bump textures\\stone_ddn.png", "map_bump textures\\stone_ddn.png\nmap_Ns textures\\stone_gloss.png"))
+    compile_geom(project)
+    orme = virtual(project, "Texture")["stone_gloss (ORME)"][1]
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"INTENSITY"', orme), "the ORME is data (an intensity texture), not a color with alpha"
+    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+1', orme) and "stone_gloss.png" in orme, orme
+
+
+def test_a_map_the_model_does_not_name_is_found_next_to_its_color_map_by_name(project):
+    """stone_diff.png is the color map, stone_glossiness.png sits beside it and the model never names it: it is the roughness, upside down."""
+    png(project / "Assets/model/textures/stone_glossiness.png", (200, 200, 200, 255))
+    out = compile_geom(project)
+    assert "stone_glossiness.png" in out and "is not named by the model" in out, out[-3000:]
+    orme = virtual(project, "Texture")["stone_glossiness (ORME)"][1]
+    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+1', orme), orme
+
+
+def test_a_slot_with_only_constants_takes_the_map_once_there_is_one(project):
+    """The first compile has no roughness map: the ORME is constants. The map shows up next to the color map: the slot takes the new ORME (a slot with files stays, see the tests above)."""
+    compile_geom(project)
+    before = texture_of(virtual(project, "MaterialInstance")["stone"][1], 2)
+
+    png(project / "Assets/model/textures/stone_glossiness.png", (200, 200, 200, 255))
+    out = compile_geom(project)
+    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
+    after = texture_of(virtual(project, "MaterialInstance")["stone"][1], 2)
+    assert after == textures["stone_glossiness (ORME)"] != before, out[-3000:]
+    assert "its constant SamplerORME is found" in out
+
+
+def test_a_slot_whose_texture_is_gone_takes_the_new_one(project):
+    """The texture of a slot was deleted (removed as unused): the slot is a missing one, it takes what the import makes now."""
+    import shutil
+    compile_geom(project)
+    before = texture_of(virtual(project, "MaterialInstance")["stone"][1], 2)
+    shutil.rmtree(guid_folder(project / "Descriptors", "Texture", before))
+
+    png(project / "Assets/model/textures/stone_glossiness.png", (200, 200, 200, 255))
+    compile_geom(project)
+    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
+    assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 2) == textures["stone_glossiness (ORME)"]
 
 
 def test_with_the_import_off_nothing_is_made(project):
@@ -280,7 +338,9 @@ def test_a_missing_texture_is_magenta_until_it_is_found(project):
 def test_a_slot_the_user_pointed_at_another_texture_is_kept(project):
     compile_geom(project)
     instances = virtual(project, "MaterialInstance")
-    mine = "ABCDEF0123456789"                                         # a texture the geometry did not make
+    mine = "ABCDEF0123456789"                                         # a texture the geometry did not make (it exists: a texture that is gone is a missing one)
+    guid_folder(project / "Descriptors", "Texture", mine).mkdir(parents=True)
+    (guid_folder(project / "Descriptors", "Texture", mine) / "Descriptor.txt").write_text(HEADER)
     folder, text = instances["stone"]
     generated = texture_of(text, 1)
     path = descriptor_of(project, "MaterialInstance", folder)

@@ -186,13 +186,16 @@ namespace xeditor::scale_reference
         if (ImGui::IsItemHovered()) xeditor::hint::Text("Human scale reference (%s): a 1.8 m figure beside the mesh, to judge its size. It keeps its size when the mesh's Scale changes (the preview shows the Scale being edited before it is compiled). Every preview, remembered.", bOn ? "on" : "off");
     }
 
-    // A preview's figure, when the toggle is on: beside the box BoxMin..BoxMax (the mesh as the preview draws it), over the view's rectangle Min, Size
-    inline void DrawBesideBox(ImDrawList& DL, const xmath::fmat4& W2C, const xmath::fvec3& Eye, const ImVec2& Min, const ImVec2& Size, const xmath::fvec3& BoxMin, const xmath::fvec3& BoxMax) noexcept
+    // A preview's figure, when the toggle is on: beside the box BoxMin..BoxMax (the mesh as the preview draws it), over the view's rectangle Min, Size.
+    // ViewScale: a view that draws everything scaled (the Skeleton's "Resize to 1m") draws the figure scaled with it, so it keeps its size against the box
+    inline void DrawBesideBox(ImDrawList& DL, const xmath::fmat4& W2C, const xmath::fvec3& Eye, const ImVec2& Min, const ImVec2& Size, const xmath::fvec3& BoxMin, const xmath::fvec3& BoxMax, float ViewScale = 1.0f) noexcept
     {
         RegisterSettings();
-        if (!Shown()) return;
+        if (!Shown() || ViewScale <= 1.0e-9f) return;
         DL.PushClipRect(Min, ImVec2(Min.x + Size.x, Min.y + Size.y), true);
-        Draw(DL, BesideBox(BoxMin, BoxMax), Eye, clip_projector{ W2C, Min, Size });
+        const float          Inv = 1.0f / ViewScale;
+        const clip_projector Project{ W2C, Min, Size };
+        Draw(DL, BesideBox(BoxMin * Inv, BoxMax * Inv), Eye * Inv, [&](const xmath::fvec3& P, ImVec2& S) { return Project(P * ViewScale, S); });
         DL.PopClipRect();
     }
 }
