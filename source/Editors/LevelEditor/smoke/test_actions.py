@@ -131,7 +131,7 @@ def test_every_resource_editor_gets_the_editor_actions(editor, type_name):
             assert path in a and a[path][0] == keys, f"{type_name}: {path} -> {a.get(path)}; live: {sorted(a)}"
         assert a["Editor/Save"][1] == "no changes to save" and a["Editor/Undo"][1] == "nothing to undo"
         # each editor's own keys, besides the shared Editor/... ones
-        for path, keys in {"Texture": {"Texture/Preview/LightFollowsCamera": "L"}, "GeomStatic": {"GeomStatic/Preview/LightFollowsCamera": "F"}
+        for path, keys in {"Texture": {"Texture/Preview/LightFollowsCamera": "L"}, "GeomStatic": {"GeomStatic/Preview/LightFollowsCamera": "L"}
                            , "AnimPackage": {"AnimPackage/Preview/PlayPause": "P"}}.get(type_name, {}).items():
             assert path in a and a[path][0] == keys, f"{type_name}: {path} -> {a.get(path)}; live: {sorted(a)}"
     finally:
@@ -199,7 +199,7 @@ def test_a_3d_preview_declares_its_mouse_gestures(editor, type_name):
 
 def test_surfaces_declare_their_mouse_gestures(editor):
     """The Level's viewport and tree list what the mouse does on them (descriptions: the F1 view draws them on the mouse, the status line shows them)."""
-    g = editor.wait_for("ListGestures", r"Viewport\tWheel\tZoom", timeout=20)
+    g = editor.wait_for("ListGestures", r"Viewport\tWheel\tSpeed / Zoom", timeout=20)
     for line in ("Viewport\tLMB click\tSelect", "Viewport\tCtrl+LMB click\tAdd / remove", "Viewport\tRMB drag\tLook around",
                  "Viewport\tRMB drag + W A S D Q E\tFly", "Viewport\tMMB drag\tPan", "Level tree\tRMB click\tMenu"):
         assert line in g, f"missing {line!r} in: {g}"

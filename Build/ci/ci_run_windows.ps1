@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force $Results, $Base | Out-Null
 # the results folder is the job's workspace and outlives the run: what an earlier run left there must not be reported as this run's (a run that stopped at the build would
 # summarize the suite.xml of the last run that got to the tests). timing.log stays: the test timing keeps the previous one
 'suite.xml', 'suite_release.xml', 'summary.md', 'description.txt', 'status.txt', 'new_failures.txt', 'fixed.txt', 'failed_now.txt', 'timing.tsv', 'compile_wait.log', 'compile_editor.log', `
-    'compile_editor_err.log', 'changed.txt', 'manifest.txt', 'smoke_logs.tgz', 'sanitizer.md', 'sanitizer_status.txt', 'sanitizer_all.txt', 'sanitizer_new.txt', 'sanitizer_logs.tgz' |
+    'compile_editor_err.log', 'build_compilers.log', 'changed.txt', 'manifest.txt', 'smoke_logs.tgz', 'sanitizer.md', 'sanitizer_status.txt', 'sanitizer_all.txt', 'sanitizer_new.txt', 'sanitizer_logs.tgz' |
     ForEach-Object { Remove-Item (Join-Path $Results $_) -Force -ErrorAction SilentlyContinue }
 $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
 $BDir = if ($Sanitize) { 'xLION.vs2022-asan' } else { 'xLION.vs2022' }          # the build folder under Build\
@@ -158,6 +158,15 @@ $ok = Stage 'build' {
             Write-Host "copied $($dlls.Name -join ', ') to $Tree\Build\$BDir\$cfg"
         }
     }
+    # The resource compilers (one exe per plugin, run by the resource pipeline and by the tests) are separate CMake projects that Install.bat only builds when missing:
+    # without this a plugin change never reaches them on this tree (the Linux run builds them every time: the target xlion_compilers). Incremental: an unchanged one is not relinked.
+    foreach ($dir in Get-ChildItem "$Tree\example.lionprj\Cache\Plugins\*\build\*_compiler.vs2022" -Directory) {
+        foreach ($cfg in 'Debug', 'Release') {
+            cmake --build $dir.FullName --config $cfg --target $dir.Name.Replace('.vs2022', '') -- /m /nologo /v:m >> "$Results\build_compilers.log" 2>&1
+            if ($LASTEXITCODE -ne 0) { Write-Host "build of the $($dir.Name) compiler ($cfg) failed (see build_compilers.log)"; Copy-Item "$Results\build_compilers.log" "$Results\build.log" -Force; return $false }
+        }
+    }
+    Write-Host "resource compilers built: $((Get-ChildItem "$Tree\example.lionprj\Cache\Plugins\*\build\*_compiler.vs2022" -Directory).Count)"
     $true
 }
 if (-not $ok) { if (Test-Path "$Results\build.log") { Select-String -Path "$Results\build.log" -Pattern ' error ' | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line } }; Fail 'build failed' }

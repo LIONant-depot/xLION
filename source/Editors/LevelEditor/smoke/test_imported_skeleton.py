@@ -107,7 +107,9 @@ def test_the_edits_of_the_generated_skeleton_and_package_survive_a_recompile(pro
     skeleton, package = virtual(project, "Skeleton")[0] / "Descriptor.txt", virtual(project, "AnimPackage")[0] / "Descriptor.txt"
     skeleton_guid = skeleton.parent.name.removesuffix(".desc")
 
-    skeleton.write_text(skeleton.read_text().replace('"Skeleton/PreTransform/Scale/X"              ;f32     #3F800000', '"Skeleton/PreTransform/Scale/X"              ;f32     #40000000'))
+    text, n = re.subn(r'("Skeleton/PreTransform/Scale/X"\s+;f32\s+)#3F800000', r"\1#40000000", skeleton.read_text())     # the columns are as wide as the longest name: not a fixed text
+    assert n == 1, "the generated skeleton has the default scale"
+    skeleton.write_text(text)
     package.write_text(re.sub(r'("AnimPackage/SkeletonRef"\s+;full_guid\s+)#[0-9A-F]+', r"\1#1234", package.read_text()))
     skeleton_stamp = skeleton.stat().st_mtime_ns
 
