@@ -37,7 +37,8 @@ namespace xeditor
         static constexpr int s_CellPixels = 128;
         static constexpr int s_Cols       = 8;
         static constexpr int s_Rows       = 8;
-        static constexpr int s_MaxCells   = s_Cols * s_Rows;   // 64 - grown to a second page only if this genuinely isn't enough
+        static constexpr int s_MaxCells   = s_Cols * s_Rows;   // 64 a page (a 1024x1024 texture of its own); more pages as more are on the screen
+        static constexpr int s_MaxPages   = 16;                 // 1024 thumbnails, 64 MB
 
         // The sharded on-disk cache path for one resource, mirroring Descriptors' own
         // <lowbyte>/<2ndbyte>/<hex>  scheme (xresource_editor_asset_mgr.h's NewAsset) - both instance and type in the
@@ -71,7 +72,8 @@ namespace xeditor
             {
                 m_Order.remove(Guid);
                 m_Order.push_front(Guid);
-                return CellRef(It->second);
+                It->second.m_LastFrame = ImGui::GetFrameCount();
+                return CellRef(It->second.m_Index);
             }
 
             if (m_InFlight.contains(Guid)) { PollInFlight(Device); return {}; }
@@ -118,7 +120,7 @@ namespace xeditor
 
             if (auto It = m_Cells.find(Guid); It != m_Cells.end())
             {
-                m_FreeCells.push_back(It->second);
+                m_FreeCells.push_back(It->second.m_Index);
                 m_Order.remove(Guid);
                 m_Cells.erase(It);
             }
@@ -219,7 +221,8 @@ namespace xeditor
 
         xresource_editor::plugin_icon_ref CellRef(int Cell) noexcept
         {
-            const int cx = Cell % s_Cols, cy = Cell / s_Cols;
+            const int Local = Cell % s_MaxCells;
+            const int cx = Local % s_Cols, cy = Local / s_Cols;
             const float U = 1.0f / s_Cols, V = 1.0f / s_Rows;
             // plugin_icon_ref::m_pTexture must be a pointer to the PUBLIC xgpu::texture wrapper (matching
             // xresource_editor_asset_browser.h's own m_IconAtlasGPUHandle convention: "shared_ptr<xgpu::texture> ->
@@ -228,7 +231,7 @@ namespace xeditor
             // level here was a real, confirmed bug: the browser's ImageWithBg call reinterpreted whatever
             // bytes happen to sit at vulkan::texture's own layout as if they were xgpu::texture's
             // shared_ptr, producing a garbage-but-build-consistent VkImageView and crashing the app.
-            return { &m_AtlasTexture, cx * U, cy * V, (cx + 1) * U, (cy + 1) * V };
+            return { m_Pages[Cell / s_MaxCells].get(), cx * U, cy * V, (cx + 1) * U, (cy + 1) * V };
         }
 
         static bool Ok(xgpu::device::error* pErr) noexcept
@@ -240,47 +243,59 @@ namespace xeditor
 
         void EnsureAtlas(xgpu::device& Device) noexcept
         {
-            if (m_AtlasTexture.m_Private) return;
+            if (m_Pages.empty()) (void)AddPage(Device);
+        }
+
+        // One more page of s_MaxCells cells (a texture of its own: a cell is a page and a place in it, Cell / s_MaxCells and Cell % s_MaxCells)
+        bool AddPage(xgpu::device& Device) noexcept
+        {
+            if (m_Pages.size() >= s_MaxPages) return false;
+            auto pPage = std::make_unique<xgpu::texture>();
             // sRGB (m_isGamma - default true, matching the existing plugin-icon atlas, which never overrides
             // it): this atlas is sampled straight for on-screen display, same as that one, not read back into
             // a shader computation - a UNORM/linear atlas would show visibly washed-out colors next to the
             // type-icon atlas it sits beside in the same browser row.
-            (void)Ok(Device.Create(m_AtlasTexture, { .m_Format = xgpu::texture::format::R8G8B8A8_UNORM
-                , .m_Width = s_Cols * s_CellPixels, .m_Height = s_Rows * s_CellPixels, .m_isGamma = true }));
-            for (int i = s_MaxCells - 1; i >= 0; --i) m_FreeCells.push_back(i);
+            if (!Ok(Device.Create(*pPage, { .m_Format = xgpu::texture::format::R8G8B8A8_UNORM
+                , .m_Width = s_Cols * s_CellPixels, .m_Height = s_Rows * s_CellPixels, .m_isGamma = true }))) return false;
+            const int Base = static_cast<int>(m_Pages.size()) * s_MaxCells;
+            m_Pages.push_back(std::move(pPage));
+            for (int i = s_MaxCells - 1; i >= 0; --i) m_FreeCells.push_back(Base + i);
+            return true;
         }
 
-        // Claims a cell for Guid, evicting the least-recently-used one if the atlas is full.
-        int ClaimCell(xresource::full_guid Guid) noexcept
+        // Claims a cell: a free one; else the least recently used one, when it was not drawn in this frame or the last; else a new page's. One on the
+        // screen is never evicted while a page can be added: the browser asks for every thumbnail it shows each frame, so with more on the screen than
+        // cells, evicting the least recently used evicts the next one asked for (none ever stays: all show their type icon, each frame loads them from
+        // disk again), and the one evicted is drawn this frame with the new picture of its cell. -1: none (all pages full and on the screen).
+        int ClaimCell(xgpu::device& Device) noexcept
         {
-            if (!m_FreeCells.empty())
+            if (m_FreeCells.empty())
             {
-                const int Cell = m_FreeCells.back();
-                m_FreeCells.pop_back();
-                return Cell;
-            }
-            // Evict the least recently used resident (the back of m_Order that still owns a cell).
-            for (auto It = m_Order.rbegin(); It != m_Order.rend(); ++It)
-            {
-                if (auto Found = m_Cells.find(*It); Found != m_Cells.end())
+                const auto Lru = m_Order.empty() ? m_Cells.end() : m_Cells.find(m_Order.back());
+                if (Lru != m_Cells.end() && (Lru->second.m_LastFrame < ImGui::GetFrameCount() - 1 || !AddPage(Device)))
                 {
-                    const int Cell = Found->second;
-                    m_Cells.erase(Found);
-                    m_Order.erase(std::next(It).base());
+                    const int Cell = Lru->second.m_Index;
+                    m_Cells.erase(Lru);
+                    m_Order.pop_back();
                     return Cell;
                 }
+                if (m_FreeCells.empty()) return -1;
             }
-            return 0;   // unreachable once the atlas has ever been populated - s_MaxCells is never 0
+            const int Cell = m_FreeCells.back();
+            m_FreeCells.pop_back();
+            return Cell;
         }
 
         void InsertBitmap(xgpu::device& Device, xresource::full_guid Guid, const xbitmap& Bmp) noexcept
         {
             if (Bmp.getWidth() != s_CellPixels || Bmp.getHeight() != s_CellPixels || Bmp.getFormat() != xbitmap::format::R8G8B8A8) return;
-            const int Cell = ClaimCell(Guid);
-            const int cx = (Cell % s_Cols) * s_CellPixels, cy = (Cell / s_Cols) * s_CellPixels;
+            const int Cell = ClaimCell(Device);
+            if (Cell < 0) return;
+            const int Local = Cell % s_MaxCells;
+            const int cx = (Local % s_Cols) * s_CellPixels, cy = (Local / s_Cols) * s_CellPixels;
             auto Pixels = Bmp.getMip<xcolori>(0);   // std::span<const xcolori> already - Bmp is const
-            (void)Ok(Device.UpdateTexture(m_AtlasTexture, cx, cy, s_CellPixels, s_CellPixels, std::as_bytes(Pixels)));
-            m_Cells[Guid] = Cell;
+            (void)Ok(Device.UpdateTexture(*m_Pages[Cell / s_MaxCells], cx, cy, s_CellPixels, s_CellPixels, std::as_bytes(Pixels)));
+            m_Cells[Guid] = { Cell, ImGui::GetFrameCount() };
             m_Order.push_front(Guid);
         }
 
@@ -370,8 +385,9 @@ namespace xeditor
         }
 
         xgpu::window*                                                            m_pWindow = nullptr;
-        xgpu::texture                                                            m_AtlasTexture;
-        std::unordered_map<xresource::full_guid, int>                            m_Cells;         // guid -> cell index
+        struct cell { int m_Index; int m_LastFrame; };                          // m_LastFrame: the last frame it was asked for (drawn) in
+        std::vector<std::unique_ptr<xgpu::texture>>                              m_Pages;         // the atlas pages (unique_ptr: a plugin_icon_ref points at one)
+        std::unordered_map<xresource::full_guid, cell>                           m_Cells;         // guid -> its cell
         std::list<xresource::full_guid>                                          m_Order;         // most-recently-used first
         std::vector<int>                                                         m_FreeCells;
         std::unordered_map<xresource::full_guid, in_flight>                      m_InFlight;
