@@ -24,6 +24,11 @@ $GitBase = if ($env:GIT_BASE) { $env:GIT_BASE } else { 'https://github.com/LIONa
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Base = Split-Path -Parent $Tree
 New-Item -ItemType Directory -Force $Results, $Base | Out-Null
+# the results folder is the job's workspace and outlives the run: what an earlier run left there must not be reported as this run's (a run that stopped at the build would
+# summarize the suite.xml of the last run that got to the tests). timing.log stays: the test timing keeps the previous one
+'suite.xml', 'suite_release.xml', 'summary.md', 'description.txt', 'status.txt', 'new_failures.txt', 'fixed.txt', 'failed_now.txt', 'timing.tsv', 'compile_wait.log', 'compile_editor.log', `
+    'compile_editor_err.log', 'changed.txt', 'manifest.txt', 'smoke_logs.tgz', 'sanitizer.md', 'sanitizer_status.txt', 'sanitizer_all.txt', 'sanitizer_new.txt', 'sanitizer_logs.tgz' |
+    ForEach-Object { Remove-Item (Join-Path $Results $_) -Force -ErrorAction SilentlyContinue }
 $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
 $BDir = if ($Sanitize) { 'xLION.vs2022-asan' } else { 'xLION.vs2022' }          # the build folder under Build\
 $sgNow = [System.TimeZoneInfo]::ConvertTime((Get-Date), [System.TimeZoneInfo]::FindSystemTimeZoneById('Singapore Standard Time'))
@@ -48,9 +53,16 @@ function Write-Manifest {                                 # "<commit> <repo>" fo
 }
 function Finish {
     Write-Manifest
+    $stopped = (Test-Path "$Results\status.txt") -and ((Get-Content "$Results\status.txt" -Raw).Trim() -eq 'FAILED')     # the run stopped before the tests (Fail): that is its verdict, not a test report
     $py = if (Test-Path "$Base\venv\Scripts\python.exe") { "$Base\venv\Scripts\python.exe" } else { 'python' }
     & $py "$Here\summarize.py" --junit "$Results\suite.xml" --out $Results --tier $Tier --known "$Here\known_failures_windows.txt" `
         --changed "$Results\changed.txt" --stages $Stages --title "xLION windows $Tier run $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" *> $null
+    if ($stopped) {
+        $at = Get-Content $Stages | Where-Object { $_ -match "`t" -and ($_ -split "`t")[2] -ne 'ok' } | Select-Object -First 1 | ForEach-Object { $f = $_ -split "`t"; "$($f[0]) $($f[2])" }
+        'FAILED' | Set-Content "$Results\status.txt"
+        "The run stopped before the tests: $(if ($at) { $at } else { 'see the console log' })" | Set-Content "$Results\description.txt"
+        "# The run stopped before the tests`n`n$(if ($at) { $at } else { 'The reason is in the console log' }). No test ran: see the build logs and the console log." | Set-Content "$Results\summary.md"
+    }
     $buildFailed = [bool](Select-String -Path $Stages -Pattern "^(update repos|build)`t.*`tFAILED" -Quiet)
     if ($Sanitize -and -not $buildFailed) {             # the verdict of a sanitizer run is its findings (a run whose update or build FAILED stays FAILED)
         $bl = "$Here\sanitizer_baseline_windows$(if ($SanCfg -eq 'Release') { '_release' }).txt"
@@ -114,9 +126,10 @@ $ok = Stage 'build' {
         $sha = [Security.Cryptography.SHA256]::Create()
         [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($list -join "`n")))) -replace '-', ''
     }
-    function Get-Stamp { "v3 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null) $(Get-CMakeInputs)$(if ($Sanitize) { ' asan' })" }
+    function Get-Stamp { "v4 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null) $(Get-CMakeInputs)$(if ($Sanitize) { ' asan' })" }
     if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
         Push-Location "$Tree\Build"; $sanArgs = if ($Sanitize) { @('-DXLION_SANITIZE=ON', "-DCMAKE_PROJECT_xLION_INCLUDE=$($Here -replace '\\', '/')/msvc_asan.cmake") } else { @() }
+        $sanArgs += '-DXLION_ECS_LINK_GATE=ON'         # the target xLION_ecs_gate (EXCLUDE_FROM_ALL: only test_ecs_gate.py builds it); without it the link gate test fails with "the target does not exist"
         cmake ../ -G 'Visual Studio 17 2022' -A x64 -B $BDir @sanArgs 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }

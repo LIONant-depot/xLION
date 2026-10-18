@@ -60,6 +60,10 @@ fi
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # helpers
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# the results folder is the job's workspace and outlives the run: what an earlier run left there must not be reported as this run's (a run that stopped at the build
+# summarized the suite.xml of the last run that got to the tests and showed its counts as its own). timing.log stays: the test timing keeps the previous one
+rm -f "$RESULTS"/{suite.xml,summary.md,description.txt,status.txt,new_failures.txt,fixed.txt,failed_now.txt,timing.tsv,build.log,compile_wait.log,compile_editor.log,changed.txt,manifest.txt} \
+      "$RESULTS"/{smoke_logs.tgz,sanitizer.md,sanitizer_status.txt,sanitizer_all.txt,sanitizer_new.txt,sanitizer_logs.tgz}
 : > "$STAGES"
 source "$HERE/watch.sh"
 stage_run() {                                   # stage_run <name> <command...>: runs it, records the time and the result in stages.tsv
@@ -73,9 +77,16 @@ stage_run() {                                   # stage_run <name> <command...>:
   return $rc
 }
 finish() {                                      # always: the summary, whatever happened
-  local junit="$RESULTS/suite.xml"
+  local junit="$RESULTS/suite.xml" stopped=0
+  [ "$(cat "$RESULTS/status.txt" 2>/dev/null)" = FAILED ] && stopped=1    # the run stopped before the tests (lock, update, build, python): that is its verdict, not a test report
   python3 "$HERE/summarize.py" --junit "$junit" --out "$RESULTS" --tier "$TIER" --known "$HERE/known_failures_linux$([ "$CONFIG" = Release ] && echo _release).txt" \
     --timing "$RESULTS/timing.tsv" --changed "$RESULTS/changed.txt" --stages "$STAGES" --title "xLION $TIER $CONFIG run $(date '+%F %T %z')" > /dev/null 2>&1 || true
+  if [ $stopped = 1 ]; then
+    local at; at=$(awk -F'\t' '$3 != "ok" { print $1 " " $3; exit }' "$STAGES" 2>/dev/null)
+    echo "FAILED" > "$RESULTS/status.txt"
+    echo "The run stopped before the tests: ${at:-see the console log}" > "$RESULTS/description.txt"
+    printf '# The run stopped before the tests\n\n%s. No test ran: see build.log and the console log.\n' "${at:-The reason is in the console log}" > "$RESULTS/summary.md"
+  fi
   clean_project 2>/dev/null || true
   if [ "$SAN" = 1 ] && ! grep -q -E "^(update repos|build)"$'\t'".*"$'\t'"(FAILED|STALLED)" "$STAGES" 2>/dev/null; then    # the verdict of a sanitizer run is its findings (a run whose update or build failed stays FAILED)
     python3 "$HERE/sanitize_report.py" --logs "$RESULTS/sanitizer" --out "$RESULTS" --baseline "$BASELINE" || true
@@ -207,7 +218,8 @@ wait_compiles() {
     [ $idle -ge 3 ] && break
     sleep 10
   done
-  echo "compile queue idle after $(( $(date +%s) - start )) s ($polls polls)" | tee -a "$log"
+  if [ $idle -ge 3 ]; then echo "compile queue idle after $(( $(date +%s) - start )) s ($polls polls)"
+  else echo "the compile queue was NOT idle after $(( $(date +%s) - start )) s ($polls polls, the cap is $cap s)"; fi | tee -a "$log"
   timeout 60 "$BIN/xeditorcli" Exit > /dev/null 2>&1
   for i in $(seq 1 120); do kill -0 $ed 2>/dev/null || break; sleep 1; done
   kill -9 $ed 2>/dev/null
