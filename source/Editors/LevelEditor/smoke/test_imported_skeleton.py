@@ -149,3 +149,56 @@ def test_a_skin_that_does_not_import_has_no_generated_resources_and_needs_its_ow
     assert "[COMPILATION_SUCCESS]" not in run.stdout + run.stderr, "no skeleton: the skin does not compile"
     assert "skeleton reference is NULL" in run.stdout + run.stderr
     assert virtual(project, "Skeleton") == [] and virtual(project, "AnimPackage") == [], "and nothing was generated"
+
+
+def _vec(text: str, pattern: str) -> list[float]:
+    m = re.search(pattern + r" (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)", text)
+    assert m, f"no {pattern!r} in the compile log: {text[-2000:]}"
+    return [float(v) for v in m.groups()]
+
+
+def _compile_skin_and_skeleton(prj: Path, skin: str) -> dict:
+    """The skin, then its skeleton (the pipeline's order): where the mesh is and where the joints of the bind pose are, from the two compile logs."""
+    mesh = compile_one(prj, "xgeom_skin", skin)
+    skeleton = virtual(prj, "Skeleton")[0]
+    joints = compile_one(prj, "xskeleton", "Descriptors\\" + str(skeleton.relative_to(prj / "Descriptors")))
+    return {"mesh_size": _vec(mesh, r"\] Size"), "mesh_center": _vec(mesh, r"\] Center"),
+            "joint_size": _vec(joints, r"Joints \d+ Size"), "joint_center": _vec(joints, r"Center")}
+
+
+def test_the_skin_follows_the_pretransform_of_its_generated_skeleton_and_editing_it_back_restores_it(project):
+    """The skeleton is the master: its PreTransform moves the bind poses (the Skeleton compiler) and the vertices (the skin compiler) the same way, so the
+    skin stays on its bones. Scale 2, 90 degrees about Y and 1 m up: both boxes double, swap X and Z, and rise by 1; the skin's dependencies name the
+    skeleton's descriptor (an edit of it compiles the skin again); the edit is the user's (the skin's compile keeps it); and editing it back gives the
+    original boxes."""
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    before = _compile_skin_and_skeleton(project, skin)
+    skeleton = virtual(project, "Skeleton")[0] / "Descriptor.txt"
+    original = skeleton.read_text()
+    deps = next((project / "Cache/Resources/Logs/GeomSkin").rglob("dependencies.txt")).read_text().replace("\\\\", "/").lower()
+    assert str(skeleton.relative_to(project)).replace("\\", "/").lower() in deps, "the skin compiles again when its skeleton's descriptor changes"
+
+    edited, values = original, (("Scale/X", "40000000"), ("Scale/Y", "40000000"), ("Scale/Z", "40000000"), ("Rotation/Y", "42B40000"), ("Translation/Y", "3F800000"))
+    for name, value in values:
+        edited, n = re.subn(rf'("Skeleton/PreTransform/{name}"\s+;f32\s+)#[0-9A-F]+', rf"\g<1>#{value}", edited)
+        assert n == 1, name
+    skeleton.write_text(edited)
+    after = _compile_skin_and_skeleton(project, skin)
+    kept = skeleton.read_text()                                       # (its columns may be aligned again: the values are what counts)
+    assert all(re.search(rf'"Skeleton/PreTransform/{name}"\s+;f32\s+#{value}\b', kept) for name, value in values), "the skin's compile keeps the user's PreTransform"
+
+    def close(a, b, what):
+        assert all(abs(x - y) <= 1e-3 + 1e-3 * abs(y) for x, y in zip(a, b)), f"{what}: {a} != {b}"
+    for box in ("mesh", "joint"):
+        sx, sy, sz = before[f"{box}_size"]
+        close(after[f"{box}_size"], [2 * sz, 2 * sy, 2 * sx], f"the {box} box doubles and turns a quarter about Y")
+        close([after[f"{box}_center"][1]], [2 * before[f"{box}_center"][1] + 1], f"the {box} box rises by 1 after its scale")
+    # the skin stays on its bones: the offset between the two boxes turns and scales with them
+    d0 = [m - j for m, j in zip(before["mesh_center"], before["joint_center"])]
+    d1 = [m - j for m, j in zip(after["mesh_center"], after["joint_center"])]
+    close([abs(d1[0]), d1[1], abs(d1[2])], [2 * abs(d0[2]), 2 * d0[1], 2 * abs(d0[0])], "the mesh keeps its place on the joints")
+
+    skeleton.write_text(original)
+    restored = _compile_skin_and_skeleton(project, skin)
+    for k in before:
+        close(restored[k], before[k], f"editing it back restores the {k}")
