@@ -113,6 +113,12 @@ $ok = Stage 'build' {
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
         Set-Content $Marker (Get-Stamp)
     }
+    # The marker covers the pinned third party only. A CMakeLists.txt that changed in any repo (an include directory, a source) is CMake's own check, ZERO_CHECK,
+    # which a build of xLION.sln /t:xLION does not run: without this the projects stayed as the last configure made them (xLIONRender without the include
+    # directory dependencies\xGPU it got on Oct 13: "Cannot open include file: 'source/xGPU.h'"). It configures again only when an input of CMake changed.
+    $zcCfg = if ($Sanitize) { $SanCfg } else { 'Debug' }
+    cmake --build "$Tree\Build\$BDir" --target ZERO_CHECK --config $zcCfg 2>&1 | Tee-Object -FilePath "$Results\regenerate.log" | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) { Write-Host 'cmake regenerate (ZERO_CHECK) failed (see regenerate.log)'; return $false }
     $buildCfgs = if ($Sanitize) { @($SanCfg) } else { @('Debug', 'Release') }
     foreach ($cfg in $buildCfgs) {                         # both are the standard builds: both are built, the tests run on Debug (the sanitizer run: its one configuration)
         $out = "$Results\build_${cfg}_console.log"
