@@ -4,7 +4,7 @@
 
 // The toolbar of a 3D viewport, the same one the Level editor has (dependencies/toolbar.imgui: a bar the user drags to any edge of the viewport or leaves floating,
 // remembered in the ImGui settings), with the buttons of the camera (xeditor_tools_camera.h). Today one button: the mode, Orbit or Fly (a click is F). More
-// buttons go in CameraButtons.
+// buttons go in CameraButtons; an editor's own buttons go after them (Render with Extra).
 //
 // An editor holds one camera_toolbar per viewport, calls Init once (a unique id: the guid of its resource) and draws its viewport through Render:
 //      m_CameraToolbar.Render(ImGui::GetContentRegionAvail(), m_Camera /* xeditor_tools::camera_state */, [this] { RenderViewportBody(); });
@@ -31,11 +31,12 @@ namespace xeditor
         camera_toolbar& operator = (const camera_toolbar&) = delete;
         ~camera_toolbar() noexcept { if (m_bHandler && ImGui::GetCurrentContext()) ImGui::RemoveSettingsHandler(m_HandlerName); }
 
-        // Id: unique among the editors that are open (the guid of the resource); the toolbar keeps its place under that name
-        void Init(std::uint64_t Id) noexcept
+        // Id: unique among the editors that are open (the guid of the resource); the toolbar keeps its place under that name. Width, Length: its size along the edge
+        // when horizontal and when vertical (more than the camera's when an editor adds buttons, see Render)
+        void Init(std::uint64_t Id, float Width = 190.0f, float Length = 120.0f) noexcept
         {
             m_Host.m_Items.push_back({ "Camera", ximgui::toolbar::toolbar_host_edge::Top, ximgui::toolbar::axis::Horizontal
-                                     , ImVec2(190.0f, kHeight), ImVec2(32.0f, 120.0f), ImVec2(24.0f, 40.0f) });
+                                     , ImVec2(Width, kHeight), ImVec2(32.0f, Length), ImVec2(24.0f, 40.0f) });
             if (!ImGui::GetCurrentContext()) return;
             std::snprintf(m_HandlerName, sizeof(m_HandlerName), "CameraToolbar%016llX", static_cast<unsigned long long>(Id));
             if (ImGui::FindSettingsHandler(m_HandlerName) == nullptr)
@@ -80,6 +81,22 @@ namespace xeditor
         void Render(const ImVec2& Avail, xeditor_tools::camera_state& Camera, BODY&& Body) noexcept
         {
             ximgui::toolbar::RenderToolbarHost(m_Host, Avail, [&](const char*, ximgui::toolbar::axis Axis) { CameraButtons(Camera, Axis); }, std::forward<BODY>(Body));
+        }
+
+        // With the editor's own buttons after the camera's: Extra(bHorizontal, ButtonHeight) draws them (each puts its own SameLine first when horizontal)
+        template<typename BODY, typename EXTRA>
+        void Render(const ImVec2& Avail, xeditor_tools::camera_state& Camera, BODY&& Body, EXTRA&& Extra) noexcept
+        {
+            ximgui::toolbar::RenderToolbarHost(m_Host, Avail, [&](const char*, ximgui::toolbar::axis Axis)
+            {
+                CameraButtons(Camera, Axis);
+                const bool bHorizontal = Axis == ximgui::toolbar::axis::Horizontal;
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, ImGui::GetStyle().ItemSpacing.y));
+                if (bHorizontal) { ImGui::SameLine(); ImGui::TextDisabled("|"); }
+                else ImGui::Separator();
+                Extra(bHorizontal, bHorizontal ? kHeight - 4.0f : 28.0f);
+                ImGui::PopStyleVar();
+            }, std::forward<BODY>(Body));
         }
     };
 }

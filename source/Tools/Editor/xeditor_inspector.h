@@ -57,7 +57,7 @@ namespace xeditor
     // saved with the object's next save. Every inspector_panel has it (the resource editors' Descriptor panels).
     inline void WireScaleLockToggle(xproperty::inspector& Inspector) noexcept
     {
-        Inspector.m_OnLeftColumnAppend.Register<+[](xproperty::inspector&, const xproperty::type::object& Obj, void* pInstance, std::string_view Path)
+        Inspector.m_OnLeftColumnAppend.Register<+[](xproperty::inspector& Inspector, const xproperty::type::object& Obj, void* pInstance, std::string_view Path)
         {
             constexpr std::string_view scale_v = "/Scale";
             if (!Path.ends_with(scale_v)) return;
@@ -73,7 +73,8 @@ namespace xeditor
                 xproperty::sprop::collector(pInstance, Obj, Context, [&](const char* pName, xproperty::any&& Value, const xproperty::type::members&, bool, const void*) noexcept
                 {
                     if (std::string_view(pName).ends_with("/EditorLockScale") && Value.is<bool>()) ItObj->second.emplace(pName, Value.get<bool>());
-                });
+                }, false
+                , [&](const char* pListPath, std::size_t Count, const xproperty::type::members& Member) { return Inspector.getListWalk(pListPath, Count, Member); });  // a folded list has no Scale row shown
             }
 
             const std::string LockPath = std::string(Path.substr(0, Path.size() - scale_v.size())) + "/EditorLockScale";
