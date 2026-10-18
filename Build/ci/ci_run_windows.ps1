@@ -105,7 +105,16 @@ $ok = Stage 'build' {
     # ImGui sources: the link then fails with hundreds of unresolved ImGui:: symbols), which is not a configured tree.
     $Marker = "$Tree\Build\$BDir\.configured_ok"
     # the marker holds what the configure was made with: the pinned third party commits and the xcmake_tools commit. A change of either means the configure runs again (it fetches the pinned commits and patches them).
-    function Get-Stamp { "v2 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null)$(if ($Sanitize) { ' asan' })" }
+    # It also holds the CMake files of our own repos (the blob ids git already has, so nothing is read): xcmake_tools' Common.cmake sets CMAKE_SUPPRESS_REGENERATION, there is
+    # no ZERO_CHECK, so a CMakeLists.txt that changed (xLIONRender got the include directory dependencies\xGPU on Oct 13) only reaches the projects by a configure. Without it
+    # the projects stayed as the configure of Oct 11 made them: "Cannot open include file: 'source/xGPU.h'".
+    function Get-CMakeInputs {
+        $repos = @($Tree, "$Tree\example.lionprj") + @(Get-ChildItem "$Tree\example.lionprj\Cache\dependencies", "$Tree\example.lionprj\Cache\Plugins" -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
+        $list = $repos | Where-Object { Test-Path "$_\.git" } | ForEach-Object { git -C $_ ls-files -s -- '*CMakeLists.txt' '*.cmake' 2>$null }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($list -join "`n")))) -replace '-', ''
+    }
+    function Get-Stamp { "v3 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null) $(Get-CMakeInputs)$(if ($Sanitize) { ' asan' })" }
     if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
         Push-Location "$Tree\Build"; $sanArgs = if ($Sanitize) { @('-DXLION_SANITIZE=ON', "-DCMAKE_PROJECT_xLION_INCLUDE=$($Here -replace '\\', '/')/msvc_asan.cmake") } else { @() }
         cmake ../ -G 'Visual Studio 17 2022' -A x64 -B $BDir @sanArgs 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
@@ -113,12 +122,6 @@ $ok = Stage 'build' {
         if ($rc -ne 0) { Write-Host 'cmake configure failed (see the last lines above; a symbolic link error means Developer Mode is off on the PC)'; return $false }
         Set-Content $Marker (Get-Stamp)
     }
-    # The marker covers the pinned third party only. A CMakeLists.txt that changed in any repo (an include directory, a source) is CMake's own check, ZERO_CHECK,
-    # which a build of xLION.sln /t:xLION does not run: without this the projects stayed as the last configure made them (xLIONRender without the include
-    # directory dependencies\xGPU it got on Oct 13: "Cannot open include file: 'source/xGPU.h'"). It configures again only when an input of CMake changed.
-    $zcCfg = if ($Sanitize) { $SanCfg } else { 'Debug' }
-    cmake --build "$Tree\Build\$BDir" --target ZERO_CHECK --config $zcCfg 2>&1 | Tee-Object -FilePath "$Results\regenerate.log" | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) { Write-Host 'cmake regenerate (ZERO_CHECK) failed (see regenerate.log)'; return $false }
     $buildCfgs = if ($Sanitize) { @($SanCfg) } else { @('Debug', 'Release') }
     foreach ($cfg in $buildCfgs) {                         # both are the standard builds: both are built, the tests run on Debug (the sanitizer run: its one configuration)
         $out = "$Results\build_${cfg}_console.log"
