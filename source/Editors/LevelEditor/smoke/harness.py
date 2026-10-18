@@ -110,6 +110,16 @@ def vulkan_messages_from_text(text: str) -> tuple[dict, dict]:
     return errors, warnings
 
 
+
+def _allow_ptrace_by_parent() -> None:
+    """In the editor's process before its exec: with kernel.yama.ptrace_scope 1 only an ancestor may attach, and gdb is the harness's child, not the
+    editor's ancestor; PR_SET_PTRACER names the harness, whose children may then attach (the hang dump). Best effort: nothing else depends on it."""
+    try:
+        ctypes.CDLL(None).prctl(0x59616D61, os.getppid(), 0, 0, 0)
+    except Exception:
+        pass
+
+
 class EditorCrashed(RuntimeError):
     pass
 
@@ -161,6 +171,20 @@ class Editor:
     def exit_code(self) -> Optional[int]:
         return None if self.proc is None else self.proc.poll()
 
+
+    def _dump_hang_stacks(self) -> None:
+        """Linux: every thread's stack of a wedged editor, before it is killed, next to its log (editor_N.hang.txt, in smoke_logs.tgz). Never in the way of the kill."""
+        if os.name == "nt" or os.environ.get("XLION_TEST_GDB"):
+            return
+        out = self.log_dir / f"editor_{self.launches}.hang.txt"
+        if not shutil.which("gdb"):
+            out.write_text("no gdb: no stacks of the hang\n")
+            return
+        try:
+            run = subprocess.run(["gdb", "-q", "-batch", "-p", str(self.proc.pid), "-ex", "thread apply all bt"], capture_output=True, text=True, timeout=90)
+            out.write_text(run.stdout + run.stderr)
+        except (OSError, subprocess.SubprocessError) as e:
+            out.write_text(f"gdb could not dump the stacks: {e}\n")
     def start(self, ready_timeout: float = 120.0) -> None:
         if not self.exe.is_file():
             raise FileNotFoundError(f"editor exe not found: {self.exe} (build xLION or pass --exe)")
@@ -187,7 +211,7 @@ class Editor:
         if os.name != "nt" and os.environ.get("XLION_TEST_GDB") and shutil.which("gdb"):
             # Linux: run the editor under gdb so a crash leaves its backtrace in the editor log (there is no crash handler writing LevelEditor.trace.log)
             argv = ["gdb", "-q", "-batch", "-ex", "handle SIGPIPE nostop noprint", "-ex", "run", "-ex", "bt 30", "--args", *argv]
-        self.proc = subprocess.Popen(argv, cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT,
+        self.proc = subprocess.Popen(argv, cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT, preexec_fn=None if os.name == "nt" else _allow_ptrace_by_parent,
                                      env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XEDITOR_VIRTUAL_INPUT": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
             deadline = time.monotonic() + ready_timeout
@@ -333,6 +357,7 @@ class Editor:
             if isinstance(e, TimeoutError):
                 # Alive but answering nothing: it is wedged. Left running, every later test would wait out its own timeout against it (the run stalled for an hour that way):
                 # it is killed, this test fails with the reason, and the next one starts a fresh editor.
+                self._dump_hang_stacks()
                 self.proc.kill()
                 self.proc.wait(timeout=10)
                 raise EditorCrashed(f"editor did not answer {line!r} within {timeout}s (hung): killed, the next test gets a new one") from e
