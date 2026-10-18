@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force $Results, $Base | Out-Null
 # the results folder is the job's workspace and outlives the run: what an earlier run left there must not be reported as this run's (a run that stopped at the build would
 # summarize the suite.xml of the last run that got to the tests). timing.log stays: the test timing keeps the previous one
 'suite.xml', 'suite_release.xml', 'summary.md', 'description.txt', 'status.txt', 'new_failures.txt', 'fixed.txt', 'failed_now.txt', 'timing.tsv', 'compile_wait.log', 'compile_editor.log', `
-    'compile_editor_err.log', 'build_compilers.log', 'changed.txt', 'manifest.txt', 'smoke_logs.tgz', 'sanitizer.md', 'sanitizer_status.txt', 'sanitizer_all.txt', 'sanitizer_new.txt', 'sanitizer_logs.tgz' |
+    'compile_editor_err.log', 'build.log', 'build_compilers.log', 'changed.txt', 'manifest.txt', 'smoke_logs.tgz', 'sanitizer.md', 'sanitizer_status.txt', 'sanitizer_all.txt', 'sanitizer_new.txt', 'sanitizer_logs.tgz' |
     ForEach-Object { Remove-Item (Join-Path $Results $_) -Force -ErrorAction SilentlyContinue }
 $Stages = Join-Path $Results 'stages.tsv'; '' | Set-Content $Stages
 $BDir = if ($Sanitize) { 'xLION.vs2022-asan' } else { 'xLION.vs2022' }          # the build folder under Build\
@@ -128,7 +128,7 @@ $ok = Stage 'build' {
     }
     function Get-Stamp { "v4 $((Get-FileHash "$Tree\Build\third_party.txt").Hash) $(git -C "$Tree\Build\$BDir\_deps\xcmake_tools" rev-parse HEAD 2>$null) $(Get-CMakeInputs)$(if ($Sanitize) { ' asan' })" }
     if (-not (Test-Path $Marker) -or (Get-Content $Marker -Raw).Trim() -ne (Get-Stamp)) {            # first run: what Build\CreateProject.bat does, without its admin prompt and pause
-        Push-Location "$Tree\Build"; $sanArgs = if ($Sanitize) { @('-DXLION_SANITIZE=ON', "-DCMAKE_PROJECT_xLION_INCLUDE=$($Here -replace '\\', '/')/msvc_asan.cmake") } else { @() }
+        Push-Location "$Tree\Build"; $sanArgs = @(if ($Sanitize) { '-DXLION_SANITIZE=ON'; "-DCMAKE_PROJECT_xLION_INCLUDE=$($Here -replace '\\', '/')/msvc_asan.cmake" })    # @(): an empty if is $null, and $null += 'x' is a string, which @sanArgs splats one character at a time
         $sanArgs += '-DXLION_ECS_LINK_GATE=ON'         # the target xLION_ecs_gate (EXCLUDE_FROM_ALL: only test_ecs_gate.py builds it); without it the link gate test fails with "the target does not exist"
         cmake ../ -G 'Visual Studio 17 2022' -A x64 -B $BDir @sanArgs 2>&1 | Tee-Object -FilePath "$Results\cmake.log" | ForEach-Object { Write-Host $_ }       # live: the console shows the clones and the configure as they happen
         $rc = $LASTEXITCODE; Pop-Location
