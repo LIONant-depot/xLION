@@ -149,13 +149,13 @@ namespace xeditor::transform_gizmo
     };
 
     //---------------------------------------------------------------------------------------------------------------------------------------------
-    // The gizmo, over the view's rectangle Min, Size, with the camera View (an xgpu::tools::view: last frame's, which the preview updates after).
+    // The gizmo, over the view's rectangle Min, Size, with the camera View (an xgpu::tools::view: its non-const getters refresh any matrix a camera or toolbar change left stale since the preview last rendered).
     // True when it is hovered or dragged: the preview then submits ImGui::Dummy(Size) instead of its InvisibleButton, which would claim the hover
     // ImGuizmo needs to activate. The edit is written into the descriptor as it is dragged, and one SnapshotEdit is run on the release.
     // Display: where the view draws the asset's space (the Skeleton view's "Resize to 1m"), identity when it draws it as is.
     //---------------------------------------------------------------------------------------------------------------------------------------------
     template<typename T_VIEW>
-    bool Run(state& S, descriptor_editor& Editor, layer& Layer, const T_VIEW& View, const ImVec2& Min, const ImVec2& Size, const target& Target
+    bool Run(state& S, descriptor_editor& Editor, layer& Layer, T_VIEW& View, const ImVec2& Min, const ImVec2& Size, const target& Target
            , const xmath::fmat4& Display = xmath::fmat4::fromIdentity()) noexcept
     {
         auto Commit = [&]
