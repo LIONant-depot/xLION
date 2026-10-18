@@ -248,17 +248,33 @@ def test_the_edits_of_a_generated_texture_survive_a_recompile(project):
     assert "My stone color" in info.read_text(), "the name too"
 
 
-def test_a_slot_that_still_holds_what_the_model_made_follows_the_model(project):
+def test_a_slot_that_is_set_stays_when_the_model_names_another_texture(project):
+    """An instance that exists is the user's: the import never updates its slots (Reapply in the editor is explicit)."""
     compile_geom(project)
-    old = texture_of(virtual(project, "MaterialInstance")["stone"][1], 1)
+    before = virtual(project, "MaterialInstance")["stone"][1]
+    old = texture_of(before, 1)
 
     use_another_diffuse_map(project)
     compile_geom(project)
-    new = texture_of(virtual(project, "MaterialInstance")["stone"][1], 1)
+    after = virtual(project, "MaterialInstance")["stone"][1]
+    assert texture_of(after, 1) == old, "the albedo stays the texture it was set to"
+    assert after == before, "and nothing else of the instance changes"
     textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
-    assert new != old and new == textures["stone_diff2 (color)"], "the albedo is the texture of the new file"
-    assert old in textures.values(), "the old texture stays on disk with its edits, unused"
-    assert re.search(r'"Texture/Input/Filename"\s+;wstring\s+"Assets\\\\model\\\\textures\\\\stone_diff2.png"', descriptor_of(project, "Texture", new).read_text())
+    assert textures["stone_diff (color)"] == old, "the texture it holds stays on disk"
+
+
+def test_a_missing_texture_is_magenta_until_it_is_found(project):
+    """The one exception: a slot that still holds the magenta placeholder of a missing texture takes the texture once it is found."""
+    (project / "Assets/model/textures/stone_diff.png").unlink()
+    compile_geom(project)
+    placeholder, text = virtual(project, "Texture")["Missing texture"]
+    assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 1) == placeholder, "the albedo is the placeholder"
+    assert "CUSTOM_CONSTANT" in text and re.search(r'"Texture/SRGB"\s+;bool\s+0', text), "a constant (magenta) texture"
+
+    png(project / "Assets/model/textures/stone_diff.png", (120, 110, 100, 255))
+    compile_geom(project)
+    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
+    assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 1) == textures["stone_diff (color)"], "found: the slot takes it"
 
 
 def test_a_slot_the_user_pointed_at_another_texture_is_kept(project):
@@ -277,7 +293,7 @@ def test_a_slot_the_user_pointed_at_another_texture_is_kept(project):
     assert f"#{PBR} " in after, "the base material is the generator's"
 
 
-def test_the_geometry_lists_what_it_made_and_without_a_list_the_slots_still_follow(project):
+def test_the_geometry_lists_what_it_made_and_without_a_list_it_is_written_again(project):
     compile_geom(project)
     lists = list((project / "Descriptors/GeomStatic").rglob("Virtual.txt"))
     assert len(lists) == 1, "one list, in the descriptor folder of the geometry"
@@ -286,11 +302,11 @@ def test_the_geometry_lists_what_it_made_and_without_a_list_the_slots_still_foll
     assert made == every, "every virtual resource of the geometry is on it"
 
     lists[0].unlink()                                                  # a project from before the lists
-    use_another_diffuse_map(project)
+    before = virtual(project, "MaterialInstance")["stone"][1]
     compile_geom(project)
-    textures = {name: folder for name, (folder, _) in virtual(project, "Texture").items()}
-    assert texture_of(virtual(project, "MaterialInstance")["stone"][1], 1) == textures["stone_diff2 (color)"], "the Info links tell what the geometry made"
-    assert lists[0].exists(), "and the list is written again"
+    assert lists[0].exists(), "the list is written again"
+    assert set(re.findall(r"full_guid\s+#([0-9A-F]+) ", lists[0].read_text())) == made, "with the same resources (the Info links tell what the geometry made)"
+    assert virtual(project, "MaterialInstance")["stone"][1] == before, "and the instance is not touched"
 
 
 def test_a_generated_descriptor_that_cannot_be_read_is_left_alone_with_a_warning(project):
