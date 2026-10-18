@@ -1,6 +1,6 @@
 # Skin geometry: bone palettes for the clusters that need them
 
-Status: proposal, 2026-10-19, revised after review. Nothing built yet.
+Status: built 2026-10-19 (uncommitted), except lady.fbx end to end: see Implementation notes at the end.
 
 ## The problem
 
@@ -171,3 +171,25 @@ ever needs a splitting cost model.
 1. Palette size: 128 entries. The vertex keeps its 7 bit indices; no 8 or 16 bit vertex format until an asset needs one.
 2. Policy: base offset if it fits, otherwise palette if it fits, otherwise split. A cost model only if measurements ask for one.
 3. Facts inspector: yes, the counts above.
+
+## Implementation notes (2026-10-19)
+
+- Compiler: the user's reference compiler (palette support) matched the plan and was taken whole on top of the latest fixes; the single-triangle
+  throw became unreachable and was removed, the enum and packing come from `xgeom_skin.h`. The compiled data blob is zeroed (its alignment gaps
+  held garbage: two compiles of Walking.fbx differed). The log has `Skin addressing: N base-offset clusters, N palette clusters, N BoneMap
+  entries, N unique palettes`.
+- Format v4: `cluster_data::m_PosTrasnlationAndWPADDING` is `pos_translation_and_bones` (`GetBoneAddressing`/`SetBoneAddressing`, `Pack`,
+  `getMode`, `getPayload`); `m_pBoneMap`/`m_nBoneMap`; `geom::getVertexBone` (the CPU decode) and `geom::ValidateBoneAddressing` (the loader's
+  Debug check). A palette's size is not stored, so an index is checked against the end of the BoneMap, not of its own palette.
+- GPU: the BoneMap is storage binding 8 of set 1 in both shader copies (xLIONRender uses 0..7), read as 32 bit words (two entries each). The
+  loader's dummy is one shared word; xLIONRender binds its GI dummy when a `cluster_geom` has no BoneMap (its tests). xGPU's static descriptor
+  writes were capped at 8 buffers (the skin's lit pass now has 9): raised to 16, as its set key already held.
+- Bone matrices: the skin editor's preview (and so the thumbnails) grows its matrix buffer to the skeleton's bone count (was capped at 256).
+  xLIONRender takes the caller's buffer. Skeleton LODs: the matrices stay indexed by the full skeleton index; LODs are bone counts (bones sorted
+  by LOD), no compact array exists, so no remap was needed.
+- Tests: `xgeom_skin_compiler.exe -SELFTEST` (boundaries, mixed palettes at 0 and 4 with a shared one, a fan vertex in a base-offset and a palette
+  cluster, the packed field, the corrupt-resource validation), run by `test_imported_skeleton.py` with Walking (empty BoneMap, same bytes twice)
+  and lady.fbx.
+- lady.fbx: clusters fine (12 base-offset, 14 palette clusters, 335 BoneMap entries, 13 unique palettes), then the compiler dies writing
+  Details.txt: xproperty's collector keeps the property path in `std::array<char, 256>` (`property_sprop_collector.h`) and the model's node
+  tree (assimp pivot nodes per bone) is deeper than that; 4096 was not enough either. Open: how Details should hold a deep node tree.

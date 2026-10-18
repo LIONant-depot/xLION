@@ -202,3 +202,60 @@ def test_the_skin_follows_the_pretransform_of_its_generated_skeleton_and_editing
     restored = _compile_skin_and_skeleton(project, skin)
     for k in before:
         close(restored[k], before[k], f"editing it back restores the {k}")
+
+
+# Bone palettes (documentation/Editors/skin_bone_palette_plan.md) ------------------------------------------------------------------------------
+
+def addressing(out: str) -> tuple[int, int, int]:
+    m = re.search(r"Skin addressing: (\d+) base-offset clusters, (\d+) palette clusters, (\d+) BoneMap entries", out)
+    assert m, f"no addressing line in the compile log: {out[-2000:]}"
+    return tuple(int(v) for v in m.groups())
+
+
+def compiled_skin(prj: Path) -> bytes:
+    files = [f for f in (prj / "Cache/Resources/Platforms").rglob("*") if f.is_file() and "GeomSkin" in str(f) and SKIN_GUID in f.name.upper()]
+    assert len(files) == 1, f"one compiled skin: {files}"
+    return files[0].read_bytes()
+
+
+def test_the_bone_addressing_packs_and_validates_on_synthetic_meshes():
+    """The compiler's own cluster split on synthetic meshes: the span and distinct-bone boundaries, a mixed geometry with palettes that do not
+    start at 0, a vertex shared by a base-offset and a palette cluster, the packed field, and the loader's validation of corrupt resources."""
+    run = subprocess.run([str(compiler_exe("xgeom_skin")), "-SELFTEST"], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0 and "SELFTEST: OK" in run.stdout, run.stdout + run.stderr
+
+
+def test_walking_needs_no_palette_and_compiles_the_same_bytes_twice(project):
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    base, palette, entries = addressing(compile_one(project, "xgeom_skin", skin))
+    assert base > 0 and palette == 0 and entries == 0, "every cluster of Walking.fbx fits the base offset: an empty BoneMap"
+    first = compiled_skin(project)
+    compile_one(project, "xgeom_skin", skin)
+    assert compiled_skin(project) == first, "the same input gives the same binary"
+
+
+LADY = REPO / "example.lionprj/Assets/LadyNJ/lady.fbx"
+
+def test_a_952_bone_rig_compiles_with_palettes_deterministically(tmp_path):
+    """lady.fbx: a shoulder vertex's bones lie 179 skeleton slots apart, more than the base offset reaches: its clusters use palettes."""
+    if not LADY.exists():
+        pytest.fail(f"the example project's model is missing: {LADY}")
+    prj = tmp_path / "t.lionprj"
+    (prj / "Assets/LadyNJ").mkdir(parents=True)
+    shutil.copy(LADY, prj / "Assets/LadyNJ/lady.fbx")
+    desc = prj / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc")
+    desc.mkdir(parents=True)
+    (desc / "Descriptor.txt").write_text(HEADER + """[ xProperties : 4 ]
+{ Name:s  Value:? }
+  "GeomSkin/ImportAsset" ;wstring "Assets\\\\LadyNJ\\\\lady.fbx"
+  "GeomSkin/bMergeAllMeshes" ;bool 1
+  "GeomSkin/AllMeshesDetails/Name" ;string "Lady"
+  "GeomSkin/ImportMaterials/bImport" ;bool 0
+""")
+    (prj / "Cache/Resources/Platforms").mkdir(parents=True)
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    base, palette, entries = addressing(compile_one(prj, "xgeom_skin", skin))
+    assert palette > 0 and entries > 0, "the wide clusters use palettes"
+    first = compiled_skin(prj)
+    compile_one(prj, "xgeom_skin", skin)
+    assert compiled_skin(prj) == first, "the same input gives the same binary"
