@@ -322,6 +322,7 @@ namespace xeditor
         case result::SUCCESS:            pState = "success";                break;
         case result::SUCCESS_WARNINGS:   pState = "success (warnings)";     break;
         case result::FAILURE:            pState = "failed";                 break;
+        case result::CANCELLED:          pState = "cancelled";              break;
         }
         Text = std::format("state: {}\nunsaved changes: {}\nvalidation errors: {}\n", pState, bDirty ? "yes" : "no", Errors.size());
         for (auto& E : Errors) Text += "  " + E + "\n";
@@ -381,6 +382,28 @@ namespace xeditor
                 }
                 auto Err = m_Doc.Save();
                 return Err.empty() ? "Compile: saved, compile queued" : "Compile: " + Err;
+            }
+        };
+
+        // The Cancel button (what Compile becomes while a compile runs): the compiler's process tree ends, the result is "cancelled"
+        struct cancel_compile_cmd : xundo::query_command_base
+        {
+            std::shared_ptr<xresource_editor::compilation::historical_entry::log>& m_Log;
+            cancel_compile_cmd(xundo::system& System, std::shared_ptr<xresource_editor::compilation::historical_entry::log>& Log) noexcept : query_command_base(System, "CancelCompile", nullptr), m_Log(Log) {}
+            const char* getCommandHelp() const noexcept override { return "Stops the compile that runs: the compiler and every process it started end, the resource is marked cancelled. Usage: CancelCompile"; }
+            void RegisterArguments() noexcept override {}
+            std::string Query() noexcept override
+            {
+                using result = xresource_editor::compilation::historical_entry::result;
+                if (!m_Log) return "CancelCompile: no compile";
+                result Result;
+                {
+                    xcontainer::lock::scope Lock(*m_Log);
+                    Result = m_Log->get().m_Result;
+                }
+                if (Result != result::COMPILING && Result != result::COMPILING_WARNINGS) return "CancelCompile: no compile is running";
+                xresource_editor::compilation::RequestCancel(*m_Log);
+                return "CancelCompile: cancelling";
             }
         };
 
@@ -534,6 +557,7 @@ namespace xeditor
         document_cmds::undo_cmd                 m_UndoCmd;
         document_cmds::redo_cmd                 m_RedoCmd;
         document_cmds::compile_status_cmd       m_CompileStatus;
+        document_cmds::cancel_compile_cmd       m_CancelCompile;
 
         xgpu::device*                           m_pDevice = nullptr;
         std::string                             m_TypeName;
@@ -548,7 +572,7 @@ namespace xeditor
             xresource_editor::compilation::historical_entry::communication{ .m_Result = xresource_editor::compilation::historical_entry::result::SUCCESS });
 
         document_editor(const char* pTypeName, xresource::full_guid Guid, xresource_editor::library::guid LibraryGuid, xgpu::device* pDevice) noexcept
-            : m_Save(m_Undo, m_Document), m_Compile(m_Undo, m_Document, m_ValidationErrors), m_UndoCmd(m_Undo), m_RedoCmd(m_Undo), m_CompileStatus(m_Undo, m_Document, m_CompilationLog, m_ValidationErrors)
+            : m_Save(m_Undo, m_Document), m_Compile(m_Undo, m_Document, m_ValidationErrors), m_UndoCmd(m_Undo), m_RedoCmd(m_Undo), m_CompileStatus(m_Undo, m_Document, m_CompilationLog, m_ValidationErrors), m_CancelCompile(m_Undo, m_CompilationLog)
             , m_pDevice(pDevice), m_TypeName(pTypeName)
         {
             m_Document.m_Guid        = Guid;
@@ -612,7 +636,7 @@ namespace xeditor
             }
             else if (Result == xresource_editor::compilation::historical_entry::result::SUCCESS || Result == xresource_editor::compilation::historical_entry::result::SUCCESS_WARNINGS)
                 m_bCompiled = true;
-            else if (Result == xresource_editor::compilation::historical_entry::result::FAILURE)
+            else if (Result == xresource_editor::compilation::historical_entry::result::FAILURE || Result == xresource_editor::compilation::historical_entry::result::CANCELLED)
                 m_bCompileFailed = true;
         }
 
@@ -621,6 +645,7 @@ namespace xeditor
         static void ToolbarHint(void* pUser, const char* pAction) noexcept { HintFor(static_cast<document_editor*>(pUser)->m_Actions, pAction); }
         static void ToolbarSave(void* pUser) noexcept    { auto R = static_cast<document_editor*>(pUser)->m_Undo.Query("Save");    (void)R; }
         static void ToolbarCompile(void* pUser) noexcept { auto R = static_cast<document_editor*>(pUser)->m_Undo.Query("Compile"); (void)R; }
+        static void ToolbarCancel(void* pUser) noexcept  { auto R = static_cast<document_editor*>(pUser)->m_Undo.Query("CancelCompile"); (void)R; }
 
         void RenderToolbar() noexcept
         {
@@ -635,6 +660,7 @@ namespace xeditor
             Bar.m_pOpenFeedback     = &m_Actions.m_bOpenFeedback;
             Bar.m_Subject           = AssetRef(m_Document.m_Guid);
             Bar.m_OnCompile         = &document_editor::ToolbarCompile;
+            Bar.m_OnCancel          = &document_editor::ToolbarCancel;
             Bar.m_pUser             = this;
             Bar.m_pEditor           = this;
             Bar.m_pDevice           = m_pDevice;

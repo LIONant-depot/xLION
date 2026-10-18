@@ -27,6 +27,7 @@ namespace xeditor
             auto* pFactory = xresource_pipeline::factory_base::Find(m_Guid.m_Type);
             if (!pFactory) return false;
             m_pDescriptor = pFactory->CreateDescriptor();
+            m_pDescriptor->SetupNew();      // a file read next replaces it (ReplaceFromFile): this is what a resource with no file yet starts with
             return true;
         }
 

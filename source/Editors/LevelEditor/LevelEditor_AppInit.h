@@ -393,6 +393,8 @@ namespace level_editor
     {
         xeditor::diagnostics::Log("shutdown: frame loop ended");
 
+        xresource_editor::compilation::CancelAll();       // the compilers still running end now (each runs in a job that also ends it if the editor dies)
+
         xresource_editor::source_control::StopSourceControlScans();       // a scan worker must not outlive the statics it reads
 
         // Plugin systems live in the Level session's world but their DestroyFunction code is in the DLL -

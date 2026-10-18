@@ -53,6 +53,7 @@ namespace xeditor
 
         void (*m_OnSave)(void* pUser)    = nullptr;
         void (*m_OnCompile)(void* pUser) = nullptr;
+        void (*m_OnCancel)(void* pUser)  = nullptr;      // the Cancel button (Compile while a compile runs); without it the bar cancels m_Log itself (RequestCancel)
         void* m_pUser                    = nullptr;
 
         // The editor the bar belongs to: with it the bar starts with the editor menu (the icon of the resource's type and a down arrow, one button) that has Save, Save All and Close.
@@ -178,11 +179,24 @@ namespace xeditor
                 ImGui::SetCursorPos(ImVec2(ImMax(CenterX, ImGui::GetCursorPosX() + 8.0f), Y));
             }
 
-            if (bBusy || bValidationFail) ImGui::BeginDisabled();
-            if (ImGui::Button("\xEF\x96\xB0 Compile ") && Model.m_OnCompile)
-                Model.m_OnCompile(Model.m_pUser);
-            if (bBusy || bValidationFail) ImGui::EndDisabled();
-            if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Compile"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor and trigger compilation");
+            // While a compile runs Compile is Cancel: it ends the compiler's process tree and marks the compile cancelled (compilation::RequestCancel)
+            if (bBusy && Model.m_Log)
+            {
+                if (ImGui::Button("\xEE\x9C\x91 Cancel##Compile", ImVec2(CompileW, 0)))
+                {
+                    if (Model.m_OnCancel) Model.m_OnCancel(Model.m_pUser);
+                    else                  xresource_editor::compilation::RequestCancel(*Model.m_Log);
+                }
+                if (ImGui::IsItemHovered()) xeditor::hint::Text("Stop the compile: the compiler and what it started end, the resource is marked cancelled");
+            }
+            else
+            {
+                if (bBusy || bValidationFail) ImGui::BeginDisabled();
+                if (ImGui::Button("\xEF\x96\xB0 Compile ") && Model.m_OnCompile)
+                    Model.m_OnCompile(Model.m_pUser);
+                if (bBusy || bValidationFail) ImGui::EndDisabled();
+                if (Model.m_OnHint) Model.m_OnHint(Model.m_pUser, "Compile"); else if (ImGui::IsItemHovered()) xeditor::hint::Text("Save the descriptor and trigger compilation");
+            }
 
             ImGui::SameLine(0, 4);
 
@@ -196,6 +210,7 @@ namespace xeditor
                 case xresource_editor::compilation::historical_entry::result::COMPILING_WARNINGS: Color = IM_COL32(255, 255, 0, 255); break;
                 case xresource_editor::compilation::historical_entry::result::COMPILING:          Color = IM_COL32(0, 255, 0, 255);   break;
                 case xresource_editor::compilation::historical_entry::result::FAILURE:            Color = IM_COL32(255, 170, 140, 255); break;
+                case xresource_editor::compilation::historical_entry::result::CANCELLED:          Color = IM_COL32(180, 180, 180, 255); break;
                 case xresource_editor::compilation::historical_entry::result::SUCCESS_WARNINGS:   Color = IM_COL32(255, 255, 0, 255); break;
                 case xresource_editor::compilation::historical_entry::result::SUCCESS:            Color = IM_COL32(255, 255, 255, 255); break;
                 }

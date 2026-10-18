@@ -81,6 +81,7 @@ namespace level_editor
         xlevel::commands::simulate_snapshot_failure_cmd     CmdSimulateSnapshotFailure;
         xscene::commands::set_entity_reference_cmd          CmdSetEntityReference;
         xlevel::commands::edit_tool_query_cmd               CmdEditTool;
+        xlevel::commands::scale_reference_query_cmd         CmdScaleReference;    // Name\ScaleReference: the viewport's human figures (editor only)
         xscene::commands::instantiate_prefab_cmd            CmdInstantiatePrefab;
         xscene::commands::move_to_folder_cmd                CmdMoveToFolder;
         xscene::commands::create_folder_cmd                 CmdCreateFolder;
@@ -192,6 +193,7 @@ namespace level_editor
         , CmdSimulateSnapshotFailure(Level, pEditor)
         , CmdSetEntityReference(Level, pScene)
         , CmdEditTool(Level, pEditor)
+        , CmdScaleReference(Level, pEditor)
         , CmdInstantiatePrefab(Level, pScene)
         , CmdMoveToFolder(Level, pScene)
         , CmdCreateFolder(Level, pScene)

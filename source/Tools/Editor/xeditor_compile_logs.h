@@ -152,7 +152,7 @@ namespace xeditor
             if (!C.m_TypeName.empty()) { Channel += '.'; for (char c : C.m_TypeName) Channel += static_cast<char>(std::tolower(static_cast<unsigned char>(c))); }
             xlog::pipeline_output_adapter Adapter(*pHub, C.m_Op, C.m_Subject, std::move(Channel));
             xlog::FeedPipelineOutput(Adapter, Output);
-            Result == result::FAILURE ? C.m_Op.Fail() : C.m_Op.Succeed();
+            Result == result::FAILURE ? C.m_Op.Fail() : Result == result::CANCELLED ? C.m_Op.Cancel() : C.m_Op.Succeed();
 
             m_Finished.push_back(Log);
             if (m_Finished.size() > finished_remembered_v) m_Finished.pop_front();
