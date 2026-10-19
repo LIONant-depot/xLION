@@ -243,6 +243,70 @@ def test_a_glossiness_map_is_the_roughness_upside_down(project):
     assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+1', orme) and "stone_gloss.png" in orme, orme
 
 
+def test_a_roughness_map_in_the_shininess_slot_is_used_as_it_is(project):
+    """map_Ns names stone_rough.png: its name says roughness (xLION is roughness based), so it goes into G as it is, not upside down."""
+    obj = project / "Assets/model"
+    png(obj / "textures/stone_rough.png", (200, 200, 200, 255))
+    mtl = obj / "model.mtl"
+    mtl.write_text(mtl.read_text().replace("map_bump textures\\stone_ddn.png", "map_bump textures\\stone_ddn.png\nmap_Ns textures\\stone_rough.png"))
+    compile_geom(project)
+    orme = virtual(project, "Texture")["stone_rough (ORME)"][1]
+    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "stone_rough.png" in orme, orme
+
+
+def test_a_material_with_no_map_in_the_model_finds_its_maps_by_its_own_name(project):
+    """The model gives the material lamp no map at all (an FBX that lost its links), but lamp_Albedo.png, lamp_Rough.png and lamp_Emissive.png sit in the textures
+    folder: they are its color, its roughness (as it is, xLION is roughness based) and the mask of its emission."""
+    textures = project / "Assets/model/textures"
+    png(textures / "lamp_Albedo.png",   (200, 180, 90, 255))
+    png(textures / "lamp_Rough.png",    (90, 90, 90, 255))
+    png(textures / "lamp_Emissive.png", (255, 255, 255, 255))
+    out = compile_geom(project)
+    assert "lamp_Albedo.png (named after the material or the model) is taken" in out, out[-3000:]
+    orme = virtual(project, "Texture")["lamp_Rough (ORME)"][1]
+    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "lamp_Rough.png" in orme, orme
+    assert "lamp_Emissive.png" in orme, "the emissive map is the mask of the emission (ORME.a)"
+
+
+def test_a_material_with_no_map_finds_the_maps_named_after_the_model(project):
+    """The maps are named after the model (model.obj: model_Cor.jpeg, modelRough.jpeg: Portuguese 'cor' is the color, no separator), not after its material lamp."""
+    textures = project / "Assets/model/textures"
+    png(textures / "model_Cor.jpeg",    (200, 180, 90, 255))
+    png(textures / "modelRough.jpeg",   (90, 90, 90, 255))
+    out = compile_geom(project)
+    assert "model_Cor.jpeg (named after the material or the model) is taken" in out, out[-3000:]
+    orme = virtual(project, "Texture")["modelRough (ORME)"][1]
+    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "modelRough.jpeg" in orme, orme
+
+
+def test_the_instances_of_a_particle_system_have_a_material_of_their_own_with_the_unclaimed_maps(project):
+    """A node named x|Dupli|n (Blender's instanced hair cards) shares the model's material lamp (it names no map), but is a slot of its own, "lamp|Dupli": it takes
+    the set of maps no material took (feather_alpha.png and feather_normal.png), a cut-out of the material's color."""
+    obj = project / "Assets/model/model.obj"
+    obj.write_text(obj.read_text() + "o card|Dupli|0\nusemtl lamp\nf 1/1/1 2/2/1 3/3/1\n")
+    textures = project / "Assets/model/textures"
+    png(textures / "feather_alpha.png",  (255, 255, 255, 255))
+    png(textures / "feather_normal.png", (128, 128, 255, 255))
+    out = compile_geom(project)
+    assert "lamp|Dupli: the opacity map is not named by the model, " in out and "feather_alpha.png (no other material has it) is taken" in out, out[-3000:]
+    assert "lamp|Dupli" in virtual(project, "MaterialInstance"), "a slot of its own"
+    assert "lamp" in virtual(project, "MaterialInstance"), "and the model's own"
+    cut_out = virtual(project, "Texture")["feather_alpha (color, cut out)"][1]
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_ALPHA"', cut_out) and "feather_alpha.png" in cut_out, cut_out
+    assert "feather_normal (normal)" in virtual(project, "Texture")
+
+
+def test_an_unclaimed_alpha_map_with_an_alpha_channel_is_the_color_map_with_its_cut_out(project):
+    """feather_alpha.png is an RGBA image (black feathers, their shape in the alpha channel), not a mask in the red channel: it is the color of the instanced cards."""
+    obj = project / "Assets/model/model.obj"
+    obj.write_text(obj.read_text() + "o card|Dupli|0\nusemtl lamp\nf 1/1/1 2/2/1 3/3/1\n")
+    png(project / "Assets/model/textures/feather_alpha.png", (10, 10, 10, 0))
+    out = compile_geom(project)
+    assert "feather_alpha.png has its own alpha channel: it is the color map, with its cut-out" in out, out[-3000:]
+    cut_out = virtual(project, "Texture")["feather_alpha (color and alpha)"][1]
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_ALPHA"', cut_out) and "feather_alpha.png" in cut_out, cut_out
+
+
 def test_a_map_the_model_does_not_name_is_found_next_to_its_color_map_by_name(project):
     """stone_diff.png is the color map, stone_glossiness.png sits beside it and the model never names it: it is the roughness, upside down."""
     png(project / "Assets/model/textures/stone_glossiness.png", (200, 200, 200, 255))
