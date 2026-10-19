@@ -221,6 +221,16 @@ def test_a_texture_next_to_the_model_under_a_copys_name_is_found(project):
     assert "Missing texture" not in virtual(project, "Texture"), "no placeholder"
 
 
+def test_a_texture_converted_to_another_image_format_is_found(project):
+    """The model names stone_diff.png, the folder holds stone_diff.tga (the same name in another format): found, not magenta."""
+    textures = project / "Assets/model/textures"
+    (textures / "stone_diff.png").rename(textures / "stone_diff.tga")   # stb reads by content, the extension is only a name
+    out = compile_geom(project)
+    assert "stone_diff.png not found" not in out, out[-3000:]
+    assert "stone_diff.png found as" in out and "stone_diff.tga" in out
+    assert "Missing texture" not in virtual(project, "Texture"), "no placeholder"
+
+
 def test_a_glossiness_map_is_the_roughness_upside_down(project):
     """map_Ns is FBX's glossiness: the ORME takes it into G inverted (roughness = 1 - glossiness) instead of a constant."""
     obj = project / "Assets/model"
