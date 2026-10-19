@@ -259,3 +259,30 @@ def test_a_952_bone_rig_compiles_with_palettes_deterministically(tmp_path):
     first = compiled_skin(prj)
     compile_one(prj, "xgeom_skin", skin)
     assert compiled_skin(prj) == first, "the same input gives the same binary"
+
+
+def test_the_fold_keeps_the_joints_and_bakes_the_rest_on_synthetic_rigs():
+    """xraw3d's fold (documentation/Editors/skeleton_runtime_folding_plan.md) through the skeleton compiler's own checks: an animated helper
+    baked away with every kept joint where it was each frame, a group over two branches replaced by a synthetic root, a fold that would need
+    shear keeping its node."""
+    run = subprocess.run([str(compiler_exe("xskeleton")), "-SELFTEST"], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0 and "SELFTEST: OK" in run.stdout, run.stdout + run.stderr
+
+
+def test_walking_keeps_its_joints_and_folds_the_scene_nodes(project):
+    """The runtime skeleton of Walking.fbx: its joints, not the scene's RootNode and Armature; the package's clip is folded to the same bones."""
+    compile_one(project, "xgeom_skin", "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc")
+    skeleton, package = virtual(project, "Skeleton")[0], virtual(project, "AnimPackage")[0]
+    out = compile_one(project, "xskeleton", "Descriptors\\" + str(skeleton.relative_to(project / "Descriptors")))
+    m = re.search(r"Runtime joints: (\d+) of (\d+) source nodes", out)
+    assert m and int(m[1]) < int(m[2]), out[-2000:]
+
+    manifest = next((project / "Cache/Resources/Logs/Skeleton").rglob("AnimPackage.txt")).read_text()
+    bones    = re.findall(r'"bone_manifest/Bones\[G:\d+\]/Name"\s+;string\s+"([^"]*)"', manifest)
+    assert bones and bones[0] == "CC_Base_Hip", "the root is the rig's hip, not a scene node"
+    assert "RootNode" not in bones and "Armature" not in bones, "the scene nodes are folded"
+    assert int(m[1]) == len(bones)
+
+    out = compile_one(project, "xanim_package", "Descriptors\\" + str(package.relative_to(project / "Descriptors")))
+    assert "source nodes folded into the skeleton's joints" in out, out[-2000:]
+    assert "not found in the referenced skeleton" not in out, "every node of the clip is a joint or folded into one"

@@ -124,3 +124,36 @@ def test_scaling_the_skeleton_recompiles_the_skin_and_its_animations(editor, ski
     after = skin_size(asset)
     assert all(abs(a - b * 0.01) <= b * 0.0002 + 1e-4 for a, b in zip(after, before)), f"the mesh follows the skeleton: {before} -> {after}"
     assert editor.alive()
+
+
+SKELETON_TYPE = "F5D3BE1ED860ABF7"
+
+
+def skeleton_log(guid: str) -> str:
+    v = int(guid, 16)
+    return (PROJECT / "Cache/Resources/Logs/Skeleton" / f"{v & 0xFF:02X}" / f"{(v >> 8) & 0xFF:02X}" / f"{v:X}.log" / "Log.txt").read_text(errors="replace")
+
+
+def test_a_bone_marked_with_an_intent_compiles_with_it_and_unmarking_it_sticks(editor, skin):
+    """The skeleton editor's intents (documentation/Editors/skeleton_runtime_folding_plan.md): right click a bone, pick an intent - SetBone
+    -Intent - and the compiled skeleton carries it; "none" removes it, also for a bone whose name would suggest one."""
+    lib, asset = skin
+    assert "compile queued" in editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Compile", allow_disk=True)
+    wait_idle(editor)
+    skeletons = generated("Skeleton", asset)
+    assert len(skeletons) == 1, "the compile made the skeleton"
+    skeleton = skeletons[0].rjust(16, "0") + SKELETON_TYPE
+    editor.ok(f"OpenResourceEditor -Asset {skeleton} -Library {lib}", timeout=30)
+    try:
+        editor.ok(f"ResourceEditorCommand -Asset {skeleton} -Cmd " + quote("SetBone -Bones CC_Base_Head -Intent facing"))
+        assert "compile queued" in editor.cmd(f"ResourceEditorCommand -Asset {skeleton} -Cmd Compile", allow_disk=True)
+        wait_idle(editor)
+        assert re.search(r"Intent Facing: [^\n]*CC_Base_Head", skeleton_log(skeletons[0])), "the marked bone compiles with its intent"
+
+        editor.ok(f"ResourceEditorCommand -Asset {skeleton} -Cmd " + quote("SetBone -Bones CC_Base_Head -Intent none"))
+        assert "compile queued" in editor.cmd(f"ResourceEditorCommand -Asset {skeleton} -Cmd Compile", allow_disk=True)
+        wait_idle(editor)
+        assert "CC_Base_Head" not in "".join(l for l in skeleton_log(skeletons[0]).splitlines() if "Intent " in l), "unmarked, it has none"
+        assert editor.alive()
+    finally:
+        editor.cmd(f"CloseResourceEditor -Asset {skeleton}")
