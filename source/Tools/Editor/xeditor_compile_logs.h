@@ -41,6 +41,13 @@ namespace xeditor
         if (auto* pHost = host::current()) pHost->show_logs(Operation ? std::format("op:{}", Operation) : std::string("channel:asset.compile"));
     }
 
+    // The Feedback of an editor's Compile bar: the drawer on the Compilation tab, with the compile of this resource (its instance guid) open there.
+    inline void OpenCompilationFor(void*, std::uint64_t Instance) noexcept
+    {
+        xresource_editor::g_LibMgr.FocusCompilation(Instance);
+        if (auto* pHost = host::current()) pHost->show_compilation();
+    }
+
     class compile_log_bridge
     {
     public:

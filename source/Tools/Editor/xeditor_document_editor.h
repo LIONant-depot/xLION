@@ -295,7 +295,7 @@ namespace xeditor
     // Commands every document editor has: queries (xundo keeps them apart from edits, and none is itself undoable)
     //--------------------------------------------------------------------------------------------
     // The state of the last compile of a resource, its validation errors and the tail of the compiler's log: what CompileStatus answers
-    inline std::string DescribeCompile(const std::shared_ptr<xresource_editor::compilation::historical_entry::log>& Log, bool bDirty, const std::vector<std::string>& Errors, int nLines) noexcept
+    inline std::string DescribeCompile(const std::shared_ptr<xresource_editor::compilation::historical_entry::log>& Log, bool bDirty, const std::vector<std::string>& Errors, int nLines, bool bOrderOpen = false) noexcept
     {
         using result = xresource_editor::compilation::historical_entry::result;
         std::string Text;
@@ -317,6 +317,7 @@ namespace xeditor
         const char* pState = "success";
         switch (Result)
         {
+        case result::QUEUED:             pState = "queued";                 break;
         case result::COMPILING:          pState = "compiling";              break;
         case result::COMPILING_WARNINGS: pState = "compiling (warnings)";   break;
         case result::SUCCESS:            pState = "success";                break;
@@ -324,6 +325,8 @@ namespace xeditor
         case result::FAILURE:            pState = "failed";                 break;
         case result::CANCELLED:          pState = "cancelled";              break;
         }
+        // The compile of the resource is over but its order is not: what it made (a font's atlas) still compiles. Not done, whatever its own log says.
+        if (bOrderOpen && (Result == result::SUCCESS || Result == result::SUCCESS_WARNINGS || Result == result::FAILURE)) pState = "compiling (what it made is not done)";
         Text = std::format("state: {}\nunsaved changes: {}\nvalidation errors: {}\n", pState, bDirty ? "yes" : "no", Errors.size());
         for (auto& E : Errors) Text += "  " + E + "\n";
         if (!Tail.empty()) Text += "log (last lines):\n" + Tail;
@@ -347,8 +350,9 @@ namespace xeditor
                 int n = 15;
                 if (cmd_util::GetArg(m_Parser, m_hLines, Lines) && std::from_chars(Lines.data(), Lines.data() + Lines.size(), n).ec != std::errc()) return "CompileStatus: Lines takes a number";
                 std::vector<std::string> Errors = m_Errors;
+                if (auto Open = xresource_editor::g_LibMgr.FindOpenOrder(m_Doc.m_Guid)) m_Log = std::move(Open);       // (nothing renders in a headless editor)
                 if (Errors.empty() && m_Doc.isLoaded()) m_Doc.Validate(Errors);
-                return DescribeCompile(m_Log, m_Doc.isDirty(), Errors, n);
+                return DescribeCompile(m_Log, m_Doc.isDirty(), Errors, n, xresource_editor::g_LibMgr.FindOpenOrder(m_Doc.m_Guid) != nullptr);
             }
             xcmdline::parser::handle m_hLines;
         };
@@ -366,7 +370,9 @@ namespace xeditor
         {
             file_document&            m_Doc;
             std::vector<std::string>& m_Errors;
-            compile_cmd(xundo::system& System, file_document& Doc, std::vector<std::string>& Errors) noexcept : query_command_base(System, "Compile", nullptr), m_Doc(Doc), m_Errors(Errors) {}
+            std::shared_ptr<xresource_editor::compilation::historical_entry::log>* m_pLog;     // the editor's (when it keeps one): it holds the order from the moment it is made
+            compile_cmd(xundo::system& System, file_document& Doc, std::vector<std::string>& Errors, std::shared_ptr<xresource_editor::compilation::historical_entry::log>* pLog = nullptr) noexcept
+                : query_command_base(System, "Compile", nullptr), m_Doc(Doc), m_Errors(Errors), m_pLog(pLog) {}
             const char* getCommandHelp() const noexcept override { return "Validates the resource, saves it and queues the compile. Usage: Compile"; }
             void RegisterArguments() noexcept override {}
             std::string Query() noexcept override
@@ -381,29 +387,35 @@ namespace xeditor
                     return Text;
                 }
                 auto Err = m_Doc.Save();
-                return Err.empty() ? "Compile: saved, compile queued" : "Compile: " + Err;
+                if (!Err.empty()) return "Compile: " + Err;
+                // The order is made here, not when the file monitor sees the saved file: the editor (this one or one opened later) finds it right away
+                auto Order = xresource_editor::g_LibMgr.RequestCompile({ m_Doc.m_LibraryGuid.m_Instance }, m_Doc.m_Guid);
+                if (Order && m_pLog) *m_pLog = Order;
+                return Order ? std::format("Compile: saved, compile queued (order {})", [&] { xcontainer::lock::scope Lk(*Order); return Order->get().m_Order; }()) : "Compile: saved, nothing to compile";
             }
         };
 
         // The Cancel button (what Compile becomes while a compile runs): the compiler's process tree ends, the result is "cancelled"
         struct cancel_compile_cmd : xundo::query_command_base
         {
+            file_document&                                                          m_Doc;
             std::shared_ptr<xresource_editor::compilation::historical_entry::log>& m_Log;
-            cancel_compile_cmd(xundo::system& System, std::shared_ptr<xresource_editor::compilation::historical_entry::log>& Log) noexcept : query_command_base(System, "CancelCompile", nullptr), m_Log(Log) {}
+            cancel_compile_cmd(xundo::system& System, file_document& Doc, std::shared_ptr<xresource_editor::compilation::historical_entry::log>& Log) noexcept : query_command_base(System, "CancelCompile", nullptr), m_Doc(Doc), m_Log(Log) {}
             const char* getCommandHelp() const noexcept override { return "Stops the compile that runs: the compiler and every process it started end, the resource is marked cancelled. Usage: CancelCompile"; }
             void RegisterArguments() noexcept override {}
             std::string Query() noexcept override
             {
                 using result = xresource_editor::compilation::historical_entry::result;
+                if (auto Open = xresource_editor::g_LibMgr.FindOpenOrder(m_Doc.m_Guid)) m_Log = std::move(Open);
                 if (!m_Log) return "CancelCompile: no compile";
-                result Result;
+                std::uint64_t Order;
                 {
                     xcontainer::lock::scope Lock(*m_Log);
-                    Result = m_Log->get().m_Result;
+                    Order = m_Log->get().m_Order;
                 }
-                if (Result != result::COMPILING && Result != result::COMPILING_WARNINGS) return "CancelCompile: no compile is running";
-                xresource_editor::compilation::RequestCancel(*m_Log);
-                return "CancelCompile: cancelling";
+                // The manager finds the order, and everything of its tree that is not over: what waits leaves the queue, what runs has its compiler ended.
+                // An order that is over finds nothing (even when its compile ended, what it made may still compile: that is cancelled too).
+                return xresource_editor::g_LibMgr.CancelCompile(Order) ? "CancelCompile: cancelling" : "CancelCompile: no compile is running";
             }
         };
 
@@ -572,7 +584,7 @@ namespace xeditor
             xresource_editor::compilation::historical_entry::communication{ .m_Result = xresource_editor::compilation::historical_entry::result::SUCCESS });
 
         document_editor(const char* pTypeName, xresource::full_guid Guid, xresource_editor::library::guid LibraryGuid, xgpu::device* pDevice) noexcept
-            : m_Save(m_Undo, m_Document), m_Compile(m_Undo, m_Document, m_ValidationErrors), m_UndoCmd(m_Undo), m_RedoCmd(m_Undo), m_CompileStatus(m_Undo, m_Document, m_CompilationLog, m_ValidationErrors), m_CancelCompile(m_Undo, m_CompilationLog)
+            : m_Save(m_Undo, m_Document), m_Compile(m_Undo, m_Document, m_ValidationErrors, &m_CompilationLog), m_UndoCmd(m_Undo), m_RedoCmd(m_Undo), m_CompileStatus(m_Undo, m_Document, m_CompilationLog, m_ValidationErrors), m_CancelCompile(m_Undo, m_Document, m_CompilationLog)
             , m_pDevice(pDevice), m_TypeName(pTypeName)
         {
             m_Document.m_Guid        = Guid;
@@ -583,9 +595,10 @@ namespace xeditor
 
             m_IdSuffix = std::format("##{:016X}{:016X}", Guid.m_Instance.m_Value, Guid.m_Type.m_Value);
             xresource_editor::g_LibMgr.m_OnCompilationState.Register<&document_editor::OnCompilationState>(*this);
+            xresource_editor::g_LibMgr.m_OnOrderDone.Register<&document_editor::OnOrderDone>(*this);
         }
 
-        ~document_editor() noexcept override { xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this); }
+        ~document_editor() noexcept override { xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this); xresource_editor::g_LibMgr.m_OnOrderDone.RemoveDelegates(this); }
 
         // ---- what a resource type overrides
         // An editor with actions of its own (a preview key, say) makes them live here: called for every window of the editor, after Editor/... is.
@@ -623,9 +636,11 @@ namespace xeditor
             if (m_CompilationLog.get() != Log.get()) m_CompilationLog = Log;
             if (!m_CompilationLog) return;
             xresource_editor::compilation::historical_entry::result Result;
+            std::uint64_t                                           Order;
             {
                 xcontainer::lock::scope Lock(*m_CompilationLog);
                 Result = m_CompilationLog->get().m_Result;
+                Order  = m_CompilationLog->get().m_Order;
             }
             if (Result == xresource_editor::compilation::historical_entry::result::COMPILING || Result == xresource_editor::compilation::historical_entry::result::COMPILING_WARNINGS)
             {
@@ -634,10 +649,22 @@ namespace xeditor
                 SetCompileStartTime(std::filesystem::file_time_type::clock::now());
                 m_bCompileStarted = true;
             }
-            else if (Result == xresource_editor::compilation::historical_entry::result::SUCCESS || Result == xresource_editor::compilation::historical_entry::result::SUCCESS_WARNINGS)
-                m_bCompiled = true;
-            else if (Result == xresource_editor::compilation::historical_entry::result::FAILURE || Result == xresource_editor::compilation::historical_entry::result::CANCELLED)
-                m_bCompileFailed = true;
+            // The end of the compile of a resource that was queued by itself waits for what it made (OnOrderDone); what another compile made says so here
+            else if (!xresource_editor::g_LibMgr.IsRootOrder(Order))
+            {
+                if (Result == xresource_editor::compilation::historical_entry::result::SUCCESS || Result == xresource_editor::compilation::historical_entry::result::SUCCESS_WARNINGS)
+                    m_bCompiled = true;
+                else if (Result == xresource_editor::compilation::historical_entry::result::FAILURE || Result == xresource_editor::compilation::historical_entry::result::CANCELLED)
+                    m_bCompileFailed = true;
+            }
+        }
+
+        // The order of this resource is over - it and everything its compile made (a font's atlas): now what it made can be shown
+        void OnOrderDone(xresource_editor::library_mgr&, std::uint64_t, xresource::full_guid Guid, xresource_editor::compilation::order_outcome Outcome) noexcept
+        {
+            if (Guid != m_Document.m_Guid) return;
+            if (Outcome == xresource_editor::compilation::order_outcome::success) m_bCompiled = true;
+            else                                                                  m_bCompileFailed = true;
         }
 
         std::filesystem::file_time_type CompileStartTime() const noexcept { std::lock_guard Lock(m_CompileStartMutex); return m_CompileStart; }
@@ -653,6 +680,9 @@ namespace xeditor
             Bar.m_pUndo             = &m_Undo;
             Bar.m_bDirty            = m_Document.isDirty();
             Bar.m_bCanCompile       = m_Document.isLoaded();
+            // The manager knows the order of this resource, whoever asked for it and whichever editor was open then: this one shows what it says
+            // (an order is open until its whole tree is done: the compile of the resource may be over while what it made still compiles)
+            if (auto Open = xresource_editor::g_LibMgr.FindOpenOrder(m_Document.m_Guid)) { m_CompilationLog = std::move(Open); Bar.m_bOrderOpen = true; }
             Bar.m_Log               = m_CompilationLog;
             Bar.m_pValidationErrors = &m_ValidationErrors;
             Bar.m_OnSave            = &document_editor::ToolbarSave;
