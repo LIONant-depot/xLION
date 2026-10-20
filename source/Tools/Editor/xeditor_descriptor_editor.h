@@ -338,6 +338,21 @@ namespace xeditor
             , m_SetProperty(m_Undo, m_Document), m_SnapshotEdit(m_Undo, m_Document), m_ListOp(m_Undo, m_Document), m_ListProperties(m_Undo, m_Document)
         {
             BindDescriptorInspector();
+            NameFromSource();
+        }
+
+        // A resource still called "New <Type>" (the name it was given when it was made) takes the name of what it imports, as soon as it has one
+        void NameFromSource() noexcept
+        {
+            if (!m_Document.isLoaded()) return;
+            const auto Name = m_Document.m_pDescriptor->SuggestedName();
+            if (Name.empty()) return;
+            const auto* pFactory = xresource_pipeline::factory_base::Find(m_Document.m_Guid.m_Type);
+            if (!pFactory) return;
+            const std::string Default = std::format("New {}", pFactory->ResourceTypeName());
+            bool bRename = false;
+            xresource_editor::g_LibMgr.getNodeInfo(m_Document.m_LibraryGuid, m_Document.m_Guid, [&](xresource_editor::library_db::info_node& Node) { bRename = Node.m_Info.m_Name == Default; });
+            if (bRename) (void)xresource_editor::g_LibMgr.RenameDescriptor(m_Document.m_LibraryGuid, m_Document.m_Guid, Name);
         }
 
         virtual void OnDescriptorReplaced() noexcept {}         // an undo rebuilt the descriptor object
@@ -359,8 +374,9 @@ namespace xeditor
         void OnDescriptorChange(xproperty::inspector&, const xproperty::ui::undo::cmd& Cmd) noexcept
         {
             m_Document.m_bDirty = true;
-            if (OnCustomChange(Cmd)) return;
+            if (OnCustomChange(Cmd)) { NameFromSource(); return; }
             ReportDescriptorEdit(m_Undo, m_Document, Cmd);
+            NameFromSource();
         }
     };
 }

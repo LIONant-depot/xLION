@@ -87,6 +87,10 @@ def test_the_skin_makes_its_skeleton_and_animations_and_binds_to_the_same_bones(
     for f in (skeletons[0], packages[0]):
         assert f"#{SKIN_GUID} " in (f / "Info.txt").read_text()
 
+    # Named after the model they come from, not all "Skeleton" / "Animations"
+    for f, kind in ((skeletons[0], "Skeleton"), (packages[0], "Animations")):
+        assert re.search(rf'"Name"\s+;string\s+"Walking {kind}"', (f / "Info.txt").read_text()) or f"Walking {kind}" in (f / "Info.txt").read_text(), f"the generated {kind} is named after the model"
+
     # The pipeline's order: the skeleton (its manifest), then the package on it
     compile_one(project, "xskeleton", "Descriptors\\" + str(skeletons[0].relative_to(project / "Descriptors")))
     compile_one(project, "xanim_package", "Descriptors\\" + str(packages[0].relative_to(project / "Descriptors")))
