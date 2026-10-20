@@ -261,3 +261,61 @@ def test_apply_import_compressions_sets_the_generated_textures_and_undo_puts_the
     assert compressions() == start, "the descriptors came back as they were"
     assert "Undo: done" in editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Undo")       # then the setting
     assert editor.alive()
+
+
+@pytest.mark.parametrize("command, label, before, after", [("SetFlipNormalY", "Normal Flip Y", 0, 1), ("SetNormalizeNormals", "Normalize Normals", 1, 0)])
+def test_an_option_of_the_normal_maps_goes_on_the_ones_already_made_and_only_those_are_compiled_again(editor, geometry, command, label, before, after):
+    """SetFlipNormalY and SetNormalizeNormals (xmaterial_instance_import_editor.h): the setting, and the generated normal maps take it. Their textures are compiled again - the
+    color map, the geometry are not - and an undo puts the descriptors back (and compiles that normal map again)."""
+    from test_imported_materials import png
+    lib, asset = geometry
+    png(ASSET_DIR / "red.png", (200, 30, 30, 255))
+    png(ASSET_DIR / "red_normal.png", (120, 140, 255, 255))
+    (ASSET_DIR / "model.mtl").write_text(MTL.replace("newmtl red\nKd 0.8 0.1 0.1", "newmtl red\nKd 0.8 0.1 0.1\nmap_Kd red.png\nmap_Bump red_normal.png"))
+    _compile(editor, asset, True)
+
+    made     = _children(editor, lib, asset)
+    textures = sorted({t[:16] for m in made for t in _children(editor, lib, m)})
+    def descriptor(g):  return _folder(PROJECT / "Descriptors", "Texture", g) / f"{int(g, 16):X}.desc" / "Descriptor.txt"
+    def compiled(g):    return _folder(PROJECT / "Cache/Resources/Platforms/WINDOWS", "Texture", g) / f"{int(g, 16):X}"
+    def text(g):
+        deadline = time.time() + 15
+        while True:
+            try:
+                return descriptor(g).read_text()
+            except OSError:                                          # the file watcher has a file open for a moment
+                assert time.time() < deadline
+                time.sleep(0.3)
+    def flip(g):
+        found = re.search(rf'"Texture/{label}"\s+;bool\s+(\d)', text(g))
+        return int(found[1]) if found else before          # (the default is what the descriptor does not say)
+    normals = [g for g in textures if "TANGENT_NORMAL" in text(g) and "red_normal" in text(g)]
+    others  = [g for g in textures if g not in normals]
+    assert len(normals) == 1 and others, f"the red material has one normal map made from its file, and other textures: {textures}"
+    normal = normals[0]
+    assert flip(normal) == before
+
+    def stamp(g):  return compiled(g).stat().st_mtime_ns if compiled(g).exists() else 0
+    def settle():
+        deadline = time.time() + 120
+        while time.time() < deadline and "Compiling=0 Waiting=0" not in editor.cmd("CompileStatus"):
+            time.sleep(0.5)
+    before_normal, before_others = stamp(normal), {g: stamp(g) for g in others}
+
+    editor.ok(f"ResourceEditorCommand -Asset {asset} -Cmd {quote(f'{command} -On ' + ('true' if after else 'false'))}")
+    deadline = time.time() + 60
+    while time.time() < deadline and stamp(normal) == before_normal:
+        time.sleep(0.3)
+    settle()
+    assert flip(normal) == after, "the normal map made earlier took the setting"
+    assert stamp(normal) != before_normal, "and it was compiled again"
+    assert {g: stamp(g) for g in others} == before_others, "the other textures were not"
+
+    after_normal = stamp(normal)
+    assert "Undo: done" in editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Undo")
+    assert flip(normal) == before, "the undo put the descriptor back"
+    deadline = time.time() + 60
+    while time.time() < deadline and stamp(normal) == after_normal:
+        time.sleep(0.3)
+    settle()
+    assert stamp(normal) != after_normal, "and the normal map was compiled as it was"

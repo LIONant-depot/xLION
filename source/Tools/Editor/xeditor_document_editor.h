@@ -689,6 +689,8 @@ namespace xeditor
             Bar.m_OnHint            = &document_editor::ToolbarHint;
             Bar.m_pOpenFeedback     = &m_Actions.m_bOpenFeedback;
             Bar.m_Subject           = AssetRef(m_Document.m_Guid);
+            Bar.m_Guid              = m_Document.m_Guid;
+            Bar.m_Library           = m_Document.m_LibraryGuid;
             Bar.m_OnCompile         = &document_editor::ToolbarCompile;
             Bar.m_OnCancel          = &document_editor::ToolbarCancel;
             Bar.m_pUser             = this;

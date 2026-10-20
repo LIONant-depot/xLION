@@ -42,6 +42,10 @@ namespace xeditor
 
         // What the Feedback popup reads from the Logs (the xlog diagnostics view): the asset this editor edits, and "Open in Logs" (given the operation id, 0 = none yet).
         xlog::ref m_Subject;
+        // The asset and its library: what the Compilation tab needs to show the descriptor's errors when there is nothing to compile (RecordValidationFailure). An editor that
+        // does not say keeps the old popup for them.
+        xresource::full_guid            m_Guid    = {};
+        xresource_editor::library::guid m_Library = {};
         void (*m_OnOpenLogs)(void* pUser, std::uint64_t Operation) = &OpenLogsForOperation;
         // Feedback: the drawer on the Compilation tab, with the compile of this editor's asset (its instance guid, m_Subject.m_Id) open there
         void (*m_OnOpenCompilation)(void* pUser, std::uint64_t Instance) = &OpenCompilationFor;
@@ -285,8 +289,10 @@ namespace xeditor
             // Feedback goes to the Compilation tab: the drawer opens there with the compile of this asset open (its state, the problems, the compiler's
             // output). Only the descriptor's own validation errors, which are not build events, keep a small popup of their own. A bar with no asset to
             // name (no subject) still goes to the Logs.
-            if (bOpenFeedback && !bValidationFail && Model.m_OnOpenCompilation && Model.m_Subject.m_Id != 0)
+            // The descriptor's errors are said there too: nothing is compiled while it has errors, so they are recorded as a compile that failed before it began.
+            if (bOpenFeedback && Model.m_OnOpenCompilation && Model.m_Subject.m_Id != 0 && (!bValidationFail || (Model.m_Library.isValid() && !Model.m_Guid.empty())))
             {
+                if (bValidationFail) xresource_editor::g_LibMgr.RecordValidationFailure(Model.m_Library, Model.m_Guid, *Model.m_pValidationErrors);
                 Model.m_OnOpenCompilation(Model.m_pUser, Model.m_Subject.m_Id);
                 bOpenFeedback = false;
             }

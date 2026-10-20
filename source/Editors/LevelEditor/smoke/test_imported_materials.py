@@ -480,3 +480,54 @@ def test_the_import_settings_choose_the_compression_of_the_textures_made_from_no
     textures = virtual(project, "Texture")
     assert compression_of(textures["stone_diff (color)"][1]) == "RGBA_BC7", "made again, it takes the setting"
     assert compression_of(textures["stone_ddn (normal)"][1]) == "RGBA_BC7"
+
+
+def flip_of(text: str) -> int:
+    found = re.search(r'"Texture/Normal Flip Y"\s+;bool\s+(\d)', text)
+    return int(found[1]) if found else 0
+
+
+def test_flip_y_for_normals_is_on_the_normal_maps_made_from_now_on_and_only_on_them(project):
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert flip_of(textures["stone_ddn (normal)"][1]) == 0, "a model's normal maps are not flipped by default"
+
+    desc = guid_folder(project / "Descriptors", "GeomStatic", GEOM_GUID) / "Descriptor.txt"
+    desc.write_text(desc.read_text().replace("xProperties : 5", "xProperties : 6").replace('"GeomStatic/ImportMaterials/bImport" ;bool 1'
+        , '"GeomStatic/ImportMaterials/bImport" ;bool 1\n  "GeomStatic/ImportMaterials/Flip Y for normals" ;bool 1'))
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert flip_of(textures["stone_ddn (normal)"][1]) == 0, "a texture that exists is the user's: the setting does not reach it by a compile (the geometry editor's SetFlipNormalY does)"
+
+    import shutil
+    shutil.rmtree(guid_folder(project / "Descriptors", "Texture", textures["stone_ddn (normal)"][0]))
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert flip_of(textures["stone_ddn (normal)"][1]) == 1, "made again, the normal map takes the setting"
+    assert flip_of(textures["stone_diff (color)"][1]) == 0, "and a color map has nothing to flip"
+    assert flip_of(textures["Flat normal"][1]) == 0, "nor does the flat normal"
+
+
+def normalize_of(text: str) -> int:
+    found = re.search(r'"Texture/Normalize Normals"\s+;bool\s+(\d)', text)
+    return int(found[1]) if found else 1                    # (on by default)
+
+
+def test_normalize_normals_is_on_by_default_and_the_setting_reaches_the_normal_maps_made_from_now_on(project):
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert normalize_of(textures["stone_ddn (normal)"][1]) == 1, "a model's normal maps are normalized by default"
+
+    desc = guid_folder(project / "Descriptors", "GeomStatic", GEOM_GUID) / "Descriptor.txt"
+    desc.write_text(desc.read_text().replace("xProperties : 5", "xProperties : 6").replace('"GeomStatic/ImportMaterials/bImport" ;bool 1'
+        , '"GeomStatic/ImportMaterials/bImport" ;bool 1\n  "GeomStatic/ImportMaterials/Normalize normals" ;bool 0'))
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert normalize_of(textures["stone_ddn (normal)"][1]) == 1, "a texture that exists is the user's: a compile does not change it"
+
+    import shutil
+    shutil.rmtree(guid_folder(project / "Descriptors", "Texture", textures["stone_ddn (normal)"][0]))
+    compile_geom(project)
+    textures = virtual(project, "Texture")
+    assert normalize_of(textures["stone_ddn (normal)"][1]) == 0, "made again, the normal map takes the setting"
+    assert flip_of(textures["stone_ddn (normal)"][1]) == 0, "and the other option of the normal map is as it was"
