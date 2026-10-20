@@ -7,6 +7,7 @@ read-only rows and the preview's animation (the AnimationRef) are drawn by the s
 (The compilers are their own executables: build plugins/xgeom_skin.plugin, xskeleton.plugin and xanim_package.plugin first when they changed.)
 """
 import re
+import struct
 import shutil
 import subprocess
 from pathlib import Path
@@ -107,8 +108,9 @@ def test_the_edits_of_the_generated_skeleton_and_package_survive_a_recompile(pro
     skeleton, package = virtual(project, "Skeleton")[0] / "Descriptor.txt", virtual(project, "AnimPackage")[0] / "Descriptor.txt"
     skeleton_guid = skeleton.parent.name.removesuffix(".desc")
 
-    text, n = re.subn(r'("Skeleton/PreTransform/Scale/X"\s+;f32\s+)#3F800000', r"\1#40000000", skeleton.read_text())     # the columns are as wide as the longest name: not a fixed text
-    assert n == 1, "the generated skeleton has the default scale"
+    # (all three axes: the Scale is locked by default, so an edit of one axis alone is not what a file means; the columns are as wide as the longest name: not a fixed text)
+    text, n = re.subn(r'("Skeleton/PreTransform/Scale/[XYZ]"\s+;f32\s+)#3F800000', r"\1#40000000", skeleton.read_text())
+    assert n == 3, "the generated skeleton has the default scale"
     skeleton.write_text(text)
     package.write_text(re.sub(r'("AnimPackage/SkeletonRef"\s+;full_guid\s+)#[0-9A-F]+', r"\1#1234", package.read_text()))
     skeleton_stamp = skeleton.stat().st_mtime_ns
@@ -286,3 +288,90 @@ def test_walking_keeps_its_joints_and_folds_the_scene_nodes(project):
     out = compile_one(project, "xanim_package", "Descriptors\\" + str(package.relative_to(project / "Descriptors")))
     assert "source nodes folded into the skeleton's joints" in out, out[-2000:]
     assert "not found in the referenced skeleton" not in out, "every node of the clip is a joint or folded into one"
+
+
+# The PostTransform of the skeleton (xskeleton_descriptor.h): the correction of the space the model was authored and animated in -----------------------------------
+
+def _set_skeleton(skeleton: Path, values: dict[str, str]) -> None:
+    """Sets properties of the generated skeleton's descriptor ("PostTransform/Rotation/Y": "42B40000"); the columns are as wide as the longest name: not a fixed text."""
+    text = skeleton.read_text()
+    for name, value in values.items():
+        text, n = re.subn(rf'("Skeleton/{name}"\s+;f32\s+)#[0-9A-F]+', rf"\g<1>#{value}", text)
+        assert n == 1, name
+    skeleton.write_text(text)
+
+
+def _hex_float(text: str) -> float:
+    return struct.unpack(">f", bytes.fromhex(text.removeprefix("#").rjust(8, "0")))[0]
+
+
+def _root_rest(prj: Path) -> list[float]:
+    """Where the skeleton's frozen pose has its root bone (the bone manifest the compile leaves for the animations and the skins)."""
+    manifest = next((prj / "Cache/Resources/Logs/Skeleton").rglob("AnimPackage.txt")).read_text()
+    return [_hex_float(re.search(rf'"bone_manifest/Bones\[G:0\]/RestPosition/{axis}"\s+;f32\s+(#[0-9A-Fa-f]+)', manifest)[1]) for axis in "XYZ"]
+
+
+def _close(a, b, what, tolerance=1e-3):
+    assert all(abs(x - y) <= tolerance + tolerance * abs(y) for x, y in zip(a, b)), f"{what}: {a} != {b}"
+
+
+def test_the_posttransform_moves_the_frozen_pose_and_not_the_bind_pose_nor_the_skin(project):
+    """The PostTransform is between the frozen pose / the animations and the bind data the skin is bound with: the root of the frozen pose moves (here 2 m up), the joints
+    of the bind pose and the mesh stay where they are - a skin follows the PreTransform alone."""
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    plain = _compile_skin_and_skeleton(project, skin)
+    rest = _root_rest(project)
+    skeleton = virtual(project, "Skeleton")[0] / "Descriptor.txt"
+    assert "Skeleton/PostTransform/Rotation/Y" in skeleton.read_text(), "a skeleton has a PostTransform"
+
+    _set_skeleton(skeleton, {"PostTransform/Translation/Y": "40000000"})
+    moved = _compile_skin_and_skeleton(project, skin)
+    for k in plain:
+        _close(moved[k], plain[k], f"the {k} is the same: the skin and the bind pose do not take the PostTransform")
+    _close(_root_rest(project), [rest[0], rest[1] + 2.0, rest[2]], "the frozen pose's root moved 2 m up")
+
+    _set_skeleton(skeleton, {"PostTransform/Translation/Y": "0"})
+    _compile_skin_and_skeleton(project, skin)
+    _close(_root_rest(project), rest, "taking it away puts the frozen pose back")
+
+
+def test_the_posttransform_is_applied_before_the_pretransform(project):
+    """Post then Pre: 90 degrees about Y (Post), then 1 m along X (Pre). The frozen pose's root is turned and then moved along the world X: where the turn alone put it,
+    plus 1 along X (the other order would turn the 1 m too). The bind pose and the skin take the PreTransform only: they move 1 along X."""
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    _compile_skin_and_skeleton(project, skin)
+    skeleton = virtual(project, "Skeleton")[0] / "Descriptor.txt"
+
+    _set_skeleton(skeleton, {"PostTransform/Rotation/Y": "42B40000"})
+    turned = _compile_skin_and_skeleton(project, skin)
+    rest_turned = _root_rest(project)
+    _set_skeleton(skeleton, {"PreTransform/Translation/X": "3F800000"})
+    moved = _compile_skin_and_skeleton(project, skin)
+
+    _close(_root_rest(project), [rest_turned[0] + 1.0, rest_turned[1], rest_turned[2]], "the frozen pose: turned by the Post, then moved by the Pre along the world X")
+    for box in ("mesh", "joint"):
+        d = [m - t for m, t in zip(moved[f"{box}_center"], turned[f"{box}_center"])]
+        _close(d, [1.0, 0.0, 0.0], f"the {box} (bind pose and skin): only the Pre moves it, along the world X")
+        _close(moved[f"{box}_size"], turned[f"{box}_size"], f"the {box}: the size is the same")
+
+
+def test_the_animations_take_the_posttransform_from_their_skeleton_and_have_none_of_their_own(project):
+    """The package has no PostTransform property: the skeleton's goes to its manifest, and the clips are built with it (the compile says so, for every clip), before the
+    skeleton's PreTransform. A skeleton without one makes no mention of it."""
+    skin = "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
+    compile_one(project, "xgeom_skin", skin)
+    skeleton, package = virtual(project, "Skeleton")[0], virtual(project, "AnimPackage")[0]
+    assert "PostTransform" not in (package / "Descriptor.txt").read_text(), "the package has no PostTransform of its own"
+
+    def compile_clips() -> str:
+        compile_one(project, "xskeleton", "Descriptors\\" + str(skeleton.relative_to(project / "Descriptors")))
+        return compile_one(project, "xanim_package", "Descriptors\\" + str(package.relative_to(project / "Descriptors")))
+
+    assert "PostTransform" not in compile_clips(), "a skeleton with no PostTransform: the clips are not touched by one"
+    _set_skeleton(skeleton / "Descriptor.txt", {"PostTransform/Rotation/X": "42B40000"})
+    out = compile_clips()
+    assert re.search(r"the skeleton's PostTransform is applied to its root \(scale 1\.0000 1\.0000 1\.0000, rotation 90\.00 0\.00 0\.00", out), f"the clips take it: {out[-1500:]}"
+    manifest = next((project / "Cache/Resources/Logs/Skeleton").rglob("AnimPackage.txt")).read_text()
+    assert re.search(r'"bone_manifest/PostTransformRotationDeg/X"\s+;f32\s+#42B40000', manifest), "the manifest carries it to the animations and the skins"
+    _set_skeleton(skeleton / "Descriptor.txt", {"PostTransform/Rotation/X": "0"})
+    assert "PostTransform" not in compile_clips(), "and taking it away stops it"
