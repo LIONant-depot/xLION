@@ -180,6 +180,7 @@ namespace level_editor
         xgpu::instance Instance;
         xgpu::device   Device;
         xgpu::window   MainWindow;
+        std::unique_ptr<xgpu::texture> BrandIcon;
 
         // Same wiring xresource_editor does: texture (and other) loaders Destroy via UserData.m_Device. Without this,
         // RegisterResource/ReleaseRef (Texture editor preview reload after Compile) crashes in device::Destroy
