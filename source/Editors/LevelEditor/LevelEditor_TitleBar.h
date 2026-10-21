@@ -205,6 +205,10 @@ namespace level_editor::title_bar
             return HTCAPTION;
         }
 
+        case WM_GETICON:
+            if (S.m_hIcon) return reinterpret_cast<LRESULT>(S.m_hIcon);
+            break;
+
         // The buttons are pressed here, not by DefWindowProc (it would draw the classic caption buttons over the bar)
         case WM_NCMOUSEMOVE:
         {
@@ -258,10 +262,14 @@ namespace level_editor::title_bar
         S.m_hWnd     = reinterpret_cast<HWND>(Window.getSystemWindowHandle());
         S.m_PrevProc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(S.m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WindowProc)));
         S.m_hIcon    = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_XLION_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        if (!S.m_hIcon)
+            S.m_hIcon = static_cast<HICON>(LoadImageW(nullptr, BrandAssetPath(L"xlion_icon.ico").c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE));
         if (S.m_hIcon)
         {
             SendMessageW(S.m_hWnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(S.m_hIcon));
             SendMessageW(S.m_hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(S.m_hIcon));
+            SetClassLongPtrW(S.m_hWnd, GCLP_HICON, reinterpret_cast<LONG_PTR>(S.m_hIcon));
+            SetClassLongPtrW(S.m_hWnd, GCLP_HICONSM, reinterpret_cast<LONG_PTR>(S.m_hIcon));
         }
         // The frame is asked for again: the client area grows by the caption, WM_SIZE tells xGPU (a new swap chain)
         SetWindowPos(S.m_hWnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -275,6 +283,8 @@ namespace level_editor::title_bar
         SetWindowLongPtr(S.m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(S.m_PrevProc));
         if (S.m_hIcon)
         {
+            SetClassLongPtrW(S.m_hWnd, GCLP_HICON, 0);
+            SetClassLongPtrW(S.m_hWnd, GCLP_HICONSM, 0);
             DestroyIcon(S.m_hIcon);
             S.m_hIcon = nullptr;
         }
@@ -384,6 +394,37 @@ namespace level_editor::title_bar
                 Line[i] = ImVec2(X - 0.5f, Y);
             }
             DL.AddPolyline(Line, N, FpsColor(History.Current()), ImDrawFlags_None, 1.0f);
+        }
+
+        inline void DrawBrandFallback(ImDrawList& DL, ImVec2 Min, float Size, bool bFocused) noexcept
+        {
+            const float S = Size / 24.0f;
+            const auto P = [&](float X, float Y) { return ImVec2(Min.x + X * S, Min.y + Y * S); };
+            const ImU32 Dark = Color(0x08, 0x09, 0x0B, 255);
+            const ImU32 Gold = bFocused ? Color(0xFF, 0xB3, 0x0A) : Color(0xA9, 0x75, 0x16);
+            const ImU32 Light = bFocused ? Color(0xFF, 0xE0, 0x54) : Color(0xC0, 0x9A, 0x45);
+            const ImU32 Orange = bFocused ? Color(0xF0, 0x5A, 0x08) : Color(0xA9, 0x46, 0x0B);
+            const ImU32 Black = Color(0x05, 0x06, 0x07);
+            const ImU32 White = bFocused ? Color(0xE9, 0xF5, 0xFF) : Color(0x9A, 0xA5, 0xB2);
+
+            DL.AddRectFilled(Min, ImVec2(Min.x + Size, Min.y + Size), Dark, Size * 0.22f);
+            DL.AddTriangleFilled(P(2, 8), P(5, 2), P(10, 6), Gold);
+            DL.AddTriangleFilled(P(14, 6), P(19, 2), P(22, 8), Gold);
+            DL.AddTriangleFilled(P(3, 9), P(7, 5), P(12, 8), Orange);
+            DL.AddTriangleFilled(P(12, 8), P(17, 5), P(21, 9), Orange);
+            DL.AddTriangleFilled(P(4, 9), P(12, 6), P(20, 9), Light);
+            DL.AddTriangleFilled(P(4, 9), P(8, 19), P(12, 22), Gold);
+            DL.AddTriangleFilled(P(20, 9), P(16, 19), P(12, 22), Orange);
+            DL.AddTriangleFilled(P(7, 9), P(12, 7), P(17, 9), Light);
+            DL.AddTriangleFilled(P(7, 9), P(10, 15), P(12, 18), Gold);
+            DL.AddTriangleFilled(P(17, 9), P(14, 15), P(12, 18), Orange);
+            DL.AddTriangleFilled(P(9, 12), P(12, 10), P(15, 12), Black);
+            DL.AddTriangleFilled(P(9, 12), P(11, 14), P(12, 13), Black);
+            DL.AddTriangleFilled(P(15, 12), P(13, 14), P(12, 13), Black);
+            DL.AddCircleFilled(P(9.5f, 9.5f), 1.0f * S, White);
+            DL.AddCircleFilled(P(14.5f, 9.5f), 1.0f * S, White);
+            DL.AddCircleFilled(P(9.5f, 9.5f), 0.42f * S, Black);
+            DL.AddCircleFilled(P(14.5f, 9.5f), 0.42f * S, Black);
         }
     }
 
@@ -516,13 +557,13 @@ namespace level_editor::title_bar
             const float TextY = ImFloor(MidY - TextSize * 0.5f);
             const float X0    = Min.x + 10.0f;
             const float IconSize = ImFloor(ImMin(Height - 6.0f, 24.0f));
-            const float TextX = pBrandIcon ? X0 + IconSize + 8.0f : Min.x + 12.0f;
+            const float TextX = X0 + IconSize + 8.0f;
+            const ImVec2 IconMin(ImFloor(X0), ImFloor(MidY - IconSize * 0.5f));
+            const ImVec2 IconMax(IconMin.x + IconSize, IconMin.y + IconSize);
             if (pBrandIcon)
-            {
-                const ImVec2 IconMin(ImFloor(X0), ImFloor(MidY - IconSize * 0.5f));
-                const ImVec2 IconMax(IconMin.x + IconSize, IconMin.y + IconSize);
                 DL.AddImage((ImTextureRef)(void*)pBrandIcon, IconMin, IconMax, ImVec2(0, 0), ImVec2(1, 1));
-            }
+            else
+                details::DrawBrandFallback(DL, IconMin, IconSize, bFocused);
             DL.PushClipRect(ImVec2(TextX, Min.y), ImVec2(ImMax(TextX, MarkPos.x - 16.0f), Min.y + Height), true);
             DL.AddText(pText, TextSize, ImVec2(TextX, TextY), TextDim, "Project:");
             const float Prefix = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, "Project: ").x;
