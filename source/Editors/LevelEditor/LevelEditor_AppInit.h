@@ -158,6 +158,9 @@ namespace level_editor
             xeditor::diagnostics::Log("startup: applying LevelEditor theme begin");
             level_editor::theme::ApplyUnityInspiredTheme();
             xeditor::diagnostics::Log("startup: applying LevelEditor theme complete");
+#if defined(_WIN32)
+            level_editor::title_bar::Install(MainWindow);              // the editor draws its own title bar (LevelEditor_TitleBar.h)
+#endif
 
             // io.FontDefault (not a per-frame PushFont) - xgpu::tools::imgui::BeginRendering() calls
             // ImGui::DockSpace() internally, BEFORE any panel's own render code ever runs, and ImGui's docking
@@ -421,6 +424,9 @@ namespace level_editor
             xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown begin");
 #if defined(XLION_LINUX_GUI)
             xlion::linux_gui::Shutdown();
+#endif
+#if defined(_WIN32)
+            level_editor::title_bar::Uninstall();
 #endif
             xgpu::tools::imgui::Shutdown();
             xeditor::diagnostics::Log("shutdown: xgpu/imgui Shutdown complete");

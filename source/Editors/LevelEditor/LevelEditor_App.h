@@ -50,6 +50,7 @@
 
 
 #include "source/Editors/LevelEditor/LevelEditor_Theme.h"
+#include "source/Editors/LevelEditor/LevelEditor_TitleBar.h"
 
 #include "source/Tools/Editor/xeditor_resource_tab.h"
 #include "source/Tools/Editor/xeditor_compile_logs.h"
