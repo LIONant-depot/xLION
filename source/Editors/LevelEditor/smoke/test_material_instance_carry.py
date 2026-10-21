@@ -1,5 +1,5 @@
-"""Changing the material of a Material Instance: the textures the person assigned go to the slots of the new material that have the same name
-(plugins/xmaterial_instance.plugin/source/xmaterial_instance_carry.h). Plain matching of names, so the test compiles plugins/xmaterial_instance.plugin/smoke_test_carry.cpp (no editor, no GPU) and runs it.
+"""Changing the material of a Material Instance: what the person set goes to the parameter of the new material with the same id, else the same name and type
+(plugins/xmaterial_instance.plugin/source/xmaterial_instance_carry.h). Plain matching, so the test compiles plugins/xmaterial_instance.plugin/smoke_test_carry.cpp (no editor, no GPU) and runs it.
 """
 import os
 import subprocess
@@ -30,7 +30,7 @@ def build():
 
 
 @pytest.mark.no_editor
-def test_the_textures_the_person_assigned_follow_the_names_of_the_slots_to_the_new_material():
+def test_the_overrides_the_person_set_follow_the_ids_then_the_names_to_the_new_material():
     exe = build()
     run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=60)
     assert run.returncode == 0, run.stdout + run.stderr
