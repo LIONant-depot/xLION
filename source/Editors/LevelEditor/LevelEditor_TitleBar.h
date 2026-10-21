@@ -11,7 +11,7 @@
 
 //-----------------------------------------------------------------------------------
 // The editor's own title bar (Windows): the OS caption is taken away and this bar is drawn in its place, the color
-// of the dock tab strip right below it (the two read as one dark band). Left: "xLION: <project>". Center: the
+// of the dock tab strip right below it (the two read as one dark band). Left: "Project: <project>". Center: the
 // xLION wordmark. Right of the wordmark: the frame rate and its history. Far right: minimize, maximize, close.
 //
 // Only the drawing is ImGui; the mouse on the bar is the OS's: the window's WM_NCHITTEST says HTCAPTION over the
@@ -445,14 +445,14 @@ namespace level_editor::title_bar
         }
 
         //
-        // "xLION: <project>", left; cut short before it reaches the wordmark
+        // "Project: <project>", left; cut short before it reaches the wordmark
         //
         {
             const float TextY = ImFloor(MidY - TextSize * 0.5f);
             const float X0    = Min.x + 12.0f;
             DL.PushClipRect(ImVec2(X0, Min.y), ImVec2(ImMax(X0, MarkPos.x - 16.0f), Min.y + Height), true);
-            DL.AddText(pText, TextSize, ImVec2(X0, TextY), TextDim, "xLION:");
-            const float Prefix = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, "xLION: ").x;
+            DL.AddText(pText, TextSize, ImVec2(X0, TextY), TextDim, "Project:");
+            const float Prefix = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, "Project: ").x;
             DL.AddText(pText, TextSize, ImVec2(X0 + Prefix, TextY), TextBright, S.m_ProjectName.c_str());
             DL.PopClipRect();
         }
