@@ -556,7 +556,9 @@ namespace level_editor::title_bar
         {
             const float TextY = ImFloor(MidY - TextSize * 0.5f);
             const float X0    = Min.x + 10.0f;
-            const float IconSize = ImFloor(ImMin(Height - 6.0f, 24.0f));
+            // The source artwork has a small visual margin inside its rounded square. Let the
+            // bitmap use almost the full bar height so the visible lion matches neighboring icons.
+            const float IconSize = ImFloor(ImMin(Height - 2.0f, 28.0f));
             const float TextX = X0 + IconSize + 8.0f;
             const ImVec2 IconMin(ImFloor(X0), ImFloor(MidY - IconSize * 0.5f));
             const ImVec2 IconMax(IconMin.x + IconSize, IconMin.y + IconSize);
