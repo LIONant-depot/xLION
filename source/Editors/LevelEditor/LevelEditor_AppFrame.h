@@ -191,7 +191,7 @@ namespace level_editor
 
 #if defined(_WIN32)
         // The title bar first: it takes the top of the main viewport, the dock space starts below it (Linux keeps the window manager's)
-        title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath);
+        title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get());
 #endif
 
         // Real mouse/keyboard activity this frame resets Idle Work's clock AND cancels any in-flight idle task.

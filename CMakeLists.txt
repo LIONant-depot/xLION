@@ -518,6 +518,12 @@ set(XLION_COMMON_SOURCES
 
 set(XLION_SOURCES ${XLION_COMMON_SOURCES} ${XLION_EXTRA_SOURCES} ${GENERATED_HEADERS} "source/main_graphical.cpp")
 set(XLION_HEADLESS_SOURCES ${XLION_COMMON_SOURCES} ${XLION_EXTRA_SOURCES} ${GENERATED_HEADERS} "source/main_headless.cpp")
+if(WIN32)
+  list(APPEND XLION_SOURCES
+    "source/Assets/xlion_icon.rc"
+    "source/Assets/xlion_icon_resource.h"
+  )
+endif()
 
 set(XLION_PLUGIN_INCLUDES
   "${CMAKE_SOURCE_DIR}/dependencies/toolbar.imgui"
@@ -750,6 +756,11 @@ target_link_libraries(xLION_Headless PRIVATE xLIONRender_lib)
 if(WIN32)
   target_link_libraries(${TARGET_PROJECT} PRIVATE Advapi32.lib)
   target_link_libraries(xLION_Headless PRIVATE Advapi32.lib)
+  add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_SOURCE_DIR}/source/Assets/xlion_icon.png"
+      "$<TARGET_FILE_DIR:${TARGET_PROJECT}>/xlion_icon.png"
+  )
 endif()
 
 if(MSVC)

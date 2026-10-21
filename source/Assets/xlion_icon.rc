@@ -1,0 +1,3 @@
+#include "xlion_icon_resource.h"
+
+IDI_XLION_ICON ICON DISCARDABLE "xlion_icon.ico"

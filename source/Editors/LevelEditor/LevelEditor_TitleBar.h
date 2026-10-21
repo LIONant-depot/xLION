@@ -4,9 +4,14 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "source/Assets/xlion_icon_resource.h"
+#include "source/Tools/xgpu_xcore_bitmap_helpers.h"
+#include "dependencies/xbmp_tools/src/xbmp_tools.h"
 #include "imgui_internal.h"
 
 //-----------------------------------------------------------------------------------
@@ -86,6 +91,7 @@ namespace level_editor::title_bar
 #if defined(_WIN32)
         HWND              m_hWnd     = nullptr;
         WNDPROC           m_PrevProc = nullptr;
+        HICON             m_hIcon    = nullptr;
 #endif
     };
 
@@ -104,6 +110,31 @@ namespace level_editor::title_bar
     }
 
 #if defined(_WIN32)
+    inline std::filesystem::path BrandAssetPath(const wchar_t* pName) noexcept
+    {
+        wchar_t ModulePath[MAX_PATH] = {};
+        const DWORD Length = GetModuleFileNameW(nullptr, ModulePath, static_cast<DWORD>(std::size(ModulePath)));
+        const std::filesystem::path ModuleDir = Length == 0 || Length >= std::size(ModulePath)
+            ? std::filesystem::path()
+            : std::filesystem::path(ModulePath).parent_path();
+        std::error_code Ec;
+        if (!ModuleDir.empty() && std::filesystem::exists(ModuleDir / pName, Ec)) return ModuleDir / pName;
+
+        // Development builds place the executable below Build\ while the source asset stays in source\Assets\.
+        for (std::filesystem::path Dir = ModuleDir; !Dir.empty(); Dir = Dir.parent_path())
+        {
+            const auto Candidate = Dir / L"source" / L"Assets" / pName;
+            if (std::filesystem::exists(Candidate, Ec)) return Candidate;
+            if (Dir == Dir.parent_path()) break;
+        }
+
+        const auto WorkingDirectoryCandidate = std::filesystem::current_path(Ec) / L"source" / L"Assets" / pName;
+        if (!Ec && std::filesystem::exists(WorkingDirectoryCandidate, Ec)) return WorkingDirectoryCandidate;
+        return ModuleDir.empty() ? std::filesystem::path(pName) : ModuleDir / pName;
+    }
+
+    inline std::filesystem::path BrandTexturePath() noexcept { return BrandAssetPath(L"xlion_icon.png"); }
+
     inline int ButtonHitCode(int Button) noexcept
     {
         switch (Button)
@@ -226,6 +257,12 @@ namespace level_editor::title_bar
         if (S.m_hWnd) return;
         S.m_hWnd     = reinterpret_cast<HWND>(Window.getSystemWindowHandle());
         S.m_PrevProc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(S.m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WindowProc)));
+        S.m_hIcon    = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_XLION_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        if (S.m_hIcon)
+        {
+            SendMessageW(S.m_hWnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(S.m_hIcon));
+            SendMessageW(S.m_hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(S.m_hIcon));
+        }
         // The frame is asked for again: the client area grows by the caption, WM_SIZE tells xGPU (a new swap chain)
         SetWindowPos(S.m_hWnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
@@ -236,11 +273,39 @@ namespace level_editor::title_bar
         auto& S = State();
         if (S.m_hWnd == nullptr) return;
         SetWindowLongPtr(S.m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(S.m_PrevProc));
+        if (S.m_hIcon)
+        {
+            DestroyIcon(S.m_hIcon);
+            S.m_hIcon = nullptr;
+        }
         S.m_hWnd     = nullptr;
         S.m_PrevProc = nullptr;
         S.m_Height   = 0;
     }
 #endif
+
+    inline std::unique_ptr<xgpu::texture> LoadBrandTexture(xgpu::device& Device) noexcept
+    {
+        auto pTexture = std::make_unique<xgpu::texture>();
+        xbitmap Bitmap;
+#if defined(_WIN32)
+        const auto Path = BrandTexturePath();
+#else
+        const std::filesystem::path Path = "xlion_icon.png";
+#endif
+        const std::wstring PathWide = Path.wstring();
+        if (xbmp::tools::loader::LoadSTDImage(Bitmap, PathWide))
+        {
+            std::fprintf(stderr, "xLION: unable to load the brand texture\n");
+            return {};
+        }
+        if (xgpu::tools::bitmap::Create(*pTexture, Device, Bitmap))
+        {
+            std::fprintf(stderr, "xLION: unable to create the brand texture\n");
+            return {};
+        }
+        return pTexture;
+    }
 
     namespace details
     {
@@ -323,7 +388,7 @@ namespace level_editor::title_bar
     }
 
     // Once a frame, right after BeginRendering (the bar reserves its height at the top of the main viewport, from the next frame on)
-    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath) noexcept
+    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath, const xgpu::texture* pBrandIcon = nullptr) noexcept
     {
         auto& S = State();
         S.m_Fps.Frame();
@@ -449,11 +514,19 @@ namespace level_editor::title_bar
         //
         {
             const float TextY = ImFloor(MidY - TextSize * 0.5f);
-            const float X0    = Min.x + 12.0f;
-            DL.PushClipRect(ImVec2(X0, Min.y), ImVec2(ImMax(X0, MarkPos.x - 16.0f), Min.y + Height), true);
-            DL.AddText(pText, TextSize, ImVec2(X0, TextY), TextDim, "Project:");
+            const float X0    = Min.x + 10.0f;
+            const float IconSize = ImFloor(ImMin(Height - 6.0f, 24.0f));
+            const float TextX = pBrandIcon ? X0 + IconSize + 8.0f : Min.x + 12.0f;
+            if (pBrandIcon)
+            {
+                const ImVec2 IconMin(ImFloor(X0), ImFloor(MidY - IconSize * 0.5f));
+                const ImVec2 IconMax(IconMin.x + IconSize, IconMin.y + IconSize);
+                DL.AddImage((ImTextureRef)(void*)pBrandIcon, IconMin, IconMax, ImVec2(0, 0), ImVec2(1, 1));
+            }
+            DL.PushClipRect(ImVec2(TextX, Min.y), ImVec2(ImMax(TextX, MarkPos.x - 16.0f), Min.y + Height), true);
+            DL.AddText(pText, TextSize, ImVec2(TextX, TextY), TextDim, "Project:");
             const float Prefix = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, "Project: ").x;
-            DL.AddText(pText, TextSize, ImVec2(X0 + Prefix, TextY), TextBright, S.m_ProjectName.c_str());
+            DL.AddText(pText, TextSize, ImVec2(TextX + Prefix, TextY), TextBright, S.m_ProjectName.c_str());
             DL.PopClipRect();
         }
 

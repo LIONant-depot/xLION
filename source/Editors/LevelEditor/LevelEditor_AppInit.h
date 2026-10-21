@@ -160,6 +160,7 @@ namespace level_editor
             xeditor::diagnostics::Log("startup: applying LevelEditor theme complete");
 #if defined(_WIN32)
             level_editor::title_bar::Install(MainWindow);              // the editor draws its own title bar (LevelEditor_TitleBar.h)
+            BrandIcon = level_editor::title_bar::LoadBrandTexture(Device);
 #endif
 
             // io.FontDefault (not a per-frame PushFont) - xgpu::tools::imgui::BeginRendering() calls
