@@ -763,6 +763,17 @@ add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
     "${CMAKE_SOURCE_DIR}/source/Assets/xlion_icon.png"
     "$<TARGET_FILE_DIR:${TARGET_PROJECT}>/xlion_icon.png"
 )
+# Off Windows there is no Segoe MDL2 Assets (the editor's icon font, which can't be redistributed): xGPU looks for
+# segmdl2_compat.ttf next to the executable instead, the same icons at the same code points (Build/tools/icon_font)
+if(NOT WIN32)
+  foreach(Target ${TARGET_PROJECT} xLION_Headless)
+    add_custom_command(TARGET ${Target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/source/Assets/Fonts/segmdl2_compat.ttf"
+        "$<TARGET_FILE_DIR:${Target}>/segmdl2_compat.ttf"
+    )
+  endforeach()
+endif()
 
 if(MSVC)
   target_compile_options(${TARGET_PROJECT} PRIVATE /bigobj)
