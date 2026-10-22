@@ -704,6 +704,142 @@ namespace xlion::linux_gui
         PlatformIO.Platform_GetClipboardTextFn = [](ImGuiContext* pCtx) -> const char* { return GetClipboard(pCtx); };
     }
 
+    void SetIcon( unsigned long Window, const unsigned char* pRGBA, int Width, int Height ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window || !pRGBA || Width <= 0 || Height <= 0 ) return;
+
+        // Width, height, then one ARGB pixel per CARDINAL - a CARDINAL is a C long on the client side, whatever its size (Xlib's format 32)
+        std::vector<unsigned long> Data;
+        Data.reserve(2 + static_cast<std::size_t>(Width) * Height);
+        Data.push_back(static_cast<unsigned long>(Width));
+        Data.push_back(static_cast<unsigned long>(Height));
+        for( int i = 0, n = Width * Height; i < n; ++i )
+        {
+            const unsigned char* p = pRGBA + i * 4;
+            Data.push_back((static_cast<unsigned long>(p[3]) << 24) | (static_cast<unsigned long>(p[0]) << 16) | (static_cast<unsigned long>(p[1]) << 8) | p[2]);
+        }
+
+        std::lock_guard Lk(g_X.m_Lock);
+        XChangeProperty(pDisplay, Window, XInternAtom(pDisplay, "_NET_WM_ICON", 0), XA_CARDINAL, 32, PropModeReplace
+                       , reinterpret_cast<const unsigned char*>(Data.data()), static_cast<int>(Data.size()));
+        XFlush(pDisplay);
+    }
+
+    void SetUndecorated( unsigned long Window ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return;
+        unsigned long Motif[5] = { 2 /*MWM_HINTS_DECORATIONS*/, 0 /*functions*/, 0 /*decorations: none*/, 0, 0 };
+        std::lock_guard Lk(g_X.m_Lock);
+        const Atom Hints = XInternAtom(pDisplay, "_MOTIF_WM_HINTS", 0);
+        XChangeProperty(pDisplay, Window, Hints, Hints, 32, PropModeReplace, reinterpret_cast<unsigned char*>(Motif), 5);
+        XFlush(pDisplay);
+    }
+
+    void BeginMoveResize( unsigned long Window, int Direction, int RootX, int RootY ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return;
+        std::lock_guard Lk(g_X.m_Lock);
+
+        // The window manager takes the pointer from here on, and the release of the button goes to it: the window is told the button went up now,
+        // or xGPU and ImGui would keep it down (a drag that never ends)
+        XEvent Up{};
+        Up.xbutton.type        = ButtonRelease;
+        Up.xbutton.display     = pDisplay;
+        Up.xbutton.window      = Window;
+        Up.xbutton.root        = DefaultRootWindow(pDisplay);
+        Up.xbutton.button      = Button1;
+        Up.xbutton.state       = Button1Mask;
+        Up.xbutton.same_screen = True;
+        Up.xbutton.x_root      = RootX;
+        Up.xbutton.y_root      = RootY;
+        {
+            ::Window Child = 0;
+            XTranslateCoordinates(pDisplay, DefaultRootWindow(pDisplay), Window, RootX, RootY, &Up.xbutton.x, &Up.xbutton.y, &Child);
+        }
+        XSendEvent(pDisplay, Window, True, ButtonReleaseMask, &Up);
+
+        // (the window's own connection let go of the pointer first: xgpu::window::releaseMouseCapture - an ungrab here would not, the grab is not this connection's)
+        XEvent E{};
+        E.xclient.type         = ClientMessage;
+        E.xclient.window       = Window;
+        E.xclient.message_type = XInternAtom(pDisplay, "_NET_WM_MOVERESIZE", 0);
+        E.xclient.format       = 32;
+        E.xclient.data.l[0]    = RootX;
+        E.xclient.data.l[1]    = RootY;
+        E.xclient.data.l[2]    = Direction;
+        E.xclient.data.l[3]    = Button1;
+        E.xclient.data.l[4]    = 1;                 // a normal application
+        XSendEvent(pDisplay, DefaultRootWindow(pDisplay), False, SubstructureRedirectMask | SubstructureNotifyMask, &E);
+        XFlush(pDisplay);
+    }
+
+    bool IsMaximized( unsigned long Window ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return false;
+        std::lock_guard Lk(g_X.m_Lock);
+        const Atom State = XInternAtom(pDisplay, "_NET_WM_STATE", 0);
+        const Atom Vert  = XInternAtom(pDisplay, "_NET_WM_STATE_MAXIMIZED_VERT", 0);
+        const Atom Horz  = XInternAtom(pDisplay, "_NET_WM_STATE_MAXIMIZED_HORZ", 0);
+        Atom Type = 0; int Format = 0; unsigned long Count = 0, After = 0; unsigned char* pData = nullptr;
+        if( XGetWindowProperty(pDisplay, Window, State, 0, 64, False, XA_ATOM, &Type, &Format, &Count, &After, &pData) != Success || !pData ) return false;
+        bool bV = false, bH = false;
+        for( unsigned long i = 0; i < Count; ++i )
+        {
+            const Atom A = reinterpret_cast<const Atom*>(pData)[i];
+            bV |= A == Vert; bH |= A == Horz;
+        }
+        XFree(pData);
+        return bV && bH;
+    }
+
+    void ToggleMaximized( unsigned long Window ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return;
+        const bool bMaximized = IsMaximized(Window);
+        std::lock_guard Lk(g_X.m_Lock);
+        XEvent E{};
+        E.xclient.type         = ClientMessage;
+        E.xclient.window       = Window;
+        E.xclient.message_type = XInternAtom(pDisplay, "_NET_WM_STATE", 0);
+        E.xclient.format       = 32;
+        E.xclient.data.l[0]    = bMaximized ? 0 /*_NET_WM_STATE_REMOVE*/ : 1 /*_NET_WM_STATE_ADD*/;
+        E.xclient.data.l[1]    = static_cast<long>(XInternAtom(pDisplay, "_NET_WM_STATE_MAXIMIZED_VERT", 0));
+        E.xclient.data.l[2]    = static_cast<long>(XInternAtom(pDisplay, "_NET_WM_STATE_MAXIMIZED_HORZ", 0));
+        E.xclient.data.l[3]    = 1;
+        XSendEvent(pDisplay, DefaultRootWindow(pDisplay), False, SubstructureRedirectMask | SubstructureNotifyMask, &E);
+        XFlush(pDisplay);
+    }
+
+    void Minimize( unsigned long Window ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return;
+        std::lock_guard Lk(g_X.m_Lock);
+        XIconifyWindow(pDisplay, Window, DefaultScreen(pDisplay));
+        XFlush(pDisplay);
+    }
+
+    void Close( unsigned long Window ) noexcept
+    {
+        Display* pDisplay = GetDisplay();
+        if( !pDisplay || !Window ) return;
+        std::lock_guard Lk(g_X.m_Lock);
+        XEvent E{};
+        E.xclient.type         = ClientMessage;
+        E.xclient.window       = Window;
+        E.xclient.message_type = XInternAtom(pDisplay, "WM_PROTOCOLS", 0);
+        E.xclient.format       = 32;
+        E.xclient.data.l[0]    = static_cast<long>(XInternAtom(pDisplay, "WM_DELETE_WINDOW", 0));
+        E.xclient.data.l[1]    = CurrentTime;
+        XSendEvent(pDisplay, Window, False, NoEventMask, &E);
+        XFlush(pDisplay);
+    }
+
     void SetCursor( int ImGuiCursor, const unsigned long* pWindows, int Count ) noexcept
     {
         Display* pDisplay = GetDisplay();

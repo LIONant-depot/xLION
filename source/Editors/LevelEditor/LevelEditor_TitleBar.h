@@ -15,7 +15,7 @@
 #include "imgui_internal.h"
 
 //-----------------------------------------------------------------------------------
-// The editor's own title bar (Windows): the OS caption is taken away and this bar is drawn in its place, the color
+// The editor's own title bar (Windows; Linux too, see Install below): the OS caption is taken away and this bar is drawn in its place, the color
 // of the dock tab strip right below it (the two read as one dark band). Left: "Project: <project>". Center: the
 // xLION wordmark. Right of the wordmark: the frame rate and its history. Far right: minimize, maximize, close.
 //
@@ -92,6 +92,10 @@ namespace level_editor::title_bar
         HWND              m_hWnd     = nullptr;
         WNDPROC           m_PrevProc = nullptr;
         HICON             m_hIcon    = nullptr;
+#elif defined(XLION_LINUX_GUI)
+        unsigned long     m_XWindow     = 0;                // the main window (X11)
+        bool              m_bMaximized  = false;            // asked of the window manager now and then (a round trip)
+        int               m_StateFrames = 0;
 #endif
     };
 
@@ -109,15 +113,18 @@ namespace level_editor::title_bar
         return std::string(U8.begin(), U8.end());
     }
 
-#if defined(_WIN32)
     inline std::filesystem::path BrandAssetPath(const wchar_t* pName) noexcept
     {
+        std::error_code Ec;
+#if defined(_WIN32)
         wchar_t ModulePath[MAX_PATH] = {};
         const DWORD Length = GetModuleFileNameW(nullptr, ModulePath, static_cast<DWORD>(std::size(ModulePath)));
         const std::filesystem::path ModuleDir = Length == 0 || Length >= std::size(ModulePath)
             ? std::filesystem::path()
             : std::filesystem::path(ModulePath).parent_path();
-        std::error_code Ec;
+#else
+        const std::filesystem::path ModuleDir = std::filesystem::read_symlink("/proc/self/exe", Ec).parent_path();
+#endif
         if (!ModuleDir.empty() && std::filesystem::exists(ModuleDir / pName, Ec)) return ModuleDir / pName;
 
         // Development builds place the executable below Build\ while the source asset stays in source\Assets\.
@@ -134,6 +141,8 @@ namespace level_editor::title_bar
     }
 
     inline std::filesystem::path BrandTexturePath() noexcept { return BrandAssetPath(L"xlion_icon.png"); }
+
+#if defined(_WIN32)
 
     inline int ButtonHitCode(int Button) noexcept
     {
@@ -292,17 +301,104 @@ namespace level_editor::title_bar
         S.m_PrevProc = nullptr;
         S.m_Height   = 0;
     }
+#elif defined(XLION_LINUX_GUI)
+    //
+    // Linux (X11): the window manager's decoration is taken away and the bar does what it did, through the window manager (EWMH, xlion_linux_gui.cpp):
+    // a press on the bar moves the window, a double click maximizes, the edges resize, the buttons minimize, maximize and close. There is no
+    // non-client hit-test as on Windows: the bar reads the mouse from ImGui, once a frame, before ImGui's windows do.
+    //
+    inline void Install(xgpu::window& Window) noexcept
+    {
+        auto& S = State();
+        if (S.m_XWindow) return;
+        S.m_XWindow = static_cast<unsigned long>(Window.getSystemWindowHandle());
+        xlion::linux_gui::SetUndecorated(S.m_XWindow);
+    }
+
+    inline void Uninstall() noexcept
+    {
+        auto& S = State();
+        S.m_XWindow = 0;
+        S.m_Height  = 0;
+    }
+
+    // The mouse on the bar and on the window's edges (the last frame's rectangles, as the Windows hit-test has them)
+    inline void Input(xgpu::window& Window, const ImGuiViewport& Viewport) noexcept
+    {
+        auto& S = State();
+        if (S.m_XWindow == 0) return;
+        if (--S.m_StateFrames <= 0) { S.m_bMaximized = xlion::linux_gui::IsMaximized(S.m_XWindow); S.m_StateFrames = 15; }
+        if (S.m_Height <= 0) return;
+
+        ImGuiIO& IO = ImGui::GetIO();
+        const float X = IO.MousePos.x - Viewport.Pos.x;
+        const float Y = IO.MousePos.y - Viewport.Pos.y;
+        const bool  bInside = IO.MousePos.x != -FLT_MAX && X >= 0 && Y >= 0 && X < Viewport.Size.x && Y < Viewport.Size.y;
+        bool bHole = false;
+        for (const auto& Hole : S.m_Holes) bHole |= Hole.Contains(X, Y);
+
+        // The edges resize (a border as wide as Windows' frame), not when maximized
+        int Edge = -1;
+        if (bInside && !bHole && !S.m_bMaximized)
+        {
+            constexpr float Border = 6.0f, Corner = 16.0f;
+            const bool bL = X < Border, bR = X >= Viewport.Size.x - Border, bT = Y < Border, bB = Y >= Viewport.Size.y - Border;
+            const bool bCL = X < Corner, bCR = X >= Viewport.Size.x - Corner, bCT = Y < Corner, bCB = Y >= Viewport.Size.y - Corner;
+            if      ((bT && bCL) || (bL && bCT)) Edge = 0;
+            else if ((bT && bCR) || (bR && bCT)) Edge = 2;
+            else if ((bB && bCR) || (bR && bCB)) Edge = 4;
+            else if ((bB && bCL) || (bL && bCB)) Edge = 6;
+            else if (bT) Edge = 1;
+            else if (bR) Edge = 3;
+            else if (bB) Edge = 5;
+            else if (bL) Edge = 7;
+        }
+
+        int Hot = BUTTON_NONE;
+        if (bInside && !bHole && Edge < 0 && Y < S.m_Height)
+            for (int i = 0; i < BUTTON_COUNT; ++i) if (S.m_Buttons[i].Contains(X, Y)) Hot = i;
+        S.m_Hot = Hot;
+        if (S.m_Pressed != BUTTON_NONE && S.m_Pressed != Hot) S.m_Pressed = BUTTON_NONE;
+
+        if (Edge >= 0)
+        {
+            static constexpr ImGuiMouseCursor Cursors[] = { ImGuiMouseCursor_ResizeNWSE, ImGuiMouseCursor_ResizeNS, ImGuiMouseCursor_ResizeNESW, ImGuiMouseCursor_ResizeEW
+                                                          , ImGuiMouseCursor_ResizeNWSE, ImGuiMouseCursor_ResizeNS, ImGuiMouseCursor_ResizeNESW, ImGuiMouseCursor_ResizeEW };
+            ImGui::SetMouseCursor(Cursors[Edge]);
+        }
+
+        int RootX = 0, RootY = 0;
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            if (Edge >= 0)
+            {
+                if (xlion_gui_GetCursorPos && xlion_gui_GetCursorPos(&RootX, &RootY)) { Window.releaseMouseCapture(); xlion::linux_gui::BeginMoveResize(S.m_XWindow, Edge, RootX, RootY); }
+            }
+            else if (Hot != BUTTON_NONE) S.m_Pressed = Hot;
+            else if (bInside && !bHole && Y < S.m_Height)
+            {
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { xlion::linux_gui::ToggleMaximized(S.m_XWindow); S.m_StateFrames = 0; }
+                else if (xlion_gui_GetCursorPos && xlion_gui_GetCursorPos(&RootX, &RootY)) { Window.releaseMouseCapture(); xlion::linux_gui::BeginMoveResize(S.m_XWindow, 8, RootX, RootY); }
+            }
+        }
+        else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && S.m_Pressed != BUTTON_NONE)
+        {
+            if (S.m_Pressed == Hot)
+            {
+                if      (Hot == BUTTON_MINIMIZE) xlion::linux_gui::Minimize(S.m_XWindow);
+                else if (Hot == BUTTON_MAXIMIZE) { xlion::linux_gui::ToggleMaximized(S.m_XWindow); S.m_StateFrames = 0; }
+                else if (Hot == BUTTON_CLOSE)    xlion::linux_gui::Close(S.m_XWindow);
+            }
+            S.m_Pressed = BUTTON_NONE;
+        }
+    }
 #endif
 
     inline std::unique_ptr<xgpu::texture> LoadBrandTexture(xgpu::device& Device) noexcept
     {
         auto pTexture = std::make_unique<xgpu::texture>();
         xbitmap Bitmap;
-#if defined(_WIN32)
         const auto Path = BrandTexturePath();
-#else
-        const std::filesystem::path Path = "xlion_icon.png";
-#endif
         const std::wstring PathWide = Path.wstring();
         if (xbmp::tools::loader::LoadSTDImage(Bitmap, PathWide))
         {
@@ -396,6 +492,29 @@ namespace level_editor::title_bar
             DL.AddPolyline(Line, N, FpsColor(History.Current()), ImDrawFlags_None, 1.0f);
         }
 
+        // The caption buttons without Segoe MDL2 (Linux has no such font): the same four shapes, drawn
+        inline void DrawCaptionGlyph(ImDrawList& DL, int Button, bool bRestore, ImVec2 Center, float Half, ImU32 Color) noexcept
+        {
+            const float  H = ImMax(Half, 4.0f);
+            const ImVec2 C(Center.x + 0.5f, Center.y + 0.5f);          // on the pixel centers: crisp 1-pixel lines
+            if (Button == BUTTON_MINIMIZE) DL.AddLine(ImVec2(C.x - H, C.y), ImVec2(C.x + H, C.y), Color, 1.0f);
+            else if (Button == BUTTON_CLOSE)
+            {
+                DL.AddLine(ImVec2(C.x - H, C.y - H), ImVec2(C.x + H, C.y + H), Color, 1.0f);
+                DL.AddLine(ImVec2(C.x - H, C.y + H), ImVec2(C.x + H, C.y - H), Color, 1.0f);
+            }
+            else if (!bRestore) DL.AddRect(ImVec2(C.x - H, C.y - H), ImVec2(C.x + H, C.y + H), Color, 0.0f, 0, 1.0f);
+            else
+            {
+                const float O = ImFloor(H * 0.4f);
+                DL.AddRect(ImVec2(C.x - H, C.y - H + O), ImVec2(C.x + H - O, C.y + H), Color, 0.0f, 0, 1.0f);
+                DL.AddLine(ImVec2(C.x - H + O, C.y - H + O), ImVec2(C.x - H + O, C.y - H), Color, 1.0f);
+                DL.AddLine(ImVec2(C.x - H + O, C.y - H), ImVec2(C.x + H, C.y - H), Color, 1.0f);
+                DL.AddLine(ImVec2(C.x + H, C.y - H), ImVec2(C.x + H, C.y + H - O), Color, 1.0f);
+                DL.AddLine(ImVec2(C.x + H, C.y + H - O), ImVec2(C.x + H - O, C.y + H - O), Color, 1.0f);
+            }
+        }
+
         inline void DrawBrandFallback(ImDrawList& DL, ImVec2 Min, float Size, bool bFocused) noexcept
         {
             const float S = Size / 24.0f;
@@ -485,6 +604,9 @@ namespace level_editor::title_bar
         const float     ButtonsX    = Min.x + Width - ButtonWidth * static_cast<float>(BUTTON_COUNT);
 #if defined(_WIN32)
         const bool bMaximized = S.m_hWnd && IsZoomed(S.m_hWnd);
+#elif defined(XLION_LINUX_GUI)
+        Input(Window, *pViewport);
+        const bool bMaximized = S.m_bMaximized;
 #else
         const bool bMaximized = false;
 #endif
@@ -508,8 +630,12 @@ namespace level_editor::title_bar
                 else if (bHot) DL.AddRectFilled(BMin, BMax, details::Color(0xFF, 0xFF, 0xFF, bPressed ? 16 : 26));
 
                 const char*  pGlyph = (i == BUTTON_MAXIMIZE && bMaximized) ? RestoreGlyph : Glyphs[i];
-                const ImVec2 GSize  = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, pGlyph);
-                DL.AddText(pText, TextSize, ImVec2(ImFloor(BMin.x + (ButtonWidth - GSize.x) * 0.5f), ImFloor(MidY - GSize.y * 0.5f)), Glyph, pGlyph);
+                if (pText->IsGlyphInFont(0xE921))
+                {
+                    const ImVec2 GSize  = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, pGlyph);
+                    DL.AddText(pText, TextSize, ImVec2(ImFloor(BMin.x + (ButtonWidth - GSize.x) * 0.5f), ImFloor(MidY - GSize.y * 0.5f)), Glyph, pGlyph);
+                }
+                else details::DrawCaptionGlyph(DL, i, i == BUTTON_MAXIMIZE && bMaximized, ImVec2(ImFloor(BMin.x + ButtonWidth * 0.5f), ImFloor(MidY)), ImFloor(TextSize * 0.45f), Glyph);
             }
         }
 

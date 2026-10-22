@@ -189,8 +189,8 @@ namespace level_editor
         }
         xeditor::diagnostics::Log("frame %llu BeginRendering complete", static_cast<unsigned long long>(FrameNumber));
 
-#if defined(_WIN32)
-        // The title bar first: it takes the top of the main viewport, the dock space starts below it (Linux keeps the window manager's)
+#if defined(_WIN32) || defined(XLION_LINUX_GUI)
+        // The title bar first: it takes the top of the main viewport, the dock space starts below it
         title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get());
 #endif
 

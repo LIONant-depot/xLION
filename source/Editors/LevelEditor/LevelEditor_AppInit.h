@@ -153,12 +153,21 @@ namespace level_editor
             xeditor::diagnostics::Log("startup: xgpu/imgui CreateInstance complete");
 #if defined(XLION_LINUX_GUI)
             xlion::linux_gui::Install(static_cast<unsigned long>(MainWindow.getSystemWindowHandle()), "xLION");   // X11 clipboard for ImGui, the window title
+            {
+                // The window's icon: the brand artwork (Windows has it from the .rc)
+                xbitmap IconBitmap;
+                if (!xbmp::tools::loader::LoadSTDImage(IconBitmap, level_editor::title_bar::BrandTexturePath().wstring()) && IconBitmap.getFormat() == xbitmap::format::R8G8B8A8)
+                    xlion::linux_gui::SetIcon(static_cast<unsigned long>(MainWindow.getSystemWindowHandle()), std::as_const(IconBitmap).getMip<unsigned char>(0).data()
+                                             , static_cast<int>(IconBitmap.getWidth()), static_cast<int>(IconBitmap.getHeight()));
+                else
+                    std::fprintf(stderr, "xLION: unable to load the window icon %s\n", level_editor::title_bar::BrandTexturePath().string().c_str());
+            }
 #endif
 
             xeditor::diagnostics::Log("startup: applying LevelEditor theme begin");
             level_editor::theme::ApplyUnityInspiredTheme();
             xeditor::diagnostics::Log("startup: applying LevelEditor theme complete");
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(XLION_LINUX_GUI)
             level_editor::title_bar::Install(MainWindow);              // the editor draws its own title bar (LevelEditor_TitleBar.h)
             BrandIcon = level_editor::title_bar::LoadBrandTexture(Device);
 #endif
@@ -426,7 +435,7 @@ namespace level_editor
 #if defined(XLION_LINUX_GUI)
             xlion::linux_gui::Shutdown();
 #endif
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(XLION_LINUX_GUI)
             level_editor::title_bar::Uninstall();
 #endif
             xgpu::tools::imgui::Shutdown();

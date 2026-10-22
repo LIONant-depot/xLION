@@ -43,6 +43,18 @@ namespace xlion::linux_gui
     // After the ImGui context exists: ImGui's clipboard becomes the X11 CLIPBOARD selection (shared with every app, and with
     // Windows through WSLg); the main window gets its title (xGPU names every X window "LION").
     void Install    ( unsigned long MainWindow, const char* pTitle ) noexcept;
+    // The window's icon (_NET_WM_ICON: the taskbar, Alt+Tab, the window manager's title bar), from 8-bit RGBA pixels
+    void SetIcon    ( unsigned long Window, const unsigned char* pRGBA, int Width, int Height ) noexcept;
+
+    // The editor's own title bar (LevelEditor_TitleBar.h) on the main window: the window manager's decoration goes, and the bar asks the window manager
+    // (EWMH) for what the decoration did. Direction of BeginMoveResize: _NET_WM_MOVERESIZE's (0 top-left, 1 top, 2 top-right, 3 right, 4 bottom-right,
+    // 5 bottom, 6 bottom-left, 7 left, 8 move); the left button is down and the pointer at RootX, RootY (X screen coordinates).
+    void SetUndecorated     ( unsigned long Window ) noexcept;
+    void BeginMoveResize    ( unsigned long Window, int Direction, int RootX, int RootY ) noexcept;
+    bool IsMaximized        ( unsigned long Window ) noexcept;
+    void ToggleMaximized    ( unsigned long Window ) noexcept;
+    void Minimize           ( unsigned long Window ) noexcept;
+    void Close              ( unsigned long Window ) noexcept;      // as the window manager's close button: WM_DELETE_WINDOW
     // Every frame, after ImGui::NewFrame..Render decided the cursor: ImGui's mouse cursor shape on these X windows.
     void SetCursor  ( int ImGuiMouseCursor, const unsigned long* pWindows, int Count ) noexcept;
     // Before the ImGui context goes away.

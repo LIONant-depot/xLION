@@ -756,12 +756,13 @@ target_link_libraries(xLION_Headless PRIVATE xLIONRender_lib)
 if(WIN32)
   target_link_libraries(${TARGET_PROJECT} PRIVATE Advapi32.lib)
   target_link_libraries(xLION_Headless PRIVATE Advapi32.lib)
-  add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${CMAKE_SOURCE_DIR}/source/Assets/xlion_icon.png"
-      "$<TARGET_FILE_DIR:${TARGET_PROJECT}>/xlion_icon.png"
-  )
 endif()
+# The brand artwork next to the editor: the title bar's icon, and on Linux the window's icon too
+add_custom_command(TARGET ${TARGET_PROJECT} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_SOURCE_DIR}/source/Assets/xlion_icon.png"
+    "$<TARGET_FILE_DIR:${TARGET_PROJECT}>/xlion_icon.png"
+)
 
 if(MSVC)
   target_compile_options(${TARGET_PROJECT} PRIVATE /bigobj)
