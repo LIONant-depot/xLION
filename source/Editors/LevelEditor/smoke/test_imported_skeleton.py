@@ -31,6 +31,7 @@ HEADER = """[ DescriptorVersion ]
 
 
 def folder(type_name: str, guid: str) -> str:
+    """The descriptor folder of a resource, relative to Descriptors, spelled the Windows way (as the compilers take it): split it on '\\' to make a Path"""
     v = int(guid, 16)
     return f"{type_name}\\{v & 0xFF:02X}\\{(v >> 8) & 0xFF:02X}\\{v:X}"
 
@@ -42,7 +43,7 @@ def project(tmp_path):
     prj = tmp_path / "t.lionprj"
     (prj / "Assets/WalkingSkin").mkdir(parents=True)
     shutil.copy(MODEL, prj / "Assets/WalkingSkin/Walking.fbx")
-    desc = prj / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc")
+    desc = prj.joinpath("Descriptors", *folder("GeomSkin", SKIN_GUID).split("\\")).with_suffix(".desc")
     desc.mkdir(parents=True)
     (desc / "Descriptor.txt").write_text(HEADER + """[ xProperties : 4 ]
 { Name:s  Value:? }
@@ -147,7 +148,7 @@ def test_the_skeleton_is_the_master_the_skin_takes_its_scale(project):
 
 
 def test_a_skin_that_does_not_import_has_no_generated_resources_and_needs_its_own_skeleton(project):
-    desc = project / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc") / "Descriptor.txt"
+    desc = project.joinpath("Descriptors", *folder("GeomSkin", SKIN_GUID).split("\\")).with_suffix(".desc") / "Descriptor.txt"
     desc.write_text(desc.read_text().replace("xProperties : 4", "xProperties : 5").replace('"GeomSkin/ImportMaterials/bImport" ;bool 0','"GeomSkin/ImportMaterials/bImport" ;bool 0\n  "GeomSkin/ImportSkeletonAndAnimation" ;bool 0'))
     exe = compiler_exe("xgeom_skin")
     run = subprocess.run([str(exe), "-PROJECT", str(project), "-OPTIMIZATION", "O1", "-DEBUG", "D0", "-DESCRIPTOR", "Descriptors\\" + folder("GeomSkin", SKIN_GUID) + ".desc"
@@ -249,7 +250,7 @@ def test_a_952_bone_rig_compiles_with_palettes_deterministically(tmp_path):
     prj = tmp_path / "t.lionprj"
     (prj / "Assets/LadyNJ").mkdir(parents=True)
     shutil.copy(LADY, prj / "Assets/LadyNJ/lady.fbx")
-    desc = prj / "Descriptors" / (folder("GeomSkin", SKIN_GUID) + ".desc")
+    desc = prj.joinpath("Descriptors", *folder("GeomSkin", SKIN_GUID).split("\\")).with_suffix(".desc")
     desc.mkdir(parents=True)
     (desc / "Descriptor.txt").write_text(HEADER + """[ xProperties : 4 ]
 { Name:s  Value:? }
