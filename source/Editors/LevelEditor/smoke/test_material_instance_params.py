@@ -18,7 +18,7 @@ COMPILER = ROOT / "build" / "xmaterial_instance_compiler.vs2022" / "Debug" / "xm
 
 pytestmark = [pytest.mark.no_editor, pytest.mark.skipif(os.name != "nt", reason="drives the Windows build of the instance compiler")]
 
-RED, REDROUGH, OLD, ORPHAN, CYCA, TEX = 0x1001, 0x1003, 0x1005, 0x1007, 0x1009, 0x100D
+RED, REDROUGH, OLD, ORPHAN, CYCA, TEX, DSOFF = 0x1001, 0x1003, 0x1005, 0x1007, 0x1009, 0x100D, 0x1011
 
 
 def build():
@@ -120,3 +120,17 @@ def test_a_material_compiled_with_another_layout_changes_what_the_instance_carri
     after = block(text)
     assert before[0] != after[0], "the hash must follow the layout"
     assert after[2] == [1, 0, 0, 1, 0.9, 0, 0, 0] or after[2][:5] == [1, 0, 0, 1, 0.9], "the values stay, in the new layout"
+
+
+def test_double_sided_is_the_first_of_the_chain_that_sets_it(exe, tmp_path):
+    """render_settings_plan.md part three: an instance's Double Sided (Inherit / On / Off) goes into its compiled file; Inherit takes its parent's, then the material's."""
+    assert run(exe, "fixture", tmp_path).returncode == 0
+    project = tmp_path / "t.lionprj"
+    code, text = compile_instance(project, RED)
+    assert code == 0 and "Double Sided: on (the instance's)" in text, text
+    code, text = compile_instance(project, REDROUGH)
+    assert code == 0 and "Double Sided: on (the instance's)" in text, "a child that does not set it takes its parent's " + text
+    code, text = compile_instance(project, DSOFF)
+    assert code == 0 and "Double Sided: off (the instance's)" in text, "a child that sets it wins over its parent " + text
+    code, text = compile_instance(project, ORPHAN)
+    assert code == 0 and "Double Sided:" not in text, "no instance of the chain sets it: the material's " + text

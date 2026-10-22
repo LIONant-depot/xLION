@@ -156,7 +156,11 @@ def virtual(prj: Path, type_name: str) -> dict[str, tuple[str, str]]:
 
 
 def texture_of(text: str, slot_index: int) -> str:
-    return re.search(rf'"material_instance_descriptor/Textures\[G:{slot_index}\]"\s+;full_guid\s+#([0-9A-F]+)', text)[1]
+    """The texture of a slot (0 SamplerNormal, 1 SamplerAlbedo, 2 SamplerORME): a v2 instance has it as the override of the slot's id"""
+    if m := re.search(rf'"material_instance_descriptor/Textures\[G:{slot_index}\]"\s+;full_guid\s+#([0-9A-F]+)', text):
+        return m[1]
+    i = re.search(rf'"material_instance_descriptor/Overrides\[G:(\d+)\]/ID"\s+;u64\s+#{("6E", "78", "82")[slot_index]}\s', text)[1]
+    return re.search(rf'"material_instance_descriptor/Overrides\[G:{i}\]/Texture"\s+;full_guid\s+#([0-9A-F]+)', text)[1]
 
 
 def test_each_material_of_the_model_becomes_a_pbr_instance_with_its_textures(project):
@@ -531,3 +535,54 @@ def test_normalize_normals_is_on_by_default_and_the_setting_reaches_the_normal_m
     textures = virtual(project, "Texture")
     assert normalize_of(textures["stone_ddn (normal)"][1]) == 0, "made again, the normal map takes the setting"
     assert flip_of(textures["stone_ddn (normal)"][1]) == 0, "and the other option of the normal map is as it was"
+
+
+def layout_with_factors(prj: Path) -> None:
+    """What the material compiler leaves for the default PBR materials as graphs (render_settings_plan.md part two): their factor parameters."""
+    decls = [("BaseColorFactor", "COLOR"), ("RoughnessFactor", "FLOAT"), ("MetallicFactor", "FLOAT"), ("EmissiveColor", "COLOR")]
+    rows = ['  "manifest/Version" ;s32 1', f'  "manifest/Decls[]" ;s64 {len(decls)}']
+    for i, (name, kind) in enumerate(decls):
+        rows += [f'  "manifest/Decls[G:{i}]/ID" ;u64 #{0xFAC70000 + i:X}', f'  "manifest/Decls[G:{i}]/Name" ;string "{name}"', f'  "manifest/Decls[G:{i}]/Type" ;enum "{kind}"']
+        rows += [f'  "manifest/Decls[G:{i}]/Default/{c}" ;f32 1' for c in "XYZW"]
+    text = "< s32:d u32:g s16:C u16:H s8:c u8:h f32:f f64:F string:s wstring:S u64:G s64:D bool:c full_guid:GG enum:s >\n\n" \
+           f"[ xProperties : {len(rows)} ]\n{{ Name:s  Value:? }}\n" + "\n".join(rows) + "\n"
+    for guid in (PBR, ALPHA):
+        v = int(guid, 16)
+        (prj / "Cache/Resources/Logs/Material" / f"{v & 0xFF:02X}" / f"{(v >> 8) & 0xFF:02X}" / f"{v:X}.log" / "MaterialLayout.txt").write_text(text)
+
+
+def overrides(text: str) -> dict[str, list[float]]:
+    """NameHint -> value (x, y, z, w) of every override of an instance"""
+    def f32(s: str) -> float:
+        return struct.unpack(">f", int(s[1:], 16).to_bytes(4, "big"))[0] if s.startswith("#") else float(s)
+    out = {}
+    for i, name in re.findall(r'"material_instance_descriptor/Overrides\[G:(\d+)\]/NameHint"\s+;string\s+"([^"]*)"', text):
+        out[name] = [f32(re.search(rf'"material_instance_descriptor/Overrides\[G:{i}\]/Value/{c}"\s+;f32\s+(\S+)', text)[1]) for c in "XYZW"]
+    return out
+
+
+def test_a_material_with_factors_takes_the_models_constants_over_one_white_map(project):
+    """With factor parameters in the material (the default PBR graph) a constant the model gives is a factor of the instance, over a white map
+    shared by the model's materials, instead of a texture made for the material. A map the model has stays (its factor keeps the default)."""
+    layout_with_factors(project)
+    out = compile_geom(project)
+    instances = virtual(project, "MaterialInstance")
+    textures  = virtual(project, "Texture")
+    assert "White" in textures, out[-2000:]
+    assert not {"lamp (color)", "lamp (ORME)", "stone_diff (ORME)"} & set(textures), "no constant texture is made for a material"
+    white = textures["White"][0]
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"INTENSITY"', textures["White"][1]) and textures["White"][1].count("#3F800000") == 4
+
+    lamp = instances["lamp"][1]
+    assert texture_of(lamp, 1) == white and texture_of(lamp, 2) == white, "the lamp has no map: white albedo and ORME"
+    f = overrides(lamp)
+    assert f["BaseColorFactor"] == pytest.approx([1, 12 / 17, 4 / 17, 1], abs=1e-4), "an emitter's color is its emissive color (brightest channel 1)"
+    assert f["RoughnessFactor"][0] == pytest.approx((2 / 12) ** 0.5, abs=1e-4), "the roughness from the shininess (Ns 10)"
+    assert f["MetallicFactor"][0] == 0
+    assert "EmissiveColor" not in f, "it emits: the default (1) is kept, the overrides are sparse"
+
+    stone = instances["stone"][1]
+    assert texture_of(stone, 1) != white and texture_of(stone, 2) == white, "the stone keeps its color map, its ORME is white"
+    f = overrides(stone)
+    assert "BaseColorFactor" not in f, "a color map: the factor stays at its default"
+    assert f["EmissiveColor"] == [0, 0, 0, 1] and f["MetallicFactor"][0] == 0 and f["RoughnessFactor"][0] == pytest.approx(0.8)
