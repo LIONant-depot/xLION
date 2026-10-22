@@ -4,6 +4,7 @@ geometry...) - the name of the file over three actions: open it the way the Asse
 "Find" is the LocateAsset command here (the button does the same): the Assets tab of the drawer shows the file - its folder is the current one, what would hide it (the search) is cleared, it is the
 selection - and the drawer is open on that tab. GetBrowserState says where the tab is (AssetsFolder, AssetsSelected).
 """
+import contextlib
 import re
 import time
 
@@ -22,6 +23,8 @@ def state(editor) -> dict:
 def test_finding_a_file_shows_it_in_the_assets_tab_and_opens_the_drawer_on_it(editor):
     editor.cmd("SetBrowserSearch -Text this_matches_no_file_at_all")
     assert editor.cmd("LocateAsset -Path Assets/SheKnewMe.tga") == "LocateAsset: ok"
+    with contextlib.suppress(TimeoutError):                          # the drawer takes the tab it is asked for when it next draws
+        editor.wait_for("GetBrowserState", rf"(?m)^DrawerTab={ASSETS_TAB}$", timeout=5)
     now = state(editor)
     assert now["Drawer"] == "open" and now["DrawerTab"] == ASSETS_TAB, "the drawer is open on the Assets tab"
     assert now["Search"] == "", "the search that hid the file is cleared"
