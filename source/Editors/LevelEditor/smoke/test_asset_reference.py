@@ -81,7 +81,7 @@ def test_the_skeleton_the_skin_and_the_animations_of_a_file_are_its_dependents(e
         assert hit, f"the example project has a {type_name} made from {source}"
         guid, name = hit
         editor.cmd(f"OpenResourceEditor -Asset {guid}")
-        assert editor.cmd(f"{name}\\Compile", allow_disk=True) == "Compile: saved, compile queued"
+        assert editor.cmd(f"{name}\\Compile", allow_disk=True).startswith("Compile: saved, compile queued")      # then " (order N)": test_compile_orders_live.py
         deadline = time.monotonic() + 120
         while guid not in [g for g, _ in dependents(editor, source)]:
             assert time.monotonic() < deadline, f"the {type_name} {name} never became a dependent of {source}"

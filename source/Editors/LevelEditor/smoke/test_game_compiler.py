@@ -82,7 +82,7 @@ def test_the_project_includes_the_cmake_file_of_each_module_in_order(game):
     text = game.text()
     soccer, tennis = text.index("ScriptModule/B3/A1/A1B3"), text.index("ScriptModule/D5/C3/C3D5")
     assert 0 < soccer < tennis, "the modules are built in the order the Game lists them"
-    assert text.count("include(") == 2 and "foreach(P IN LISTS XSCRIPT_MODULE_PREFIXES)" in text and "cmake_language(CALL ${p}_apply Game)" in text
+    assert text.count('include("${GAME_PROJECT_ROOT}/') == 2 and "foreach(P IN LISTS XSCRIPT_MODULE_PREFIXES)" in text and "cmake_language(CALL ${p}_apply Game)" in text
     assert "add_library(Game SHARED" in text and "LIONCore.lib" in text and "target_precompile_headers(Game" in text
 
 
@@ -144,7 +144,7 @@ def test_a_module_listed_twice_fails_validation(game):
 def test_a_game_without_modules_makes_an_empty_project(game):
     game.modules([])
     assert game.compile().returncode == 0
-    assert "include(" not in game.text()
+    assert 'include("${GAME_PROJECT_ROOT}/' not in game.text(), "no module is included (the include of the engine build's project include is not a module)"
 
 
 def test_the_compiled_resource_is_not_older_than_its_descriptor(game):
@@ -175,6 +175,6 @@ def test_every_game_writes_its_own_project_whatever_the_project_names(game):
     assert game.cmakelists.is_file() and other.cmakelists.is_file() and game.cmakelists != other.cmakelists, "a project each"
     assert (game.out / game.rest).is_file() and (other.out / other.rest).is_file()
     assert "GameDll/CD" in game.text().replace("\\", "/") and "GameDll/EF" in other.text().replace("\\", "/"), "each one builds its DLL into its own folder"
-    assert other.text().count("include(") == 1 and game.text().count("include(") == 2, "and has the modules it lists"
+    assert other.text().count('include("${GAME_PROJECT_ROOT}/') == 1 and game.text().count('include("${GAME_PROJECT_ROOT}/') == 2, "and has the modules it lists"
     game.modules([0xA1B3, 0xA1B3])
     assert game.compile().returncode != 0, "and it is checked: a module listed twice still fails"
