@@ -128,6 +128,22 @@ namespace
     }
 
     inline bool AtCwd( int Fd, const char* p ) noexcept { return Fd == AT_FDCWD || (p && p[0] == '/'); }
+
+    // A path spelled the Windows way is ONE component to std::filesystem on Linux ("<project>/Descriptors\\Texture\\05\\00\\X.desc"), so
+    // create_directories asks for all of it with a single mkdir, which fails when the parents are missing (the virtual resources of a compile
+    // were never written). Such a mkdir makes its missing parents first, as create_directories does on Windows. Out: the (case-resolved) path to retry.
+    bool MakeParents( const char* pOriginal, const char* pFixed, mode_t M, std::string& Out ) noexcept
+    {
+        if (!pOriginal || !pFixed || !Enabled() || errno != ENOENT || !::strchr(pOriginal, '\\')) return false;
+        static const auto s_mkdir = Real<int (*)(const char*, mode_t)>("mkdir");
+        if (!ResolveCase(pFixed, Out)) Out = pFixed;
+        for (std::size_t i = Out.find('/', 1); i != std::string::npos; i = Out.find('/', i + 1))
+        {
+            const std::string Parent = Out.substr(0, i);
+            if (!Exists(Parent) && s_mkdir(Parent.c_str(), M) != 0 && errno != EEXIST) return false;
+        }
+        return true;
+    }
 }
 
 // Every wrapper: try with fixed separators; on ENOENT/ENOTDIR retry with the case-resolved path.
@@ -186,8 +202,34 @@ int statx(int Fd, const char* pPath, int Fl, unsigned int M, struct statx* s) { 
 int access(const char* pPath, int M)                              { static const auto s_real = Real<int (*)(const char*, int)>("access"); XLION_PATH_CALL(int, -1, s_real(pPath, M)) }
 int faccessat(int Fd, const char* pPath, int M, int Fl)           { static const auto s_real = Real<int (*)(int, const char*, int, int)>("faccessat"); if (!AtCwd(Fd, pPath)) return s_real(Fd, pPath, M, Fl); XLION_PATH_CALL(int, -1, s_real(Fd, pPath, M, Fl)) }
 DIR* opendir(const char* pPath)                                   { static const auto s_real = Real<DIR* (*)(const char*)>("opendir"); XLION_PATH_CALL(DIR*, nullptr, s_real(pPath)) }
-int mkdir(const char* pPath, mode_t M)                            { static const auto s_real = Real<int (*)(const char*, mode_t)>("mkdir"); XLION_PATH_CALL(int, -1, s_real(pPath, M)) }
-int mkdirat(int Fd, const char* pPath, mode_t M)                  { static const auto s_real = Real<int (*)(int, const char*, mode_t)>("mkdirat"); if (!AtCwd(Fd, pPath)) return s_real(Fd, pPath, M); XLION_PATH_CALL(int, -1, s_real(Fd, pPath, M)) }
+// mkdir: also makes the missing parents of a path with '\\' separators (MakeParents)
+int mkdir(const char* pPath, mode_t M)
+{
+    static const auto s_real = Real<int (*)(const char*, mode_t)>("mkdir");
+    std::string B1, B2, B3;
+    const char* p1 = Slashes(pPath, B1);
+    int r = s_real(p1, M);
+    if (r == 0) return r;
+    const int e = errno;
+    const char* p2 = Cased(p1, B2);
+    if (p2) r = s_real(p2, M); else errno = e;
+    if (r != 0 && MakeParents(pPath, p2 ? p2 : p1, M, B3)) r = s_real(B3.c_str(), M);
+    return r;
+}
+int mkdirat(int Fd, const char* pPath, mode_t M)
+{
+    static const auto s_real = Real<int (*)(int, const char*, mode_t)>("mkdirat");
+    if (!AtCwd(Fd, pPath)) return s_real(Fd, pPath, M);
+    std::string B1, B2, B3;
+    const char* p1 = Slashes(pPath, B1);
+    int r = s_real(Fd, p1, M);
+    if (r == 0) return r;
+    const int e = errno;
+    const char* p2 = Cased(p1, B2);
+    if (p2) r = s_real(Fd, p2, M); else errno = e;
+    if (r != 0 && MakeParents(pPath, p2 ? p2 : p1, M, B3)) r = s_real(Fd, B3.c_str(), M);
+    return r;
+}
 int rmdir(const char* pPath)                                      { static const auto s_real = Real<int (*)(const char*)>("rmdir");  XLION_PATH_CALL(int, -1, s_real(pPath)) }
 int unlink(const char* pPath)                                     { static const auto s_real = Real<int (*)(const char*)>("unlink"); XLION_PATH_CALL(int, -1, s_real(pPath)) }
 int unlinkat(int Fd, const char* pPath, int Fl)                   { static const auto s_real = Real<int (*)(int, const char*, int)>("unlinkat"); if (!AtCwd(Fd, pPath)) return s_real(Fd, pPath, Fl); XLION_PATH_CALL(int, -1, s_real(Fd, pPath, Fl)) }
