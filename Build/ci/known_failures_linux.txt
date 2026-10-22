@@ -4,12 +4,9 @@
 # "known" in the report. When a listed test passes the report says "fixed": delete its line. After fixing a group, regenerate:
 #     python Build/ci/summarize.py --junit suite.xml --out out --tier full        (out/failed_now.txt is the new list: copy it here)
 # Regenerated 2026-10-22 from a full Debug run in a cloud container (4 cores, headless editor) after the Linux path/test fixes: 490 passed, 12 failed (was 241 listed). The groups: imported skins and virtual resource cleanup (generated skeleton/package and normal-map options), the old prefab format ("id already in use"), lady.fbx missing from example.lionprj on GitHub, model-named maps in the material import, prefab spawn speed targets (machine dependent), compiler-newer recompiling the fonts.
-test_compiler_newer.py::test_a_compiler_built_after_its_resources_compiles_them_again
 test_imported_materials.py::test_a_material_with_no_map_finds_the_maps_named_after_the_model
 test_imported_skeleton.py::test_a_952_bone_rig_compiles_with_palettes_deterministically
 test_prefab_spawn.py::test_prefab_spawn_meets_its_targets
-test_prefabs.py::test_every_example_prefab_reads_the_same_from_the_old_format
-test_prefabs.py::test_upgrade_project_converts_a_prefab_of_the_old_format
 test_skin_import.py::test_the_refs_are_the_generated_skeleton_and_package
 test_skin_import.py::test_turning_the_import_off_gives_the_skeleton_back_to_the_user
 test_virtual_resource_cleanup.py::test_an_option_of_the_normal_maps_goes_on_the_ones_already_made_and_only_those_are_compiled_again[SetFlipNormalY-Normal Flip Y-0-1]
