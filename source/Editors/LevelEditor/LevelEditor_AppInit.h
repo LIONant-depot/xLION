@@ -407,6 +407,7 @@ namespace level_editor
         xeditor::diagnostics::Log("shutdown: frame loop ended");
 
         xresource_editor::compilation::CancelAll();       // the compilers still running end now (each runs in a job that also ends it if the editor dies)
+        xresource_editor::g_LibMgr.m_Compilation.StopAndWait(std::chrono::seconds(5));     // and the threads that ran them, before the libraries go
 
         xresource_editor::source_control::StopSourceControlScans();       // a scan worker must not outlive the statics it reads
 
