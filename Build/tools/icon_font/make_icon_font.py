@@ -8,8 +8,29 @@ name>[:filled]". A new MDL2 glyph in the code needs a line there and a re-run.
 
 Usage: python make_icon_font.py <path to the @fluentui/svg-icons package> [out.ttf]
        (npm pack @fluentui/svg-icons, then untar; needs fonttools)
+       python make_icon_font.py --check      lists the code points the code uses that icon_map.txt lacks
 """
-import os, re, sys
+import glob, os, re, sys
+
+here = os.path.dirname(os.path.abspath(__file__))
+
+if len(sys.argv) > 1 and sys.argv[1] == "--check":
+    root  = os.path.join(here, "..", "..", "..")
+    known = {int(l.split()[0], 16) for l in open(os.path.join(here, "icon_map.txt")) if l.strip() and not l.startswith("#")}
+    used  = {}
+    def sources():
+        tops = [os.path.join(root, d) for d in ("source", "plugins")]
+        tops += [os.path.join(dep, d) for dep in glob.glob(os.path.join(root, "dependencies", "*")) for d in ("source", "src", "include")]
+        for top in tops:
+            for d, _, files in os.walk(top):     # (links inside are not followed: plugins and dependencies link to each other)
+                yield from (os.path.join(d, f) for f in files if f.endswith((".h", ".hpp", ".inl", ".cpp")))
+    for path in sources():
+        for m in re.finditer(rb"(?:\\x[0-9A-Fa-f]{2}){3}", open(path, "rb").read()):
+            try:    cp = ord(bytes(int(x, 16) for x in re.findall(rb"x([0-9A-Fa-f]{2})", m.group())).decode())
+            except: continue
+            if 0xE000 <= cp <= 0xF8FF and cp not in known: used.setdefault(cp, os.path.relpath(path, root))
+    for cp, path in sorted(used.items()): print(f"{cp:04X}  {path}")
+    sys.exit(1 if used else 0)
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.pens.transformPen import TransformPen
@@ -19,7 +40,6 @@ from fontTools.svgLib.path import parse_path
 EM = 2048       # Segoe MDL2's own em and metrics: ascent 2048, descent 0, every glyph 1 em wide
 VIEW = 20.0     # Fluent's 20px icons
 
-here = os.path.dirname(os.path.abspath(__file__))
 pkg  = sys.argv[1]
 out  = sys.argv[2] if len(sys.argv) > 2 else os.path.join(here, "..", "..", "..", "source", "Assets", "Fonts", "segmdl2_compat.ttf")
 

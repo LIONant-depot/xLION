@@ -21,6 +21,7 @@ E74D delete
 E74E save
 E768 play
 E769 pause
+E76F line_horizontal_3
 E774 globe
 E7A6 arrow_redo
 E7A7 arrow_undo

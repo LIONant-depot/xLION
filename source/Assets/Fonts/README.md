@@ -1,10 +1,12 @@
 # Fonts
 
-`segmdl2_compat.ttf` stands in for Segoe MDL2 Assets off Windows. The editor writes its icons as Segoe MDL2
-code points, and that font ships only with Windows and can't be redistributed. This font puts a matching icon at
-each code point the editor uses. `Build/tools/icon_font` builds it (`icon_map.txt` lists the code points).
+`segmdl2_compat.ttf` is the editor's icon font on every platform. The editor writes its icons as Segoe MDL2 Assets
+code points; that font ships only with Windows and can't be redistributed, so this one puts a matching icon at each
+code point the editor uses. It is copied next to the executables, where xGPU loads it for the icons. On Windows,
+Segoe MDL2 Assets is merged in behind it, so a code point missing here still draws there (and nowhere else).
 
-A real `segmdl2.ttf` next to the executable or in `~/.local/share/fonts` is used instead when it is there.
+`Build/tools/icon_font` builds it: `icon_map.txt` lists the code points, `make_icon_font.py --check` lists the ones
+the code uses that the map lacks.
 
 The glyphs come from [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons):
 
