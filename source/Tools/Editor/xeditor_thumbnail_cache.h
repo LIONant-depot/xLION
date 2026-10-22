@@ -141,6 +141,9 @@ namespace xeditor
             xresource_editor::g_LibMgr.m_OnCompilationState.Register<&thumbnail_cache::OnCompilationState>(*this);
         }
 
+        // The window renderers record into (null until Init): other small offscreen pictures (a material step's preview) use it too
+        xgpu::window* Window() const noexcept { return m_pWindow; }
+
         ~thumbnail_cache() noexcept
         {
             if (m_bCompileHookRegistered) xresource_editor::g_LibMgr.m_OnCompilationState.RemoveDelegates(this);

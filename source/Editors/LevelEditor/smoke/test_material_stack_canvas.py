@@ -1,4 +1,4 @@
-"""The ten task tests of documentation/stack_canvas.md section 11, on the Material Stack canvas of the Material editor (the Debug editor, a real window).
+"""The task tests of documentation/stack_canvas.md section 11 (1 to 10, and 11 to 14 for components, section 6.5), on the Material Stack canvas of the Material editor (the Debug editor, a real window).
 
 The editor opens example.lionprj read-only: one material is opened in the editor, every test builds its graph in it with the editor's own commands
 (and mouse gestures, tests 4 to 7 and 9) and the material is closed without saving at the end. Nothing is ever saved. Windows only.
@@ -57,6 +57,7 @@ class Canvas:
         ed.ok(f"OpenResourceEditor -Asset {self.guid} -Library {lib}")
         ed._frames(10)
         self.click_img(840, 75)                      # the Material Stack tab
+        self.C("StepPreviews -On false")             # the layouts these tests measure: without rendered previews (test_material_step_previews.py)
         ed._frames(5)
 
     def close(self):
@@ -654,3 +655,193 @@ def test_10_add_one_node_to_a_large_material(cv):
     cv.ed._frames(3)
     assert cv.stack() == after_place
     measure("10", "pass (Debug build)", f"steps {steps_now}, sampled steps moved by the add {moved} of {len(names)} (view origin shift {dx},{dy} px), layout ms: before add {st0['ms']:.2f}, after add {st1['ms']:.2f}, after a reorder {st2['ms']:.2f}, columns {st1['columns']:.0f}, crossings {st1['crossings']:.0f}; the drag preview itself was not driven (the new step is off screen at 200 steps)")
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Components (stack_canvas.md 6.5): truncation, the fan, the component picker, a vector output's component pins. Each gesture: what it
+# connects (ListStack chips), one undo step, and how many clicks / drags / keys it took (the number the section records).
+# ---------------------------------------------------------------------------------------------------------------------------------
+SHOTS = os.environ.get("XMATERIAL_SHOTS")                 # a folder: the tests also capture the canvas there (for the docs)
+
+
+def shot(cv: Canvas, name: str, rect: tuple[int, int, int, int]):
+    """The editor window's capture, cropped to rect (screen coordinates), when XMATERIAL_SHOTS names a folder."""
+    if not SHOTS:
+        return
+    from PIL import Image
+    path = os.path.join(SHOTS, name)
+    if os.path.exists(path):
+        os.remove(path)
+    cv.ed.cmd(f"CaptureWindow -File {path}")
+    for _ in range(200):
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    Image.open(path).crop((rect[0] - cv.ox, rect[1] - cv.oy, rect[2] - cv.ox, rect[3] - cv.oy)).save(path)
+
+
+def scene_components(cv: Canvas):
+    cv.clear()
+    s = cv.section("Surface")
+    cv.node("Texture", "Albedo", s)
+    cv.node("Vec4 Multiply", "Tint", s)
+    cv.node("Vec2", "UV2", s)
+    cv.ed._frames(5)
+
+
+def press_and_travel(cv: Canvas, a, b, steps: int = 10):
+    """Press at a, travel to b (frames on the way), the button still down."""
+    cv.mv(*a)
+    cv.down()
+    for i in range(1, steps + 1):
+        cv.mv(a[0] + (b[0] - a[0]) * i / steps, a[1] + (b[1] - a[1]) * i / steps, 1)
+    cv.ed._frames(3)
+
+
+def fan_slot(pin, k: int):
+    """Where component k of a vector output fans out while an input is dragged over its pin (FanSlot in the canvas)."""
+    return pin[0] + 24 + 24 * k, pin[1]
+
+
+def test_11_texture_rgb_into_vec3(cv):
+    """(a) A Texture's RGB into a vec3 input: one drag, the chip reads Albedo.xyz (truncation)."""
+    scene_components(cv)
+    before = cv.stack()
+    p, _ = cv.pins("Albedo")
+    q, _ = cv.pins("Output__Target_Color")
+    cv.ed.click(*p["out:Vec4"], to=q["in:Color(3)"])       # 1 drag
+    cv.ed._frames(4)
+    after = cv.stack()
+    assert "Color(3) <- Albedo.xyz" in after, after
+    cv.invariants("test 11")
+    cv.one_undo_step(before, after, "test 11")
+    _, chip, _ = cv.route(cv.conn("Output__Target_Color", "Color"))
+    r = cv.rect("@Output__Target_Color")
+    shot(cv, "truncation_chip.png", (p["out:Vec4"][0] - 160, r[1] - 12, r[0] + r[2] + 12, r[1] + r[3] + 12))
+    measure("11", "pass", "Texture RGB into a vec3 input: 1 drag (truncation, chip Albedo.xyz), undo steps 1")
+
+
+def test_12_texture_alpha_as_float_mask(cv):
+    """(b) A Texture's alpha into a float input: the fan (1 drag), the drop picker (1 drag + 2 keys), the output's component pins (1 click + 1 drag)."""
+    scene_components(cv)
+    cv.link("Albedo", "Output__Target_Color.Color")
+    cv.ed._frames(4)
+    before = cv.stack()
+    # the fan: drag from A(1) over Albedo's pin, along to its .w, release
+    p, _ = cv.pins("Albedo")
+    q, _ = cv.pins("Output__Target_Color")
+    press_and_travel(cv, q["in:A(1)"], p["out:Vec4"])
+    r = cv.rect("@Albedo")
+    shot(cv, "fan.png", (r[0] - 12, r[1] - 12, p["out:Vec4"][0] + 140, r[1] + r[3] + 12))
+    for i in range(1, 9):
+        cv.mv(p["out:Vec4"][0] + (fan_slot(p["out:Vec4"], 3)[0] - p["out:Vec4"][0]) * i / 8, p["out:Vec4"][1], 1)
+    cv.ed._frames(3)
+    cv.up()                                                # 1 drag in all
+    cv.ed._frames(4)
+    after = cv.stack()
+    assert "A(1) <- Albedo.w" in after, after
+    pins, text = cv.pins("Albedo")
+    assert "out:Vec4.w" in pins, f"a connected component shows the output's component pins: {text}"
+    cv.invariants("test 12 fan")
+    cv.one_undo_step(before, after, "test 12 fan")
+    r = cv.rect("@Albedo")
+    shot(cv, "expanded_output.png", (r[0] - 12, r[1] - 12, r[0] + r[2] + 330, r[1] + r[3] + 12))
+
+    # the drop picker: Albedo's output onto A(1) (the types refuse a vec4 there), type a, Enter
+    cv.C("Undo")
+    cv.ed._frames(4)
+    assert cv.stack() == before
+    p, _ = cv.pins("Albedo")
+    q, _ = cv.pins("Output__Target_Color")
+    cv.ed.click(*p["out:Vec4"], to=q["in:A(1)"])           # 1 drag: the picker opens at the drop
+    cv.ed._frames(4)
+    assert cv.stack() == before, "the drop alone connects nothing"
+    cv.type("a")
+    cv.key(0x0D)                                           # 2 keys (rgba letters work on any vector)
+    cv.ed._frames(4)
+    assert cv.stack() == after, cv.stack()
+    cv.one_undo_step(before, after, "test 12 picker")
+
+    # the output's arrow: show its components, drag from .w
+    cv.C("Undo")
+    cv.ed._frames(4)
+    p, text = cv.pins("Albedo")
+    assert "out:Vec4.w" not in p, text
+    m = re.search(r"arrow:Vec4=(-?\d+),(-?\d+)", text)
+    cv.ed.click(int(m[1]), int(m[2]))                      # 1 click
+    cv.ed._frames(4)
+    assert cv.stack() == before, "showing components is view state"
+    p, text = cv.pins("Albedo")
+    q, _ = cv.pins("Output__Target_Color")
+    assert "out:Vec4.w" in p, text
+    cv.ed.click(*p["out:Vec4.w"], to=q["in:A(1)"])         # 1 drag
+    cv.ed._frames(4)
+    assert cv.stack() == after, cv.stack()
+    cv.invariants("test 12 arrow")
+    cv.one_undo_step(before, after, "test 12 arrow")
+    measure("12", "pass", "Texture alpha into a float input: fan 1 drag; drop picker 1 drag + 2 keys; arrow 1 click + 1 drag; chip Albedo.w; undo steps 1 each")
+
+
+def test_13_vec2_x_splat_into_vec4(cv):
+    """(c) Vec2.x into a vec4 input (a splat): the fan, 1 drag."""
+    scene_components(cv)
+    before = cv.stack()
+    p, _ = cv.pins("UV2")
+    q, _ = cv.pins("Tint")
+    press_and_travel(cv, q["in:B(4)"], p["out:Vec2"])
+    for i in range(1, 5):
+        cv.mv(p["out:Vec2"][0] + (fan_slot(p["out:Vec2"], 0)[0] - p["out:Vec2"][0]) * i / 4, p["out:Vec2"][1], 1)
+    cv.ed._frames(3)
+    cv.up()
+    cv.ed._frames(4)
+    after = cv.stack()
+    assert "B(4) <- UV2.x" in after, after
+    cv.invariants("test 13")
+    cv.one_undo_step(before, after, "test 13")
+    measure("13", "pass", "Vec2.x splat into a vec4 input: 1 drag (fan), chip UV2.x, undo steps 1")
+
+
+def test_14_swizzle_picker(cv):
+    """A chip's component suffix opens the picker: a typed swizzle, a component, all again; SetInputSwizzle refuses a wrong length."""
+    scene_components(cv)
+    cv.link("Albedo", "Output__Target_Color.Color")
+    cv.ed._frames(4)
+    before = cv.stack()
+    assert "Color(3) <- Albedo.xyz" in before
+    cid = cv.conn("Output__Target_Color", "Color")
+    _, _, r = cv.route(cid)
+    m = re.search(r"suffix (-?\d+) (-?\d+)", r)
+    assert m, r
+    cv.ed.click(int(m[1]), int(m[2]))                      # 1 click: the picker
+    cv.ed._frames(4)
+    rr = cv.rect("@Output__Target_Color")
+    shot(cv, "swizzle_picker.png", (rr[0] - 12, rr[1] - 12, rr[0] + rr[2] + 300, rr[1] + rr[3] + 200))
+    cv.type("bgr")
+    cv.ed._frames(3)
+    shot(cv, "swizzle_picker_typed.png", (rr[0] - 12, rr[1] - 12, rr[0] + rr[2] + 300, rr[1] + rr[3] + 200))
+    cv.key(0x0D)                                           # 3 letters + Enter
+    cv.ed._frames(4)
+    after = cv.stack()
+    assert "Color(3) <- Albedo.zyx" in after, after         # a Vector4 shows xyzw; rgba letters are accepted
+    assert cv.conn("Output__Target_Color", "Color") == cid, "the connection keeps its id"
+    cv.one_undo_step(before, after, "test 14 swizzle")
+    # a component: the suffix again, w, Enter -> the sub-element (a vec3 input splats it)
+    _, _, r = cv.route(cid)
+    m = re.search(r"suffix (-?\d+) (-?\d+)", r)
+    cv.ed.click(int(m[1]), int(m[2]))
+    cv.ed._frames(4)
+    cv.type("w")
+    cv.key(0x0D)
+    cv.ed._frames(4)
+    comp = cv.stack()
+    assert "Color(3) <- Albedo.w" in comp, comp
+    cv.one_undo_step(after, comp, "test 14 component")
+    # the console twin, and its refusal
+    cv.E("SetInputSwizzle -Input @Output__Target_Color.Color -Swizzle all")
+    assert cv.stack() == before
+    refused = cv.C("SetInputSwizzle -Input @Output__Target_Color.Color -Swizzle xy")
+    assert "3 components" in refused and cv.stack() == before, refused
+    refused = cv.C("SetInputSwizzle -Input @Output__Target_Color.Color -Swizzle xyq")
+    assert "components" in refused and cv.stack() == before, refused
+    measure("14", "pass", "swizzle from the chip: 1 click + 3 letters + Enter (Albedo.zyx, connection id kept); component w: 1 click + 2 keys; SetInputSwizzle all / refusals; undo steps 1 each")

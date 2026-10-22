@@ -257,7 +257,7 @@ namespace xeditor
             m_View.LookAt(m_Distance + Distance - 1, m_Angles, m_Target);
 
             push_constants PushConst;
-            PushConst.m_L2W = xmath::fmat4::fromScale({ 2.f });
+            PushConst.m_L2W = xmath::fmat4::fromScale({ m_Model == e19::mesh_manager::model::PLANE3D ? 0.5f : 2.f });     // the flat quad (2 x 2) fills the view
             PushConst.m_W2C = m_View.getW2C();
 
             // A fixed, camera-relative key light (product-shot style: up and to the side of whatever angle
