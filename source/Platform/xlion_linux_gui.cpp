@@ -16,8 +16,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <strings.h>
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -565,11 +567,81 @@ extern "C" int xlion_gui_FileDialog( int Mode, const char* pTitle, const char* p
     return 1;
 }
 
+namespace
+{
+    // file:// URI of an absolute path (everything but the unreserved characters and '/' percent-encoded: a quote or a space cannot break the call)
+    std::string FileUri( const std::string& Absolute ) noexcept
+    {
+        static constexpr char Hex[] = "0123456789ABCDEF";
+        std::string Uri = "file://";
+        for( const unsigned char c : Absolute )
+        {
+            if( std::isalnum(c) || c == '/' || c == '-' || c == '_' || c == '.' || c == '~' ) Uri += static_cast<char>(c);
+            else { Uri += '%'; Uri += Hex[c >> 4]; Uri += Hex[c & 15]; }
+        }
+        return Uri;
+    }
+
+    // "Show in Explorer" (explorer /select,<path>): the desktop's file manager on the folder of Path with Path selected, as Explorer does. The file managers
+    // (Nautilus, Dolphin, Nemo, Caja, Thunar, ...) take it through org.freedesktop.FileManager1.ShowItems; without one the folder is opened (no selection).
+    bool Reveal( const std::string& Path ) noexcept
+    {
+        namespace fs = std::filesystem;
+        std::error_code Ec;
+        const fs::path Abs = fs::absolute(fs::path(Path), Ec).lexically_normal();
+        if( Abs.empty() ) return false;
+        const bool bExists = fs::exists(Abs, Ec);
+
+        if( IsWSL() )
+        {
+            std::string WinPath;
+            if( RunCapture({ "wslpath", "-w", Abs.string() }, WinPath) == 0 && !WinPath.empty() )
+                return RunDetached({ "explorer.exe", bExists ? "/select," + WinPath : WinPath }) ;
+        }
+
+        if( bExists )
+        {
+            std::string Out;
+            const std::string Uri = FileUri(Abs.string());
+            if( HasProgram("gdbus") && RunCapture({ "gdbus", "call", "--session", "--timeout", "5", "--dest", "org.freedesktop.FileManager1", "--object-path", "/org/freedesktop/FileManager1"
+                                                  , "--method", "org.freedesktop.FileManager1.ShowItems", "['" + Uri + "']", "" }, Out) == 0 ) return true;
+            if( HasProgram("dbus-send") && RunCapture({ "dbus-send", "--session", "--print-reply", "--reply-timeout=5000", "--dest=org.freedesktop.FileManager1", "/org/freedesktop/FileManager1"
+                                                      , "org.freedesktop.FileManager1.ShowItems", "array:string:" + Uri, "string:" }, Out) == 0 ) return true;
+        }
+
+        // No file manager that selects: its folder (or the folder itself when Path is one)
+        const fs::path Folder = (bExists && fs::is_directory(Abs, Ec)) ? Abs : Abs.parent_path();
+        if( HasProgram("xdg-open") ) return RunDetached({ "xdg-open", Folder.string() });
+        if( HasProgram("gio") )      return RunDetached({ "gio", "open", Folder.string() });
+        ReportMissingOnce("showing a file in the file manager needs xdg-open (xdg-utils) or a FileManager1 file manager (Nautilus, Dolphin, ...) - none is installed");
+        return false;
+    }
+
+    // Explorer's command line, as the editor writes it for Windows: "/select,<path>", "/select,\"<path>\"" or just "<folder>"
+    std::string ExplorerTarget( std::string Params, bool& bSelect ) noexcept
+    {
+        auto Trim = [](std::string& S) { while( !S.empty() && (S.front() == ' ' || S.front() == '"') ) S.erase(S.begin()); while( !S.empty() && (S.back() == ' ' || S.back() == '"') ) S.pop_back(); };
+        Trim(Params);
+        bSelect = Params.size() >= 7 && ::strncasecmp(Params.c_str(), "/select", 7) == 0;
+        if( bSelect ) { Params.erase(0, 7); if( !Params.empty() && Params.front() == ',' ) Params.erase(Params.begin()); Trim(Params); }
+        return PosixPath(Params.c_str());
+    }
+}
+
 extern "C" int xlion_gui_ShellOpen( const char* pFile, const char* pParams, const char* pDir )
 {
     const std::string File = PosixPath(pFile);
     if( File.empty() ) return 0;
     const std::string Dir = PosixPath(pDir);
+
+    // ShellExecute("explorer.exe", "/select,<path>"): Show in Explorer
+    if( const auto Name = std::filesystem::path(File).filename().string(); ::strcasecmp(Name.c_str(), "explorer.exe") == 0 || ::strcasecmp(Name.c_str(), "explorer") == 0 )
+    {
+        bool bSelect = false;
+        const std::string Target = ExplorerTarget(pParams ? pParams : "", bSelect);
+        if( Target.empty() ) return 0;
+        return (bSelect ? Reveal(Target) : xlion_gui_ShellOpen(Target.c_str(), nullptr, nullptr)) ? 1 : 0;
+    }
 
     // An executable with parameters is run as is (ShellExecute "open" on a program)
     if( pParams && *pParams && ::access(File.c_str(), X_OK) == 0 && !std::filesystem::is_directory(File) )
