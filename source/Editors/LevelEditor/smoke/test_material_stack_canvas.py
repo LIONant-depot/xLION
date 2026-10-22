@@ -796,10 +796,10 @@ def test_13_vec2_x_splat_into_vec4(cv):
     cv.up()
     cv.ed._frames(4)
     after = cv.stack()
-    assert "B(4) <- UV2.x" in after, after
+    assert "B(4) <- UV2.xxxx" in after, after
     cv.invariants("test 13")
     cv.one_undo_step(before, after, "test 13")
-    measure("13", "pass", "Vec2.x splat into a vec4 input: 1 drag (fan), chip UV2.x, undo steps 1")
+    measure("13", "pass", "Vec2.x splat into a vec4 input: 1 drag (fan), chip UV2.xxxx, undo steps 1")
 
 
 def test_14_swizzle_picker(cv):
@@ -835,7 +835,7 @@ def test_14_swizzle_picker(cv):
     cv.key(0x0D)
     cv.ed._frames(4)
     comp = cv.stack()
-    assert "Color(3) <- Albedo.w" in comp, comp
+    assert "Color(3) <- Albedo.www" in comp, comp
     cv.one_undo_step(after, comp, "test 14 component")
     # the console twin, and its refusal
     cv.E("SetInputSwizzle -Input @Output__Target_Color.Color -Swizzle all")
