@@ -117,11 +117,22 @@ namespace xeditor
         // What a material slot with no texture of its own is bound to
         xgpu::texture& DefaultTexture() noexcept { return m_DefaultTexture; }
 
-        // The material to show: its fragment shader (with the preview's vertex shader) and one binding per sampler it declares.
-        bool SetMaterial(const xgpu::shader& Fragment, std::span<xgpu::pipeline_instance::sampler_binding> Bindings) noexcept
+        // The material to show: its fragment shader (with the preview's vertex shader), one binding per sampler it declares and its parameter block (the material's
+        // default block, or an instance's resolved one: MaterialParams, binding 9, documentation/material_contract.md section 2). The LDR shader reads it at base 0.
+        bool SetMaterial(const xgpu::shader& Fragment, std::span<xgpu::pipeline_instance::sampler_binding> Bindings, std::span<const float> Block = {}) noexcept
         {
             if (!m_bReady) return false;
             ClearMaterial();
+
+            // Binding 9 holds the block (one zero vec4 when there is none: a buffer cannot be empty), binding 10 one zeroed entity entry (mask 0: nothing overridden).
+            // ponytail: new buffers per call; the old ones free themselves when dropped.
+            std::array<float, 4> Zero{};
+            if (Block.empty()) Block = Zero;
+            std::array<float, 16> Entity{};
+            if (!Ok(m_pDevice->Create(m_Params, { .m_Type = xgpu::buffer::type::STORAGE, .m_Usage = xgpu::buffer::setup::usage::GPU_READ
+                , .m_EntryByteSize = 16, .m_EntryCount = int(Block.size() / 4), .m_pData = const_cast<float*>(Block.data()) }))) return false;
+            if (!Ok(m_pDevice->Create(m_Entity, { .m_Type = xgpu::buffer::type::STORAGE, .m_Usage = xgpu::buffer::setup::usage::GPU_READ
+                , .m_EntryByteSize = 64, .m_EntryCount = 1, .m_pData = Entity.data() }))) return false;
 
             xgpu::shader Vert;
             if (!Ok(m_pDevice->Create(Vert, { .m_Type = xgpu::shader::type::bit::VERTEX, .m_Sharer = xgpu::shader::setup::raw_data{ s_MeshVertShader } }))) return false;
@@ -131,7 +142,11 @@ namespace xeditor
             // Binding 1 (set 2, per xgpu's uniform_binds convention) - mb_standard_pbr.frag's "lighting_uniforms".
             // A material whose fragment shader doesn't declare it (not built on mb_standard_pbr.frag) simply
             // never reads this bind; declaring it unconditionally costs nothing there.
-            auto UniformBinds = std::array{ xgpu::pipeline::uniform_binds{ .m_BindIndex = 1, .m_Usage = { .m_bFragment = true }, .m_Type = xgpu::pipeline::uniform_binds::type::UBO_DYNAMIC } };
+            auto UniformBinds = std::array
+            { xgpu::pipeline::uniform_binds{ .m_BindIndex = 1,  .m_Usage = { .m_bFragment = true }, .m_Type = xgpu::pipeline::uniform_binds::type::UBO_DYNAMIC }
+            , xgpu::pipeline::uniform_binds{ .m_BindIndex = 9,  .m_Usage = { .m_bFragment = true }, .m_Type = xgpu::pipeline::uniform_binds::type::SSBO_STATIC }       // MaterialParams
+            , xgpu::pipeline::uniform_binds{ .m_BindIndex = 10, .m_Usage = { .m_bFragment = true }, .m_Type = xgpu::pipeline::uniform_binds::type::SSBO_STATIC }       // EntityParams (the LDR shader never reads it)
+            };
             if (!Ok(m_pDevice->Create(m_Pipeline, xgpu::pipeline::setup
                 { .m_VertexDescriptor = m_MeshVD, .m_Shaders = Shaders, .m_PushConstantsSize = sizeof(push_constants), .m_UniformBinds = UniformBinds, .m_Samplers = Samplers }))) return false;
 
@@ -254,7 +269,8 @@ namespace xeditor
             Lighting.m_wSpaceEyePos      = xmath::fvec4(m_View.getPosition(), 0);
             Lighting.m_LightParams       = { 2.f, 6500.f, 1.f, 0.f };  // area radius, temperature (K), intensity mult, spare
 
-            CmdBuffer.setPipelineInstance(m_Instance);
+            auto Static = std::array<xgpu::buffer*, 2>{ &m_Params, &m_Entity };
+            CmdBuffer.setPipelineInstance(m_Instance, Static);
             CmdBuffer.setPushConstants(PushConst);
             CmdBuffer.setDynamicUBO(m_LightUBO, 1);
             m_Meshes.Rendering(CmdBuffer, m_Model);
@@ -265,6 +281,8 @@ namespace xeditor
         e19::mesh_manager               m_Meshes;
         xgpu::vertex_descriptor         m_MeshVD;
         xgpu::buffer                    m_LightUBO;
+        xgpu::buffer                    m_Params;                            // MaterialParams: the shown material's block
+        xgpu::buffer                    m_Entity;                            // EntityParams: one zeroed entry
         xgpu::pipeline                  m_Pipeline2D;
         xgpu::pipeline_instance         m_Background;
         xgpu::texture                   m_CheckerTexture;
