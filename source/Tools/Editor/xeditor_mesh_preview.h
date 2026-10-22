@@ -170,25 +170,31 @@ namespace xeditor
             xeditor::DestroyGpu(m_pDevice, m_Background, m_Pipeline2D, m_CheckerTexture, m_DefaultTexture);
         }
 
-        // The panel: a mesh picker over the preview. Right drag turns the object, the wheel zooms.
+        // The panel: the toolbar (camera, then the mesh picker) over the preview. Right drag turns the object, the wheel zooms.
         void Render() noexcept
         {
-            if (!m_bToolbar) { m_bToolbar = true; m_CameraToolbar.Init(reinterpret_cast<std::uint64_t>(this)); }
-            m_CameraToolbar.Render(ImGui::GetContentRegionAvail(), m_CameraState, [this] { RenderBody(); });
+            if (!m_bToolbar) { m_bToolbar = true; m_CameraToolbar.Init(reinterpret_cast<std::uint64_t>(this), 270.0f, 160.0f); }
+            m_CameraToolbar.Render(ImGui::GetContentRegionAvail(), m_CameraState, [this] { RenderBody(); }, [this](bool bHorizontal, float ButtonH) { MeshButton(bHorizontal, ButtonH); });
         }
 
-        void RenderBody() noexcept
+        // The mesh the material is shown on: a toolbar button and its list
+        void MeshButton(bool bHorizontal, float ButtonH) noexcept
         {
-            if (!m_bReady) { ImGui::TextDisabled("Preview needs a GPU device (open from LevelEditor)."); return; }
-
             static constexpr const char* s_Names[] = { "Cube", "Sphere", "Capsule", "Cylinder" };      // keep in step with s_ModelNames
-            if (ImGui::Button("\xEE\xAF\x92 Meshes")) ImGui::OpenPopup("Meshes");
+            if (bHorizontal) ImGui::SameLine();
+            if (ImGui::Button(bHorizontal ? "\xEE\xAF\x92 Meshes###Meshes" : "\xEE\xAF\x92###Meshes", ImVec2(bHorizontal ? 0.0f : 32.0f, ButtonH))) ImGui::OpenPopup("Meshes");
+            if (ImGui::IsItemHovered()) xeditor::hint::Text("The mesh the preview shows: %s", s_Names[static_cast<int>(m_Model)]);
             if (ImGui::BeginPopup("Meshes"))
             {
                 for (int n = 0; n < IM_ARRAYSIZE(s_Names); ++n)
                     if (ImGui::Selectable(s_Names[n], static_cast<int>(m_Model) == n)) m_Model = static_cast<e19::mesh_manager::model>(n);
                 ImGui::EndPopup();
             }
+        }
+
+        void RenderBody() noexcept
+        {
+            if (!m_bReady) { ImGui::TextDisabled("Preview needs a GPU device (open from LevelEditor)."); return; }
 
             const ImVec2 Avail = ImGui::GetContentRegionAvail();
             const ImVec2 Min   = ImGui::GetCursorScreenPos();
