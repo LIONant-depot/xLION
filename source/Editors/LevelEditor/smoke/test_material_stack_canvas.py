@@ -505,7 +505,9 @@ def test_9_invalid_connection(cv):
     measure("9", "pass (order case differs from the spec row)", "type refusal and cycle refusal: graph unchanged, history size unchanged (one Undo undid the earlier valid drop); producer-below-consumer drop: accepted, Emission and E2 moved after Late, 1 undo step (no popup)")
 
 
-def test_5_reorder_in_a_column(cv):
+def test_5_place_a_step_by_hand(cv):
+    """The person decides where a step sits (owner 2026-10-22): a header dragged to a height (and a column it may take) stays there, saved,
+    one undo step; Esc and a drop in place leave no history; Clean graph forgets the place (one undo step brings it back)."""
     cv.clear()
     s = cv.section("Surface")
     cv.node("Texture", "Albedo", s)
@@ -524,33 +526,34 @@ def test_5_reorder_in_a_column(cv):
     cv.link("Detail2", "D1.A")
     cv.ed._frames(6)
     before = cv.stack()
-    st0 = cv.layout()
+    o0 = cv.order()
     a, b = cv.rect("@Detail2"), cv.rect("@Detail")
+    drop = max(a[1], b[1]) + max(a[3], b[3]) + 120 - a[1]       # well below both: worse, and the person's call
     cv.mv(a[0] + 30, a[1] + 8)
     cv.down()
     for i in range(1, 9):
-        cv.mv(a[0] + 30, a[1] + 8 + (b[1] - 12 - a[1] - 8) * i / 8)
+        cv.mv(a[0] + 30, a[1] + 8 + drop * i / 8)
     cv.ed._frames(4)
-    during = cv.stack()
-    assert during == before, "the preview must not touch the graph"
+    assert cv.stack() == before, "the preview must not touch the graph"
     cv.up()
     cv.ed._frames(6)
     after = cv.stack()
-    o = cv.order()
-    assert o.index("Detail2") < o.index("Detail"), o
-    assert re.findall(r"<- \w+", before.replace("\n", " ")).__len__() == re.findall(r"<- \w+", after.replace("\n", " ")).__len__(), "bindings unchanged"
-    st1 = cv.layout()
-    assert st1["crossings"] <= st0["crossings"], "crossings raised"
+    placed = next(l for g, n, l in cv.steps() if n == "Detail2")
+    assert "[placed: column" in placed, placed
+    a1 = cv.rect("@Detail2")
+    assert abs(a1[1] - (a[1] + drop)) <= 4 and a1[0] == a[0], f"Detail2 not where it was dropped: {a} -> {a1}, wanted y {a[1] + drop}"
+    assert cv.order() == o0, "a place is not a reading-order change"
+    assert len(re.findall(r"<- \w+", before)) == len(re.findall(r"<- \w+", after)), "bindings unchanged"
     cv.invariants("test 5")
     cv.one_undo_step(before, after, "test 5")
-    # a drop that changes nothing, and Esc: no history
+    # a drop where it already is, and Esc: no history
     for what in ("nochange", "esc"):
         marker = cv.stack()
-        a, b = cv.rect("@D0"), cv.rect("@D1")
-        cv.mv(a[0] + 30, a[1] + 8)
+        p = cv.rect("@D0")
+        cv.mv(p[0] + 30, p[1] + 8)
         cv.down()
         for i in range(1, 9):
-            cv.mv(a[0] + 30, a[1] + 8 + (b[1] + b[3] + 12 - a[1] - 8) * i / 8)
+            cv.mv(p[0] + 30, p[1] + 8 + (40 if what == "esc" else 0) * i / 8)
         if what == "esc":
             cv.ed.post_key(0x1B)
         cv.up()
@@ -560,8 +563,16 @@ def test_5_reorder_in_a_column(cv):
     cv.ed._frames(3)
     cv.C("Redo")
     cv.ed._frames(3)
-    assert cv.stack() == after, "the no-change drop and Esc left history entries (one undo would not have been the reorder)"
-    measure("5", "pass", f"undo steps 1 (0 for the no-change drop and Esc), bindings unchanged, crossings {st0['crossings']:.0f} -> {st1['crossings']:.0f}, order {' '.join(o[4:6])} after the drop")
+    assert cv.stack() == after, "the no-change drop and Esc left history entries (one undo would not have been the place)"
+    # Clean graph: every place forgotten, one undo step
+    cv.E("CleanGraph")
+    cv.ed._frames(4)
+    assert "[placed" not in cv.stack(), "CleanGraph left a place"
+    assert abs(cv.rect("@Detail2")[1] - a[1]) <= 4, "after Clean graph the layout places Detail2 again"
+    cv.C("Undo")
+    cv.ed._frames(3)
+    assert cv.stack() == after, "one undo brings the place back"
+    measure("5", "pass", f"placed by hand at +{drop}px in its column and kept, 1 undo step (0 for the in-place drop and Esc), reading order and bindings unchanged; Clean graph forgets it, 1 undo step")
 
 
 def test_7_collapse_steps(cv):
