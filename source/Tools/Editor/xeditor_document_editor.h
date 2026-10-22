@@ -111,7 +111,10 @@ namespace xeditor
             std::filesystem::path Dir = m_TempDir.empty() ? std::filesystem::temp_directory_path() : std::filesystem::path(m_TempDir);
             std::error_code Ec;
             std::filesystem::create_directories(Dir, Ec);
-            return (Dir / std::format(L"xeditor_snapshot_{:016X}.txt", m_Guid.m_Instance.m_Value)).wstring();
+            std::filesystem::path File = Dir / std::format(L"xeditor_snapshot_{:016X}.txt", m_Guid.m_Instance.m_Value);
+            std::filesystem::remove(File, Ec);                              // a leftover another process holds open (the file watcher) cannot be written: writing it aborts, so that run uses a name of its own
+            if (Ec) File += L".alt";
+            return File.wstring();
         }
 
         // Descriptors\<Type>\xx\yy\<guid>.desc\info.txt  ->  the descriptor, the compiled resource and the log folder. A resource under
