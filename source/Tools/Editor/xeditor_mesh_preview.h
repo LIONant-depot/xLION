@@ -180,14 +180,13 @@ namespace xeditor
         // The mesh the material is shown on: a toolbar button and its list
         void MeshButton(bool bHorizontal, float ButtonH) noexcept
         {
-            static constexpr const char* s_Names[] = { "Cube", "Sphere", "Capsule", "Cylinder" };      // keep in step with s_ModelNames
             if (bHorizontal) ImGui::SameLine();
             if (ImGui::Button(bHorizontal ? "\xEE\xAF\x92 Meshes###Meshes" : "\xEE\xAF\x92###Meshes", ImVec2(bHorizontal ? 0.0f : 32.0f, ButtonH))) ImGui::OpenPopup("Meshes");
-            if (ImGui::IsItemHovered()) xeditor::hint::Text("The mesh the preview shows: %s", s_Names[static_cast<int>(m_Model)]);
+            if (ImGui::IsItemHovered()) xeditor::hint::Text("The mesh the preview shows: %s", s_ModelNames[static_cast<int>(m_Model)]);
             if (ImGui::BeginPopup("Meshes"))
             {
-                for (int n = 0; n < IM_ARRAYSIZE(s_Names); ++n)
-                    if (ImGui::Selectable(s_Names[n], static_cast<int>(m_Model) == n)) m_Model = static_cast<e19::mesh_manager::model>(n);
+                for (int n = 0; n < IM_ARRAYSIZE(s_ModelNames); ++n)
+                    if (ImGui::Selectable(s_ModelNames[n], static_cast<int>(m_Model) == n)) m_Model = static_cast<e19::mesh_manager::model>(n);
                 ImGui::EndPopup();
             }
         }
@@ -215,9 +214,9 @@ namespace xeditor
         }
 
     public:     // what the commands of the preview reach
-        e19::mesh_manager::model        m_Model   = e19::mesh_manager::model::CUBE;
+        e19::mesh_manager::model        m_Model   = e19::mesh_manager::model::MATERIAL_BALL;      // the material preview mesh (xprim_geom::material_ball)
 
-        static constexpr const char* s_ModelNames[] = { "Cube", "Sphere", "Capsule", "Cylinder" };
+        static constexpr const char* s_ModelNames[] = { "Cube", "Sphere", "Capsule", "Cylinder", "MaterialBall" };     // the first models of e19::mesh_manager::model, in its order
 
         // The camera's numbers, for the camera commands
         xeditor::camera_access Camera() noexcept { return { &m_Angles, &m_Distance, &m_Target, [this] { m_Angles = {}; m_Distance = 2; m_Target = {}; }, &m_CameraState }; }
@@ -311,15 +310,15 @@ namespace xeditor
         {
             mesh_preview& m_Preview;
             mesh_cmd(xundo::system& System, mesh_preview& Preview) noexcept : query_command_base(System, "SetPreviewMesh", nullptr), m_Preview(Preview) { RegisterArguments(); }
-            const char* getCommandHelp() const noexcept override { return "The mesh the material is previewed on (view state; without -Model it says which). Usage: SetPreviewMesh [-Model Cube|Sphere|Capsule|Cylinder]"; }
-            void RegisterArguments() noexcept override { m_hModel = m_Parser.addOption("Model", "Cube, Sphere, Capsule or Cylinder", false, 1); }
+            const char* getCommandHelp() const noexcept override { return "The mesh the material is previewed on (view state; without -Model it says which). Usage: SetPreviewMesh [-Model Cube|Sphere|Capsule|Cylinder|MaterialBall]"; }
+            void RegisterArguments() noexcept override { m_hModel = m_Parser.addOption("Model", "Cube, Sphere, Capsule, Cylinder or MaterialBall", false, 1); }
             std::string Query() noexcept override
             {
                 std::string Name;
                 if (!cmd_util::GetArg(m_Parser, m_hModel, Name)) return std::format("SetPreviewMesh: {}", mesh_preview::s_ModelNames[static_cast<int>(m_Preview.m_Model)]);
-                for (int i = 0; i < 4; ++i)
+                for (int i = 0; i < IM_ARRAYSIZE(mesh_preview::s_ModelNames); ++i)
                     if (Name == mesh_preview::s_ModelNames[i]) { m_Preview.m_Model = static_cast<e19::mesh_manager::model>(i); return std::format("SetPreviewMesh: {}", Name); }
-                return "SetPreviewMesh: Model is Cube, Sphere, Capsule or Cylinder";
+                return "SetPreviewMesh: Model is Cube, Sphere, Capsule, Cylinder or MaterialBall";
             }
             xcmdline::parser::handle m_hModel;
         };
