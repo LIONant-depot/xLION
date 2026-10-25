@@ -203,7 +203,9 @@ namespace level_editor
         , CmdMakePrefab(Level, pScene)
         , CmdMakePrefabVariant(Level, pScene)
         , CmdUpgradeProject(Level, pScene)
-        {}
+        {
+            CmdUpgradeProject.m_Steps.push_back(&xmaterial_instance::UpgradeKeyedOverrides);      // material instances whose overrides were addressed by place
+        }
     };
 
     struct command_set
