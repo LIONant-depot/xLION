@@ -27,6 +27,7 @@ namespace level_editor
         xscene::commands::rename_entity_cmd                 CmdRenameEntity;
         xscene::commands::set_property_cmd                  CmdSetProperty;
         xscene::commands::get_property_query_cmd            CmdGetProperty;
+        xscene::commands::override_state_query_cmd          CmdOverrideState;      // Name\OverrideState: what the Inspector's override marker says of a property with its own levels (a Mesh's material slots)
         xlevel::commands::describe_text_query_cmd           CmdDescribeText;
         xlevel::commands::describe_text_draw_query_cmd      CmdDescribeTextDraw;
         xlevel::commands::describe_scene_query_cmd          CmdDescribeScene;
@@ -139,6 +140,7 @@ namespace level_editor
         , CmdRenameEntity(Level, pScene)
         , CmdSetProperty(Level, pScene)
         , CmdGetProperty(Level, pScene)
+        , CmdOverrideState(Level, pScene)
         , CmdDescribeText(Level, pEditor)
         , CmdDescribeTextDraw(Level, pEditor)
         , CmdDescribeScene(Level, pEditor)

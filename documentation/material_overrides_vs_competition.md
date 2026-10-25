@@ -22,6 +22,59 @@ Numbers for xLION come from `xlionrender_bench_overrides` (see "How to measure")
 - **Non-bindless fallback:** each override material has its own texture-table descriptor set. Since the review fixes below,
   this is the only per-draw bind left.
 
+## The levels and the override marker (for people and for the AI)
+
+**Override Materials** on the Mesh turns the slots on. Off (most Meshes): the geometry's materials, nothing shown, saved or drawn
+differently. Turning it off keeps the slots in memory (on again: back as they were; Undo works) but does not save them, the same rule
+as any hidden property.
+
+A value goes through these levels, each one overriding the one before:
+
+1. the material (and the instances it inherits through);
+2. the slot's instance: the geometry's own, or one the entity swaps in;
+3. a prefab, when the entity belongs to a prefab instance;
+4. the entity.
+
+What the inspector shows, per slot:
+
+- **Material**: the instance the slot draws with, the geometry's own unless swapped.
+- **Parameters**: one row per parameter of that instance's material, at the value the entity draws with.
+- **Marker (>)**: shown when the row differs from what it inherits. Clicking it goes one level up. When a prefab overrides the row
+  too, it opens a menu: "Revert to the prefab" or "Revert to the material instance".
+- **Swapping the instance**: overrides of parameters the new material does not have stay, shown read only as "not applied". The
+  marker clears them. They apply again when the slot's instance has the parameter (matched by id, then by name).
+
+The same, by property (DescribeEntity, SetProperty, GetProperty):
+
+| Property | Meaning |
+|---|---|
+| `Mesh/Override Materials` | The switch. |
+| `Mesh/Slots[G:s]/Material` | The instance the slot draws with. Setting the geometry's own instance clears the swap. |
+| `Mesh/Slots[G:s]/Parameters[G:r]/Name` | The parameter's name, as the material names it. |
+| `Mesh/Slots[G:s]/Parameters[G:r]/Value...` | The value the entity draws with. Editing a channel creates the override. |
+| `Mesh/Slots[G:s]/Parameters[G:r]/Override` | The entity's own value as text: `""` inherits; `"x, y, z, w"` (as many numbers as the type has); `"#guid"` a texture. |
+| `Mesh/Slots[G:s]/Parameters[G:r]/Source` | Read only: `material instance`, `entity`, or `not applied (...)`. |
+| `Mesh/Slots[G:s]/MaterialOverride`, `Mesh/Slots[G:s]/Overrides[...]` | What is saved: the swap, and each override by id and name with its value. |
+
+`OverrideState -Scene -Id -Component Mesh -Path <row>` says what the marker says:
+
+- `Overridden=` whether the row differs from what it inherits;
+- `Prefab=` whether a prefab is one of its levels;
+- one `Revert "<label>": -Path ... -After "..."` line per choice. Doing it is that SetProperty.
+
+Game code (`xlionrender::mesh`): `SetFloat`, `SetColor`, `SetVector`, `SetTexture` by the parameter's name or id; `Revert` to go back
+to the instance's value; `SetMaterial` to swap. Each of them turns Override Materials on.
+
+The marker comes from `member_override_state` (xproperty's inspector), a tag that any property with its own levels can use: the
+property says whether it is overridden and which reverts it offers, given its base (the prefab's copy of the component, through the
+inspector's `m_OnBaseInstance`). The inspector applies a revert as an ordinary one-property edit, so it can be undone and is recorded
+for prefabs like any other edit.
+
+A known limit of prefabs: a prefab instance records its overrides by the path that was edited, and a row's path is its place in the
+material's parameter list. A prefab instance whose material later adds or removes parameters before a row it overrides would move
+that override to another row. The robust fix is for the prefab recipe to record the saved data a view edit changed (the slot's
+`Overrides`), not the view's path.
+
 ## The comparison
 
 | Engine, mechanism | Per-draw cost | Memory per overridden entity | Value change | Texture change | Batching and pipelines | Limits | Editor UX |
