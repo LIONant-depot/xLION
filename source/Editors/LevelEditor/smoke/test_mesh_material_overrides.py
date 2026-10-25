@@ -9,7 +9,7 @@ a swap) is kept, shown as not applied, and applies again when the instance has i
 import re
 import secrets
 
-from test_prefabs import FOLDER_TYPE, PREFAB_TYPE, _instantiate, level_files_restored      # noqa: F401  (a fixture of the prefab tests)
+from test_prefabs import FOLDER_TYPE, PREFAB_TYPE, _instantiate, _reload, level_files_restored      # noqa: F401  (a fixture of the prefab tests)
 from test_scene_render import POLICE_STATION
 
 MI_RED = "5E1CE0A110000003, B673C5DA4A4A70AD"          # an instance of another material (Tint, Roughness, Albedo): no BaseColorFactor
@@ -22,12 +22,12 @@ def _mesh(level, entity=None) -> str:
         level.ok(f"AddComponent -Scene {level.scene} -Id {e} -Component Mesh")
     level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
     level.ok(f"SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path \"Mesh/Override Materials\" -After true")
-    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {e}", r"Mesh/Slots\[G:0\]/Parameters\[G:0\]/Source = ", timeout=120)
+    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {e}", r"Mesh/Slots\[G:0\]/Parameters\[G:\d+\]/Source = ", timeout=120)
     return e
 
 
 def _rows(level, e: str, slot: int = 0) -> dict:
-    """Row name -> (index, Source, Override) of a slot."""
+    """Row name -> (key, Source, Override) of a slot: a row's address is its key (the parameter's id), not its place."""
     text = level.describe(e)
     rows = {}
     for i, name in re.findall(rf"Mesh/Slots\[G:{slot}\]/Parameters\[G:(\d+)\]/Name = (.*?)  \(", text):
@@ -91,6 +91,38 @@ def test_an_override_survives_a_swap_and_applies_again(level):
     assert not _state(level, e, "Mesh/Slots[G:0]/Material")["overridden"]
 
 
+def _make_mesh_prefab(level) -> str:
+    e = _mesh(level)
+    lib = level.ed.libraries()[0][0]
+    asset = "%016X" % (secrets.randbits(63) | 1) + PREFAB_TYPE
+    level.ok(f"MakePrefab -Scene {level.scene} -Id {e} -Library {lib} -Asset {asset} -Parent {lib}{FOLDER_TYPE}", allow_disk=True)
+    return asset[:16]
+
+
+def test_an_instance_override_follows_its_parameter_when_the_rows_reorder(level, level_files_restored):
+    """A prefab instance's override is recorded by the parameter's key: its rows change order (here: another instance swapped in, whose material
+    lists other parameters - the override's row moves from 2nd to last) and a save and a load later it is still on the same parameter."""
+    inst = _instantiate(level, _make_mesh_prefab(level))
+    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {inst}", r"Parameters\[G:\d+\]/Source = ", timeout=120)
+    rows = _rows(level, inst)
+    key = rows["BaseColorFactor"][0]
+    before = list(rows).index("BaseColorFactor")
+    _set(level, inst, f"Mesh/Slots[G:0]/Parameters[G:{key}]/Override", "0, 1, 0, 1")
+    assert f"Parameters[G:{key}]" in level.cmd(f"DescribePrefabOverrides -Scene {level.scene} -Id {inst}"), "recorded by the parameter's key"
+
+    _set(level, inst, "Mesh/Slots[G:0]/Material", MI_RED)
+    rows = _rows(level, inst)
+    assert list(rows).index("BaseColorFactor") != before and rows["BaseColorFactor"][0] == key, "another place, the same key"
+    assert rows["BaseColorFactor"][2] == "0, 1, 0, 1"
+
+    _reload(level)
+    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {inst}", r"Parameters\[G:\d+\]/Source = ", timeout=120)
+    orphan = {k: (s, o) for k, s, o in _rows(level, inst).values()}.get(key)       # (loaded by its key alone: named again by the material that has it)
+    assert orphan == ("not applied (the material has no such parameter)", "0, 1, 0, 1"), orphan
+    _set(level, inst, "Mesh/Slots[G:0]/Material", _state(level, inst, "Mesh/Slots[G:0]/Material")["reverts"][0][2])
+    assert _rows(level, inst)["BaseColorFactor"][1:] == ("entity", "0, 1, 0, 1"), "back on its instance: applied, on the same parameter"
+
+
 def test_a_prefab_instance_stacks_over_its_prefab(level, level_files_restored):
     e = _mesh(level)
     i = _rows(level, e)["BaseColorFactor"][0]
@@ -100,7 +132,7 @@ def test_a_prefab_instance_stacks_over_its_prefab(level, level_files_restored):
     asset = "%016X" % (secrets.randbits(63) | 1) + PREFAB_TYPE
     level.ok(f"MakePrefab -Scene {level.scene} -Id {e} -Library {lib} -Asset {asset} -Parent {lib}{FOLDER_TYPE}", allow_disk=True)
     inst = _instantiate(level, asset[:16])
-    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {inst}", r"Parameters\[G:0\]/Source = ", timeout=120)
+    level.ed.wait_for(f"{level.name}\\DescribeEntity -Scene {level.scene} -Id {inst}", r"Parameters\[G:\d+\]/Source = ", timeout=120)
 
     s = _state(level, inst, row)
     assert s["prefab"] and not s["overridden"], "the instance inherits the prefab's override: nothing of its own"

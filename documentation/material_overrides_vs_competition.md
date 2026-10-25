@@ -50,11 +50,11 @@ The same, by property (DescribeEntity, SetProperty, GetProperty):
 |---|---|
 | `Mesh/Override Materials` | The switch. |
 | `Mesh/Slots[G:s]/Material` | The instance the slot draws with. Setting the geometry's own instance clears the swap. |
-| `Mesh/Slots[G:s]/Parameters[G:r]/Name` | The parameter's name, as the material names it. |
-| `Mesh/Slots[G:s]/Parameters[G:r]/Value...` | The value the entity draws with. Editing a channel creates the override. |
-| `Mesh/Slots[G:s]/Parameters[G:r]/Override` | The entity's own value as text: `""` inherits; `"x, y, z, w"` (as many numbers as the type has); `"#guid"` a texture. |
-| `Mesh/Slots[G:s]/Parameters[G:r]/Source` | Read only: `material instance`, `entity`, or `not applied (...)`. |
-| `Mesh/Slots[G:s]/MaterialOverride`, `Mesh/Slots[G:s]/Overrides[...]` | What is saved: the swap, and each override by id and name with its value. |
+| `Mesh/Slots[G:s]/Parameters[G:id]/Name` | The parameter's name, as the material names it. `id` is the parameter's id: rows are keyed, not numbered. |
+| `Mesh/Slots[G:s]/Parameters[G:id]/Value...` | The value the entity draws with. Editing a channel creates the override. |
+| `Mesh/Slots[G:s]/Parameters[G:id]/Override` | The entity's own value as text: `""` inherits; `"x, y, z, w"` (as many numbers as the type has); `"#guid"` a texture. |
+| `Mesh/Slots[G:s]/Parameters[G:id]/Source` | Read only: `material instance`, `entity`, or `not applied (...)`. |
+| `Mesh/Slots[G:s]/MaterialOverride`, `Mesh/Slots[G:s]/Overrides[G:id]...` | What is saved: the swap, and each override keyed by the parameter's id, with its name and value. |
 
 `OverrideState -Scene -Id -Component Mesh -Path <row>` says what the marker says:
 
@@ -70,10 +70,11 @@ property says whether it is overridden and which reverts it offers, given its ba
 inspector's `m_OnBaseInstance`). The inspector applies a revert as an ordinary one-property edit, so it can be undone and is recorded
 for prefabs like any other edit.
 
-A known limit of prefabs: a prefab instance records its overrides by the path that was edited, and a row's path is its place in the
-material's parameter list. A prefab instance whose material later adds or removes parameters before a row it overrides would move
-that override to another row. The robust fix is for the prefab recipe to record the saved data a view edit changed (the slot's
-`Overrides`), not the view's path.
+Rows and saved overrides are `xproperty::keyed_vector` lists: a path names a parameter by its id (or, for an override game code set
+by name only, by a hash of the name), never by its place. A prefab instance records its overrides by those paths, so a material that
+adds, removes or reorders its parameters leaves every recorded override on its parameter. At a load, an override whose rows are not
+made yet (the slot's instance not loaded) is applied by its key (the recipe sets what the collector does not list as text) and takes its
+name from the material once the rows are made.
 
 ## The comparison
 
