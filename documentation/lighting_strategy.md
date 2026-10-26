@@ -5,7 +5,7 @@ visibility reference, ledger, counters, LightEval; the fixtures: `xLIONRender/do
 2026-10-26/27 (xLIONRender a10ef2c ... af8f7a0): the sun's virtual pages, level 0 at most 2 mm, a 2048-slot pool with dynamic
 resolution; the low sun's bias (989b73c); **P1e, the moving sun** (771ee86: requests moved across epochs, the previous epoch shading
 while the new one builds, a cross-fade); **the clipmap removed** once P1e passed B5b (Tomas, 2026-10-27) - its numbers are the
-gates' references in `R/tests/xlionrender_test_vsm.cpp`. Tomas's overnight mandate (2026-10-27): P1e, contact-hardening, the slope
+gates' references in `R/tests/xlionrender_test_vsm.cpp`. **P1b, the movers** (61620ee): built as R-C's composition, not restore-then-draw (xGPU has no copy within the atlas; the per-tap min of the static and the mover depth equals one page with both): the six transitions bit for bit against one layer, no static page rendered while a mover moves (14-16 mover pages a frame), the static-scene cost unchanged (Velociraptor 1.46 vs 1.44 ms). Tomas's overnight mandate (2026-10-27): P1e, contact-hardening, the slope
 bias, P1b, then the rest of the roadmap. The ledger: `smoke/lighting_ledger.py ... police_sun` (the saved Police level's Sun is
 editor-disabled, so Police measures the sun only that way).
 
@@ -324,7 +324,7 @@ movers; a cached object that moves invalidates the static cache under its old an
 into the static cache budgeted (no rebuild burst). Occupancy is conservative (projected caster bounds). Per-page dynamic
 occupancy: a page is not dynamic forever once a mover touched it (restore + draw while movers remain; one restore when the last
 leaves; no dynamic work when static-only). **Restore-then-draw versus composing V_static x V_dynamic per query is R-C (sec. 7c);**
-both stay behind the query interface. Transition tests, per page, each against a full re-render: a mover enters a page; crosses into
+both stay behind the query interface. *(Built 2026-10-27, 61620ee: the composition - mover pages of their own, per-tap min; restore-then-draw not built.)* Transition tests, per page, each against a full re-render: a mover enters a page; crosses into
 another; leaves the visible region; is deleted; becomes cache-eligible; moves again after being cached.
 
 **Costs and risks:** the request pass (ledger); one page-table indirection per lookup, more for boundary-crossing filter footprints; page thrash on teleports (fallback counted,
