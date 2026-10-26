@@ -1,7 +1,8 @@
-# Lighting strategy: direct light, shadows, many lights (v3.1, 2026-10-26)
+# Lighting strategy: direct light, shadows, many lights (v3.2, 2026-10-26)
 
-Status: v3.1 adopted. P0 built 2026-10-26 (xLIONRender e2b7318: saved outputs, references, ledger, counters, LightEval; what exists
-and the break tests' definitions: `xLIONRender/documentation/lighting_fixtures.md`). P1a waits for Tomas's go.
+Status: v3.1 adopted; v3.2 (virtual shadow maps as P1, one virtual-memory core) agreed with Tomas 2026-10-26. P0 built 2026-10-26
+(xLIONRender e2b7318: saved outputs, references, ledger, counters, LightEval; what exists and the break tests' definitions:
+`xLIONRender/documentation/lighting_fixtures.md`). P1 waits for Tomas's go.
 
 The GI belongs to its own thread: this document proposes interfaces the GI may adopt, never GI changes. Sources:
 - documentation/many_lights_and_shadows_research.md;
@@ -58,6 +59,17 @@ The GI belongs to its own thread: this document proposes interfaces the GI may a
 | Freeze: membership frozen, parameters current, probabilities recomputed | Sec. 9 |
 | P0 order, output tolerance, minimal P0 before P1a; static eligibility and occupancy rules; the P0/P1a report | Sec. 7, 11, 13 |
 
+### v3.1 → v3.2 (Tomas: the sun's texels are too large on screen; "the problem is deeper than higher resolution")
+
+| Change | Where |
+|---|---|
+| The sun's shadows become virtual shadow maps: pages requested by screen density, a page table and a physical pool; the clipmap stays as the levels. Not cascades | Sec. 7, 11 |
+| P1a/P1b become the VSM steps (P1-VSM-a/b/c); every v3.1 rule applies per page | Sec. 7, 11 |
+| One virtual-memory core (page table, pool, requests, LRU, residency states) shared by shadow pages and texture streaming; textures: mip streaming by feedback, virtual texturing opt-in per texture | Sec. 7b |
+| The cause (code read, Tomas checked the texels on screen): a pixel takes the finest level that holds it, not the level whose texel fits its footprint; 4 levels x 4x4 tiles of 512 texels can't be fine and far at once; nearest-texel 3x3 PCF adds stair steps | Sec. 2 |
+| Every shadow virtual: spots 1 map, points a virtual octahedral map if per-page rendering holds, else 6 cube faces; the references' facts (Unreal VSM, Godot) cited; warping/SDSM rejected, contact shadows kept for the last centimetres | Sec. 7, 12 |
+| P1 report table, ledger rows (request pass, page rendering) | Sec. 10, 11 |
+
 ## 1. Goal and hypothesis
 
 The goal: many lights, the strong ones stable and noise-free, the rest sampled at a bounded cost. Shadow work is shared with the
@@ -80,13 +92,13 @@ How we stand against the competitors: hypotheses, each with the test that would 
 
 | Piece | Exists (where) | New in this plan |
 |---|---|---|
-| Sun shadows | Clipmap of world-anchored cached tiles; invalidation by caster bounds projected along the light (`R/features/shadows/xlionrender_shadow_clipmap.h`) | Static/mover split. Today a mover re-renders its whole tiles (line 18), and skinned casters invalidate theirs every frame |
+| Sun shadows | Clipmap of world-anchored cached tiles; invalidation by caster bounds projected along the light (`R/features/shadows/xlionrender_shadow_clipmap.h`). 4 levels x 4x4 tiles of 512 texels (the 8x8 atlas is full), 16-bit depth, 3x3 PCF of exact texels; a pixel reads the finest level that holds it, so on screen the texels are too large (Tomas checked) | Virtual shadow maps (sec. 7): pages by screen density, more levels, a page pool; the static/mover split per page. Today a mover re-renders its whole tiles (line 18), and skinned casters invalidate theirs every frame |
 | Local shadows | Cached octahedral/frustum maps in a buddy atlas, an update budget (maps without a map first, then by urgent age), a cache key ignoring colour and intensity (`xlionrender_shadow_local.h:253-261`) | The same split; the budget grows into the global preparation budget |
 | Many lights | `light_cells`: a world-cell clipmap; mode SAMPLED = exact head + one tail light with a floored probability, tested unbiased against EXACT (`R/features/lights/xlionrender_light_cells.h`, `tests/xlionrender_test_light_lab.cpp`). Rebuilt on the CPU every frame | Per tile; a visibility term from existing maps; stable light ids; a GPU builder |
 | Rays | The GI's software BVH (BLAS/TLAS), any-hit `Occluded`, see-through per triangle, transport roles (`R/shaders/xlionrender_gi_bvh.glsl`) | Lighting's ray budget and coverage classification (sec. 3) |
 | An exact local-light reference | The GI's direct light: a light BVH with a shadow ray per light (`R/features/gi/xlionrender_surfel_gi.h:3265-3290`) | Used as P0's visibility reference, opaque rigid geometry only |
 | Footprint invalidation | The GI marks the old and the new box on a move (`surfel_gi.h:2357-2381`); the shadows' `m_FrameChanged` lists changed caster bounds (`R/plans/forward/xlionrender_plan_forward.cpp:1076-1116`) | One per-frame change list (sec. 6) |
-| Caster culling | GPU cluster culling for the camera, with a matrix-parametrized cull shader (`R/shaders/xlionrender_cull_comp.glsl`) | Shadow pages through it (P1b) |
+| Caster culling | GPU cluster culling for the camera, with a matrix-parametrized cull shader (`R/shaders/xlionrender_cull_comp.glsl`) | Dirty shadow pages through it (P1-VSM-c) |
 | Material classes | `render_settings`: Opaque / Masked / Translucent / Additive, cast shadows, alpha cutoff (`plugins/xmaterial.plugin/source/xmaterial_render_settings.h`) | One `MaterialVisibilityOf(material)` that every system reads |
 | Light identity | None. Lights are rebuilt every frame; three consumers hash them | Light handle + revisions (sec. 6.1) |
 | Denoiser, screen trace, per-tile memory | None | P2–P3 |
@@ -267,9 +279,61 @@ Visibility guidance never removes a contributing light's support.
    reference outputs.** Analytic tests (distance attenuation, cone boundaries, zero contribution, radiometry-only changes) guard
    against EXACT and SAMPLED sharing the same new bug.
 
-## 7. Static/mover split: restore-then-draw
+## 7. Sun shadows: virtual shadow maps, the static/mover split per page
 
-- The static depth of a tile or map is cached and holds static casters only. Each frame, every tile whose **previous or current**
+**Why not cascades:** a cascade's resolution is fixed per frustum slice whatever the screen needs, and it re-renders when the camera
+moves. The clipmap's world-anchored, cached tiles are the better half; what it lacks is letting the screen decide which pages exist
+and how fine they are.
+
+**Virtual shadow maps (VSM), on the clipmap's levels:**
+1. **Levels:** each clipmap level is a large virtual texture (start: 16k x 16k texels in 128 x 128 pages) world-anchored as today;
+   more levels (start: 10-12) so 1-2 cm texels near the camera and kilometre range cost the same machinery.
+2. **Requests:** a pass over the depth buffer gives each pixel the level whose texel matches its footprint (texel per pixel ~ 1) and
+   marks that page needed. Resolution follows the screen; nothing is resident because a level holds a point.
+3. **Pool:** a physical page pool (start: 8k x 8k, 4096 pages) and a page table the shading reads through one indirection; only
+   requested pages are resident, LRU eviction. The pool and the requests are the virtual-memory core of sec. 7b.
+4. **States per page:** sec. 3's ABSENT / VALID / DIRTY / BUILDING. A requested page not yet VALID uses the declared fallback (a
+   coarser VALID level's page when one covers the point, labelled APPROXIMATE, else unshadowed), counted; never a stale page.
+5. **Rendering:** a dirty page draws only the casters whose clusters touch it, through the GPU cull's shadow mode (6.4), indirect.
+6. **Filtering:** bilinear compare PCF from the start (no nearest-texel steps); slope-scaled bias; soft shadows (SMRT-like) later.
+7. **Every shadow is virtual.** Local lights move onto the same pool after the sun (not in the sun's critical path), their page
+   resolution chosen by screen footprint like the sun's, replacing the buddy atlas and its per-light map sizes:
+   - spot light: one virtual map (its frustum);
+   - point light: one **virtual octahedral map**, conditional on per-page rendering. Today an octahedral map is not rendered
+     directly: the casters go into a scratch as 6 cube faces, then a remap pass writes the octahedral texels
+     (`xlionrender_shadow_local.h:9`, `xlionrender_shadow_remap_frag.glsl`). A dirty octahedral page would render the cube-face
+     regions its directions fall in, then remap; the request pass must allow for the octahedral texel density varying about 2x toward
+     the fold diagonals, and page borders must wrap across the folds. If per-page rendering proves too costly, the fallback is 6
+     virtual cube faces (what Unreal does, below).
+
+**What the references do** (read 2026-10-26, `E:\source_code`):
+- Unreal 5 VSM (`Engine/Shaders/Shared/VirtualShadowMapDefinitions.h`, `Renderer/Private/VirtualShadowMaps/`): 128 x 128 texel
+  pages, a 128 x 128 page table (16k x 16k virtual per map, 8 mips); directional clipmap levels `r.Shadow.Virtual.Clipmap.FirstLevel` 6
+  to `LastLevel` 22 (each level doubles the range); `r.Shadow.Virtual.MaxPhysicalPages` 2048; pages marked from the depth buffer
+  (`VirtualShadowMapPageMarking.usf`); per-page draw commands (`VirtualShadowMapBuildPerPageDrawCommands.usf`); static caching
+  after `r.Shadow.Virtual.Cache.FramesStaticThreshold` 100 frames. A spot light is 1 virtual map, a point light 6
+  (`VirtualShadowMapArray.cpp:4134`). No perspective warping in its VSM code; screen-space contact shadows exist beside it
+  (`r.ContactShadows.*`, `LightRendering.cpp`).
+- Godot 4: a shadow atlas of quadrants; a light's slot size is the next power of two of its screen coverage
+  (`light_storage.cpp:2622-2634`): screen-sized slots, not pages.
+- Unity HDRP is not in `E:\source_code`: claims about it stay unverified.
+
+**Costs and risks:**
+- the request pass over the depth buffer (measured in the ledger), one page-table indirection per shadow lookup;
+- page thrash on fast camera moves or teleports: requested pages not yet VALID use the declared fallback, counted, never a stale page;
+- many small draws (one per dirty page): the GPU cull's shadow mode and indirect draws (P1-VSM-c);
+- a moving sun invalidates every page (Unreal's known pain point): bounded by the update budget with hysteresis, counted;
+- deformers and world-position-offset materials: always dynamic (sec. 7), so they never poison static pages.
+
+**Rejected:**
+- **Cascades:** resolution fixed per frustum slice whatever the screen needs; they re-render on camera moves; no caching.
+- **Warping (PSM, LiSPSM, TSM) and SDSM depth fitting:** they exist to give cascades more texels near the camera because cascades
+  do not tie texels to pixels; VSM does that directly. Warping also changes the projection with the camera, which breaks page
+  caching (a world-anchored page would move) and shimmers. The last centimetres at contact come from the P3 screen trace (contact
+  shadows), as Unreal pairs its VSM with contact shadows.
+
+**The static/mover split, per page (restore-then-draw):**
+- The static depth of a page is cached and holds static casters only. Each frame, every page whose **previous or current**
   dynamic footprint touches it is restored from the static copy, then the movers are drawn into the working copy.
 - The static copy and the working copy are both shadow resources with the states of sec. 3. A static change marks the static copy
   DIRTY at once; until it is rebuilt, the affected tiles use the declared fallback (or a counted, bounded-age APPROXIMATE).
@@ -281,7 +345,7 @@ Visibility guidance never removes a contributing light's support.
   again, dynamic drawing saved.
 - **Occupancy is conservative:** from projected caster bounds, never a false negative. Tighter coverage only if excess restore work
   shows up in the ledger.
-- **Per-tile dynamic occupancy.** A tile is not "dynamic forever" once a mover has touched it:
+- **Per-page dynamic occupancy** ("tile" below = page). A tile is not "dynamic forever" once a mover has touched it:
 
   | State | Work |
   |---|---|
@@ -297,20 +361,41 @@ Visibility guidance never removes a contributing light's support.
   ```
   today:          shadow atlas (sampled)  = static + movers, a moved caster re-renders whole tiles
   restore-then-draw:
-                  static atlas (cache)    = static casters only, redrawn on static change
-                  working atlas (sampled) = restored from static where occupancy says so, movers drawn on top
-  second layer:   static atlas + dynamic atlas, both sampled and composited per lookup
+                  static pages (cache)    = static casters only, redrawn on static change
+                  working pages (sampled) = restored from static where occupancy says so, movers drawn on top
+  second layer:   static pages + dynamic pages, both sampled and composited per lookup
   ```
 
-  P1a measures persistent atlas bytes, working atlas bytes, restore bytes per frame, and the copy/restore synchronization cost.
+  P1-VSM-b measures persistent pool bytes, working pages, restore bytes per frame, and the copy/restore synchronization cost.
 
-**Transition tests (P1a), each checked against a full re-render for stale depth:**
+**Transition tests (P1-VSM-b), per page, each checked against a full re-render for stale depth:**
 1. A mover enters a tile.
 2. It crosses into another tile.
 3. It leaves the visible region.
 4. It is deleted.
 5. It becomes cache-eligible.
 6. That newly cached object moves again; the static cache must invalidate.
+
+## 7b. One virtual-memory core: shadow pages and textures
+
+Shadow pages and texture streaming share the same machinery, built once (xGPU and the renderer; the texture side owned by the
+texture/xGPU work):
+- a page table and a physical page pool, LRU eviction;
+- a **request (feedback) pass**: which pages at which level/mip the frame needs; one pass writes shadow-page and texture-page requests;
+- per-page residency states (sec. 3), the streaming lane and its budget, counters and the ledger.
+
+What differs is the miss: a shadow page is rendered on the GPU this frame; a texture page comes from disk frames later, so its
+material shows a coarser resident mip meanwhile (counted). And filtering: materials need trilinear/anisotropic filtering, which
+software virtual texturing pays per sample (bordered pages, manual filtering).
+
+**Texture policy:**
+1. VSM is the core's first consumer: it proves the page table, pool, requests, LRU and states with no IO in the way.
+2. Textures get **mip streaming driven by the same feedback**: only the mips the screen asks for stay resident. On desktop backed by
+   Vulkan sparse residency where supported (sampling and hardware filtering unchanged), plain mip streaming elsewhere (mobile, Apple).
+3. **Virtual texturing is opt-in per texture** (a texture setting, carried by the material manifest's bindless texture ids): huge
+   terrain textures, decals, unique/baked texel data, later perhaps lighting caches. Not every texture: most are small enough that mip
+   streaming gives the memory win with no per-sample cost.
+4. The GI capture, previews and thumbnails write requests too (else they capture low mips), within their host-granted budgets (sec. 8).
 
 ## 8. Out of scope for the first phases, and the rule meanwhile
 
@@ -353,7 +438,7 @@ Two operating conditions, both reported:
 | Ledger row | Contents |
 |---|---|
 | Light records + grid | Record upload, cell or tile build |
-| Shadow preparation | Restore/copy, static redraw, mover draw, page culling (separate sub-rows) |
+| Shadow preparation | Page requests (the pass from depth), page table/LRU update, then page rendering: static redraw, restore/copy, mover draw, page culling (separate sub-rows) |
 | Direct shading | Head + tail evaluation |
 | Reconstruction | Denoiser, upsampling |
 | Visibility work | Tail BVH queries (P4), when they are a separate dispatch; fused into shading, they stay inside "direct shading" and are attributed approximately with paired variants (rays on/off), never as a fake exclusive timestamp |
@@ -378,28 +463,31 @@ Each phase has a gate, measured with the ledger.
 | Phase | What | Gate |
 |---|---|---|
 | **P0** Reference and ledger (evidence, not the first big refactor) | In this order: 1. save today's outputs and timings; 2. make the reference fixtures reproducible: (a) **sampling reference**, EXACT with the same visibility source as SAMPLED; (b) **visibility reference**, the GI's light BVH with shadow rays, opaque rigid scenes only, every capture labelled (`opaque rigid: supported; skinned: unsupported; per-texel masked: unsupported`), skinned and masked scenes compared against the raster path; a many-ray tail reference; 3. the minimal ledger (sec. 10) and the diagnostic skeleton (sec. 9, record + counters, no finished inspector UI); 4. extract `LightEval` (sec. 6.5) with its analytic tests; 5. verify against the saved baseline. Break tests (below) are *defined* as fixtures; they are not all running before P1a | References reproduce. "Changes no saved output" = bitwise equal where practical, else within an explicit numerical tolerance; any difference outside it is explained, never accepted because EXACT and SAMPLED still agree |
-| **P1a** Static/mover correctness, **sun first** | Light handle + revisions (6.1), `MaterialVisibilityOf` + emissive flag (6.2), one change list + static age (6.3); shadow resource states (sec. 3); restore-then-draw for the sun clipmap with old + new footprint and per-tile occupancy; skinned via the existing path. Local maps follow in the same phase only if the sun's assumptions hold | The six transition tests pass; no DIRTY resource or obsolete working composition is ever sampled as evidence; static redraw drops as expected; the allocation accounting of sec. 7 measured; forced preparation-budget exhaustion shows the declared fallback and its counters |
-| **P1b** GPU caster culling | Shadow pages through the GPU cull's shadow mode (6.4), candidates built once per frame; page Hi-Z only if measured to pay | No per-light CPU caster enumeration or submission growth (that is "flat CPU"); sun ≤ 0.8 ms with 50 movers (warmed benchmark); no caster coverage regression, off-screen casters included |
+| **P1-VSM-a** The sun's virtual shadow map, static cache only | The virtual-memory core's first consumer (7b): virtual clipmap levels, page table, physical pool, LRU, the request pass from depth (texel ~ pixel), page states (sec. 3), bilinear compare PCF; pages rendered with today's casters (static cache: every caster in a page, re-rendered when a caster touching it changes); light handle + revisions (6.1), `MaterialVisibilityOf` + emissive flag (6.2), one change list + static age (6.3) | Matches the shadow reference within tolerance (the visibility-reference disagreement no worse than today's 6.3%, and lower at the edges); texel per pixel ~ 1 at every distance on Police (a debug view shows level and density); no requested page sampled before VALID (fallback counted); memory, request-pass and page-render cost in the ledger |
+| **P1-VSM-b** The static/mover split per page | Restore-then-draw per page with the old + new footprint and per-page occupancy (sec. 7); skinned via the existing path | The six transition tests pass per page; no DIRTY page or obsolete working composition sampled as evidence; static redraw drops as expected; the allocation accounting of sec. 7 measured; forced budget exhaustion shows the fallback and its counters |
+| **P1-VSM-c** GPU per-page caster culling | Dirty pages' casters through the GPU cull's shadow mode (6.4) from the shadow-eligible casters, candidates built once per frame; page Hi-Z only if measured to pay | No per-light CPU caster enumeration or submission growth ("flat CPU"); sun ≤ 0.8 ms with 50 movers (warmed benchmark); no caster coverage regression, off-screen casters included |
+| **P1-VSM-d** Local lights on the pool (after the sun, not in its critical path) | Spots as 1 virtual map; points as a virtual octahedral map if per-page rendering holds, else 6 virtual cube faces (sec. 7); the buddy atlas retired | The local-shadow tests and saved outputs within tolerance; texel per pixel ~ 1; the same counters |
 | **P2** Per-tile head/tail | `light_cells` grows: per tile, GPU-built, stable ids, a visibility term from existing maps guiding selection with the floor kept | Sampling error against EXACT converges; no pops on a light ramp; the glossy floor test |
 | **P3** The tail | `EvaluateDirectAtReceivers`; screen trace (blocked-only); short-history denoiser; the global preparation budget | Claim only: "key lights shadowed by pages, tail contact-shadowed"; reconstruction error measured separately |
 | **P4** Traced visibility | Tail shadow rays through the GI's any-hit, with a declared ray budget. The GI publishes enough spatial coverage to tell an empty region from an unrepresented one; instance flags (possibly the free `m_Info` lanes) describe supported semantics, not completeness. Unknown reasons; alpha any-hit via bindless texture ids if the GI thread agrees | Visibility-model error on supported geometry; unknown rate per reason; no CLEAR without complete coverage |
 | **P5** Caches | Demand-driven static visibility caches; surfel visibility as a *prediction* for selection (with the GI thread) | Net benefit including memory, invalidation and maintenance |
 | **P6** Hardware RT | xGPU acceleration structures; RT as a visibility source | Equal-time comparison against the P4 software path |
 
-**The P0/P1a report** (one compact report):
+**The P1 report** (one compact report per VSM step; P0's was delivered 2026-10-26):
 
 | Evidence | Required result |
 |---|---|
-| Reference preservation | Baseline comparison and analytic tests pass |
-| Six transitions | Working depth agrees with a full redraw within the declared tolerance |
-| Resource validity | No dirty or obsolete working composition sampled as evidence |
-| Static reuse | Static redraw counts before/after |
-| Cost | Restore, static redraw, mover draw, total shadow preparation |
-| Memory | Static atlas, working atlas, metadata |
-| Stress behaviour | 0 movers, 50 movers, and forced preparation-budget exhaustion |
+| Reference preservation | Saved outputs and analytic tests pass; changed images explained (the sun's shadows change on purpose) |
+| Texel density | Texel per pixel ~ 1 at every distance on Police (debug view + numbers) |
+| Six transitions (VSM-b) | Working depth agrees with a full redraw within the declared tolerance |
+| Resource validity | No ABSENT, DIRTY or obsolete page sampled as evidence |
+| Static reuse | Page redraw counts before/after |
+| Cost | Request pass, page rendering (static redraw, restore, mover draw), total shadow preparation |
+| Memory | Physical pool, page tables, working pages, metadata |
+| Stress behaviour | 0 movers, 50 movers, a fast camera move (page thrash), forced budget exhaustion |
 
-Kept out of the critical path until measurements justify them: stale-map reuse, page Hi-Z, local-map expansion, every later-phase
-feature.
+Kept out of the critical path until measurements justify them: stale-page reuse, page Hi-Z, local lights (P1-VSM-d), texture
+streaming (7b), every later-phase feature.
 
 **Break tests** (defined as fixtures in P0, enabled by the phase that needs them):
 - a door opening (rediscovery);
@@ -421,6 +509,9 @@ feature.
 - Make the GI read the camera-centred tile or cell lists as its light source. Share the *function* (6.5), not the data; GI hits are
   off-screen.
 - Fold material opacity into the GI's transport role: role is per instance, opacity per material; they compose.
+- Cascaded shadow maps, perspective warping (PSM, LiSPSM, TSM) or SDSM depth fitting for the sun (sec. 7: VSM ties texels to pixels
+  directly; warping breaks page caching and shimmers). Contact detail comes from the P3 screen trace.
+- Make every texture virtual (7b): mip streaming by feedback for all, virtual texturing opt-in per texture.
 - Unify compile-time identities (`UpdateCount`, `m_LayoutHash`, `m_GIStamp`) with frame change events.
 - Reuse the camera's Hi-Z or the camera's surviving draws for shadow pages or the GI.
 - Add per-texel masked rays before P0's opaque reference exists.
@@ -435,12 +526,12 @@ feature.
    as the baseline: a per-tile builder must show enough benefit to justify its preparation and memory cost.
 2. **UNKNOWN fallback:** unshadowed and counted by default (sec. 10's two metrics); conservative dark as a diagnostic mode. No
    stale-map mode in P1.
-3. **P1a scope:** the sun first, with its transition tests and timing, then local maps if its assumptions hold. Two cache
-   implementations are not prerequisites for the first result.
+3. **P1 scope (v3.2):** the sun's virtual shadow map first (P1-VSM-a, then b, c); local lights on the same pool afterwards
+   (P1-VSM-d). Two cache implementations are not prerequisites for the first result.
 4. **GI coordination:** send the GI thread a short interface notice now, and ask it to change nothing:
    - the light handle and revision fields;
    - the change-event schema;
    - the lighting quantities each entry point returns;
    - the spatial-coverage question (sec. 3).
 
-   Code adoption is proposed only after P1a's measurements.
+   Code adoption is proposed only after P1-VSM-b's measurements.
