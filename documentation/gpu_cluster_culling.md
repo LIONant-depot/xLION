@@ -156,7 +156,14 @@ Beyond noise: only the Bistro from outside, +0.08 ms (every sample), all of it i
 equal, so not the per-draw cost of indirect draws or the record read in the vertex shader; not the order inside a run (an ordered
 variant measured the same in Release); not the cull (0.018 ms). Open: the order across runs and the hardware's coarse depth test, or the
 records pipelines themselves - it needs a GPU frame profiler (Nsight Graphics or RenderDoc: neither is installed). The street view: the
-GPU path is 0.16 ms faster; the CPU scene pass is half the CPU path's on the Bistro. SCENESPLIT (XLION_GPU_TIMES): the scene pass's
+GPU path is 0.16 ms faster; the CPU scene pass is half the CPU path's on the Bistro.
+
+RenderDoc (2026-10-26, smoke/rdoc_capture_cull.py + rdoc_analyze_passes.py, xGPU XGPU_RENDERDOC_TRIGGER): the two paths' frames have the
+same draws and indices, and the shading pipelines the same state (rasterizer, depth LessEqual/write/test, blend, multisample) but
+for the vertex shader (the records variant). RenderDoc's replay timings of indirect draws are not usable (it replays them slowly), so
+it gives no per-draw times for the GPU path. Measured in Release and ruled out as well: the order of the culled runs against the CPU
+path's leftover draws (moved first: the same), the record read as dynamically uniform (gl_BaseInstance: the same) - both reverted.
+The +0.06-0.08 ms in shading stays open; next: Nsight Graphics (per-draw GPU times of indirect draws) if it matters. SCENESPLIT (XLION_GPU_TIMES): the scene pass's
 prepass and the rest, per 120 frames.
 
 ## Milestones
