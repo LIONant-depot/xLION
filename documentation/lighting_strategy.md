@@ -1,4 +1,4 @@
-# Lighting strategy: direct light, shadows, many lights (v3, 2026-10-26)
+# Lighting strategy: direct light, shadows, many lights (v3.1, 2026-10-26)
 
 Status: design only. Nothing is built until Tomas says go.
 
@@ -44,6 +44,18 @@ The GI belongs to its own thread: this document proposes interfaces the GI may a
 | A shadow cull mode fed by shadow-eligible casters, not camera survivors; page Hi-Z optional (sec. 6.4, P1b) | 6 |
 | LightEval split into entry points with stated quantities; reference outputs saved before extraction; `MaterialVisibility` compositional (sec. 6.2, 6.5) | 8, 9 |
 | The ledger total includes records/grid and cache maintenance; fused ray cost not timestamped separately; the open questions became decisions (sec. 10, 13) | 10, 11 |
+
+### v3 → v3.1 (the go-ahead review's clarifications)
+
+| Change | Where |
+|---|---|
+| Caster changes include shadow-producing content without movement; static age = frames since the shadow-producing state changed | Sec. 6.3 |
+| A working tile is VALID only with the required static version *and* dynamic composition | Sec. 3 |
+| BLOCKED only from a hit that satisfies the requested semantics; masked hits without alpha prove nothing | Sec. 3 |
+| P1 has no stale-map mode: VALID → sample, otherwise fallback + counter | Sec. 3, 13 |
+| Head admission and sampling data come from one published snapshot | Sec. 4 |
+| Freeze: membership frozen, parameters current, probabilities recomputed | Sec. 9 |
+| P0 order, output tolerance, minimal P0 before P1a; static eligibility and occupancy rules; the P0/P1a report | Sec. 7, 11, 13 |
 
 ## 1. Goal and hypothesis
 
@@ -115,10 +127,13 @@ The rules:
 - traversal or work limit reached;
 - published state unavailable or invalid.
 
-A blocker found proves BLOCKED under the query's semantics. No blocker found in a partial scene is UNKNOWN, not CLEAR.
+A hit proves BLOCKED only if the hit itself satisfies the requested material and caster semantics. A supported opaque blocker proves
+it even when unsupported geometry lies alongside; a hit on a masked triangle whose alpha was not evaluated does not (today the BVH
+treats masked as solid). No blocker found in a partial scene is UNKNOWN, not CLEAR.
 
-**The screen trace** covers only the span next to the surface and may conclude BLOCKED, never CLEAR. It honours caster roles, and its
-answers never enter a world-space cache.
+**The screen trace** covers only the span next to the surface and may conclude BLOCKED, never CLEAR. Its hits stay within the
+declared contact-shadow approximation (APPROXIMATE), never stronger evidence than the depth buffer supports. It honours caster roles,
+and its answers never enter a world-space cache.
 
 **Coverage contract:** direct-light trace coverage follows the GI's published visibility residency and its supported caster
 classes. Lighting never pins GI geometry. Evicting GI lighting state must never remove an occluder from the rays without the rays
@@ -138,8 +153,13 @@ Flags on resident TLAS instances cannot describe an instance that is not there. 
 the last update frame and an estimated update cost.
 - **Invalidation is immediate; rebuilding is budgeted.** A resource loses evidence status the moment a dependency changes. The
   budget decides when it becomes VALID again, never whether the invalidation takes effect.
-- While DIRTY or BUILDING, consumers use the declared fallback. Deliberately allowing a stale map for a bounded time is classified
-  APPROXIMATE, with its age counted.
+- A **working** tile is VALID only when it holds the required static-content version *and* the required dynamic composition for the
+  published frame. A valid static source does not make a working tile valid while its movers' restore/draw is deferred. A small
+  dependency record per tile is enough; no general dependency graph.
+- While DIRTY or BUILDING, consumers use the declared fallback. **P1 rule: VALID → sample; otherwise → declared fallback + counter.**
+  Reusing a stale map for a bounded age (classified APPROXIMATE, age counted) stays documented but unbuilt until fallback artifacts
+  are a measured problem. Likewise a resource being rebuilt for an unrelated reason could keep its published version
+  (double-buffered publication), only if measured stalls justify it.
 - Three things are separate: a resource is VALID; it was selected for update; its light is admitted to the deterministic head. A
   light enters the head only with a VALID resource, never on the assumption that a requested map will exist.
 - This reuses the local-map budgeting; there is no new allocator or scheduler, only a stronger readiness contract.
@@ -164,6 +184,9 @@ the last update frame and an estimated update cost.
   invalid evidence.
 - **Head:** the sun is outside K. Up to K = 4 admitted local key lights per tile. A light needs a useful contribution and a VALID
   visibility path; unused slots stay empty.
+- **One published snapshot.** Light handles and revisions, resource bindings and validity, head membership and weights, and the
+  sampling-distribution data are published together with the existing frame buffering. No shader sees a new admission list with old
+  light parameters or resource metadata. No new synchronization framework.
 
 **The estimator.** With head weights a_l(x), L = Σ a_l C_l + Σ (1 − a_l) C_l. The tail estimates the second sum as
 (1 − a_J) C_J / q_J. Its correctness rests on:
@@ -214,8 +237,12 @@ Visibility guidance never removes a contributing light's support.
    it. Today the GI sees through only blended materials, so masked materials are solid to its rays.
 3. **One change list per frame:** `scene_changes { caster bounds (old and new), light handles + revisions, epoch }`, built once
    (today's `m_FrameChanged`). Consumers: the clipmap, local maps, probes, the static caches and the per-tile lists; the GI's
-   `MarkLinksCrossing` may listen. The second diff path (`m_PrevCasters`) folds into `slot_caster`. **Static age** is frames since
-   `instance_slots` last saw a change.
+   `MarkLinksCrossing` may listen. The second diff path (`m_PrevCasters`) folds into `slot_caster`.
+   - **A caster change includes any change to its shadow-producing geometry, opacity or participation, not only movement:** material
+     assignment or opacity mode, alpha cutoff or alpha texture, `castsShadow` or caster-mask membership, mesh replacement or geometry
+     revision, deformation or displacement state. Events keep the affected bounds even on deletion.
+   - **Static age** = frames since the *shadow-producing* state changed. Shadow-affecting changes reset it; unrelated ones (an albedo
+     colour) do not. `instance_slots`' change test is the starting point, narrowed to those fields.
 4. **Shadow pages through the GPU cull, in a shadow mode.** Tile and face view-projections are the cull's matrix, but the input is
    the **eligible resident caster set**, not the camera's surviving draws. The shadow mode must not inherit:
    - camera visibility, camera size thresholds or camera LOD;
@@ -247,6 +274,12 @@ Visibility guidance never removes a contributing light's support.
   DIRTY at once; until it is rebuilt, the affected tiles use the declared fallback (or a counted, bounded-age APPROXIMATE).
 - "Static after N frames" means cache-eligible, not proven static. Declared deformers (skinned) are always movers. When an object
   that is in the static cache moves, the static cache under its old and new bounds is invalidated and redrawn.
+- **Eligibility versus admission.** N is the engine's existing threshold if one exists, otherwise a configurable value; promotions and
+  demotions are logged. Eligibility is immediate; *admission* into the static cache is budgeted, so a wave of newly eligible objects
+  does not cause a rebuild burst. Measured: static rebuilds caused by promotion, rebuilds caused by recently promoted objects moving
+  again, dynamic drawing saved.
+- **Occupancy is conservative:** from projected caster bounds, never a false negative. Tighter coverage only if excess restore work
+  shows up in the ledger.
 - **Per-tile dynamic occupancy.** A tile is not "dynamic forever" once a mover has touched it:
 
   | State | Work |
@@ -299,8 +332,10 @@ Visibility guidance never removes a contributing light's support.
   - whether the history was accepted, and the final contribution.
 - No CPU re-evaluator.
 - The inspector distinguishes three cases: not selected this frame, selected but zero, reconstruction dark.
-- **Freeze-lists toggle:** shown as frozen. A referenced light that changed or was deleted is detected by its generation and dropped,
-  never read stale.
+- **Freeze-lists toggle**, shown as frozen. Candidate *membership* is frozen; the current valid light parameters are still read. A
+  lifetime mismatch (deleted, slot reused) drops the entry. A visibility revision invalidates obsolete guidance; a radiometry revision
+  refreshes the entry. The probabilities the active estimator needs are recomputed, never frozen while the weights they represent
+  change. A fully frozen lighting snapshot, if wanted later, is a separately named debug mode.
 - Counters through `DescribeScene`: unknown rate per reason, fallback energy, pages updated, restore and copy ms.
 
 ## 10. Measurement: one ledger
@@ -341,8 +376,8 @@ Each phase has a gate, measured with the ledger.
 
 | Phase | What | Gate |
 |---|---|---|
-| **P0** Reference and ledger | (a) **Sampling reference:** EXACT with the same visibility source as SAMPLED. (b) **Visibility reference:** the GI's light BVH with shadow rays, opaque rigid scenes only, every capture labelled (`opaque rigid: supported; skinned: unsupported; per-texel masked: unsupported`); skinned and masked scenes compared against the raster path. Many-ray tail reference. The ledger (sec. 10). Today's reference outputs saved, then the `LightEval` include (sec. 6.5) with its analytic tests. The per-pixel record skeleton and counters (sec. 9). The break tests listed below as fixtures | References reproduce; the include changes no saved output; the ledger runs on the stress city and Police |
-| **P1a** Static/mover correctness, **sun first** | Light handle + revisions (6.1), `MaterialVisibilityOf` + emissive flag (6.2), one change list + static age (6.3); shadow resource states (sec. 3); restore-then-draw for the sun clipmap with old + new footprint and per-tile occupancy; skinned via the existing path. Local maps follow in the same phase only if the sun's assumptions hold | The six transition tests pass; no DIRTY resource is ever sampled as evidence; static redraw drops as expected; the allocation accounting of sec. 7 measured |
+| **P0** Reference and ledger (evidence, not the first big refactor) | In this order: 1. save today's outputs and timings; 2. make the reference fixtures reproducible: (a) **sampling reference**, EXACT with the same visibility source as SAMPLED; (b) **visibility reference**, the GI's light BVH with shadow rays, opaque rigid scenes only, every capture labelled (`opaque rigid: supported; skinned: unsupported; per-texel masked: unsupported`), skinned and masked scenes compared against the raster path; a many-ray tail reference; 3. the minimal ledger (sec. 10) and the diagnostic skeleton (sec. 9, record + counters, no finished inspector UI); 4. extract `LightEval` (sec. 6.5) with its analytic tests; 5. verify against the saved baseline. Break tests (below) are *defined* as fixtures; they are not all running before P1a | References reproduce. "Changes no saved output" = bitwise equal where practical, else within an explicit numerical tolerance; any difference outside it is explained, never accepted because EXACT and SAMPLED still agree |
+| **P1a** Static/mover correctness, **sun first** | Light handle + revisions (6.1), `MaterialVisibilityOf` + emissive flag (6.2), one change list + static age (6.3); shadow resource states (sec. 3); restore-then-draw for the sun clipmap with old + new footprint and per-tile occupancy; skinned via the existing path. Local maps follow in the same phase only if the sun's assumptions hold | The six transition tests pass; no DIRTY resource or obsolete working composition is ever sampled as evidence; static redraw drops as expected; the allocation accounting of sec. 7 measured; forced preparation-budget exhaustion shows the declared fallback and its counters |
 | **P1b** GPU caster culling | Shadow pages through the GPU cull's shadow mode (6.4), candidates built once per frame; page Hi-Z only if measured to pay | No per-light CPU caster enumeration or submission growth (that is "flat CPU"); sun ≤ 0.8 ms with 50 movers (warmed benchmark); no caster coverage regression, off-screen casters included |
 | **P2** Per-tile head/tail | `light_cells` grows: per tile, GPU-built, stable ids, a visibility term from existing maps guiding selection with the floor kept | Sampling error against EXACT converges; no pops on a light ramp; the glossy floor test |
 | **P3** The tail | `EvaluateDirectAtReceivers`; screen trace (blocked-only); short-history denoiser; the global preparation budget | Claim only: "key lights shadowed by pages, tail contact-shadowed"; reconstruction error measured separately |
@@ -350,7 +385,22 @@ Each phase has a gate, measured with the ledger.
 | **P5** Caches | Demand-driven static visibility caches; surfel visibility as a *prediction* for selection (with the GI thread) | Net benefit including memory, invalidation and maintenance |
 | **P6** Hardware RT | xGPU acceleration structures; RT as a visibility source | Equal-time comparison against the P4 software path |
 
-**Break tests** (fixtures from P0, enabled by the phase that needs them):
+**The P0/P1a report** (one compact report):
+
+| Evidence | Required result |
+|---|---|
+| Reference preservation | Baseline comparison and analytic tests pass |
+| Six transitions | Working depth agrees with a full redraw within the declared tolerance |
+| Resource validity | No dirty or obsolete working composition sampled as evidence |
+| Static reuse | Static redraw counts before/after |
+| Cost | Restore, static redraw, mover draw, total shadow preparation |
+| Memory | Static atlas, working atlas, metadata |
+| Stress behaviour | 0 movers, 50 movers, and forced preparation-budget exhaustion |
+
+Kept out of the critical path until measurements justify them: stale-map reuse, page Hi-Z, local-map expansion, every later-phase
+feature.
+
+**Break tests** (defined as fixtures in P0, enabled by the phase that needs them):
 - a door opening (rediscovery);
 - a small blocker with a long shadow (non-local invalidation);
 - a mover stopping, becoming cache-eligible, then moving again;
@@ -382,7 +432,8 @@ Each phase has a gate, measured with the ledger.
 
 1. **K:** the sun plus up to 4 admitted local key lights per tile; slots are not filled for their own sake. Today's SAMPLED mode stays
    as the baseline: a per-tile builder must show enough benefit to justify its preparation and memory cost.
-2. **UNKNOWN fallback:** unshadowed and counted by default (sec. 10's two metrics); conservative dark as a diagnostic mode.
+2. **UNKNOWN fallback:** unshadowed and counted by default (sec. 10's two metrics); conservative dark as a diagnostic mode. No
+   stale-map mode in P1.
 3. **P1a scope:** the sun first, with its transition tests and timing, then local maps if its assumptions hold. Two cache
    implementations are not prerequisites for the first result.
 4. **GI coordination:** send the GI thread a short interface notice now, and ask it to change nothing:
