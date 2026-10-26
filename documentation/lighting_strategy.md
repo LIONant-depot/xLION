@@ -1,6 +1,7 @@
 # Lighting strategy: direct light, shadows, many lights (v3.1, 2026-10-26)
 
-Status: design only. Nothing is built until Tomas says go.
+Status: v3.1 adopted. P0 built 2026-10-26 (xLIONRender e2b7318: saved outputs, references, ledger, counters, LightEval; what exists
+and the break tests' definitions: `xLIONRender/documentation/lighting_fixtures.md`). P1a waits for Tomas's go.
 
 The GI belongs to its own thread: this document proposes interfaces the GI may adopt, never GI changes. Sources:
 - documentation/many_lights_and_shadows_research.md;
