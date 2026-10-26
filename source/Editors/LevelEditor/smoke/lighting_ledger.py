@@ -1,6 +1,6 @@
 """The lighting ledger (documentation/lighting_strategy.md sec. 10): median, p95 and p99 per ledger row, with the GPU's clock state.
 
-    python -I lighting_ledger.py <out_dir> [stress,police] [seconds=60]
+    python -I lighting_ledger.py <out_dir> [stress,police,police_sun] [seconds=60]
 
 stress: the stress city (xLIONRender's xlionrender_stress, Release), every scenario, light modes cells and sampled; per frame from its
         CSV, the first 60 frames of a scenario apart (cold start). The warmed-benchmark condition.
@@ -8,6 +8,8 @@ police: the Police level in a Release harness editor (never the user's), twice: 
         and the default window with the frame budget (editor-normal). Per-frame GPU samples from GPUTIMES (one frame every 120),
         the CPU from RENDERCPU (120-frame means), and the LEDGER lines when the editor prints them (XLION_LEDGER). Compile idle is
         checked before and after; a run that overlapped a compile is marked invalid.
+police_sun: the same with the level's Sun enabled (it is editor-disabled in the saved level; the tag is removed in the harness editor, never
+        saved) and an outside camera (40 m): the sun's shadows, clipmap or pages (XLION_VSM=1).
 Clocks: nvidia-smi sampled every 500 ms during each run (pstate, graphics and memory MHz).
 """
 import json
@@ -72,8 +74,8 @@ def stress(out: Path) -> dict:
     return res
 
 
-def police(out: Path, seconds: int, benchmark: bool) -> dict:
-    tag = "police_" + ("benchmark" if benchmark else "editor_normal")
+def police(out: Path, seconds: int, benchmark: bool, sun: bool = False) -> dict:
+    tag = "police_" + ("sun_" if sun else "") + ("benchmark" if benchmark else "editor_normal")
     (out / tag).mkdir(parents=True, exist_ok=True)
     exe = harness.DEFAULT_EXE.parent.parent / "Release" / harness.DEFAULT_EXE.name
     env = {"XLION_FRAME_TIMES": "1", "XLION_GPU_TIMES": "1", "XLION_LEDGER": "1", **({"XLION_NO_FRAME_BUDGET": "1"} if benchmark else {})}
@@ -83,6 +85,9 @@ def police(out: Path, seconds: int, benchmark: bool) -> dict:
     try:
         if benchmark: res["window"] = bench_cull.maximize(ed.proc.pid)
         bench_cull.open_view(ed, "police")
+        if sun:     # the saved level's Sun is editor-disabled: enabled here only (never saved), seen from outside
+            ed.ok(r"Police Level\RemoveComponent -Scene EF19AB610AD85421 -Id 00000002 -Component C7497C673D1DB9D7")
+            ed._roundtrip(r"Police Level\SetCamera -Mode orbit -Yaw 210 -Pitch -30 -Distance 40 -Target 0,1.5,0", 60)
         time.sleep(10)
         before = ed.wait_compile_idle(timeout=3600)
         n0 = len(ed.log_text().splitlines())
@@ -98,7 +103,7 @@ def police(out: Path, seconds: int, benchmark: bool) -> dict:
                     "scene pass cpu (120-frame means)": stats(num(r"RENDERCPU .*scene pass ([\d.]+)")),
                     "ledger": [l.strip() for l in lines if "LEDGER" in l][-5:]})
     finally:
-        ed.stop()
+        ed.stop(graceful=not sun)
     return res
 
 
@@ -111,6 +116,9 @@ def main(argv: list[str]) -> int:
     if "police" in what:
         res["police_benchmark"] = police(out, seconds, True)
         res["police_editor_normal"] = police(out, seconds, False)
+    if "police_sun" in what:    # (the Sun enabled: what the sun's shadows cost)
+        res["police_sun_benchmark"] = police(out, seconds, True, True)
+        res["police_sun_editor_normal"] = police(out, seconds, False, True)
     (out / "ledger.json").write_text(json.dumps(res, indent=1))
     print(json.dumps(res, indent=1))
     return 0

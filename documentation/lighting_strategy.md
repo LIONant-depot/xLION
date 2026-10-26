@@ -2,7 +2,10 @@
 
 Status: v3.3 approved by the final review, with v3.4's corrections; **P1a-0 → P1a-1 → P1a-2 authorized by Tomas 2026-10-26**, nothing
 beyond. P0 built 2026-10-26 (xLIONRender e2b7318: 109 + 12 saved images bitwise, visibility reference 6.3% disagreement at the edges,
-ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`).
+ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`). P1a-0/1/2 built 2026-10-26/27
+(xLIONRender a10ef2c, a16d281, 14b3710, 270c982; XLION_VSM=1 switches the sun to pages, the clipmap stays the default): measured in
+`R/tests/xlionrender_test_vsm.cpp` and the ledger (`smoke/lighting_ledger.py ... police_sun`: the saved Police level's Sun is
+editor-disabled, so Police measures the sun only that way). Waiting for the P1 report's review before P1b.
 
 The GI belongs to its own thread: this document proposes interfaces the GI may adopt, never GI changes. Sources:
 documentation/many_lights_and_shadows_research.md, lighting_gi_material_synergies.md, gpu_cluster_culling.md, the GI notes in
