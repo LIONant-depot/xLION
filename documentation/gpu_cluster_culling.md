@@ -135,6 +135,30 @@ its 167k cheap triangles saves (frustum only = the CPU path); and the Bistro fro
 variant changed nothing), the record read per vertex (gl_BaseInstance changed nothing) - both experiments reverted. Open: a GPU profile.
 The Bistro street view: all three paths equal.
 
+## Benchmark in Release (2026-10-26: validation off by default in Release; the view-size rule)
+
+The adaptive occlusion also skips a view of under 500k triangles in the frustum (`instance::m_GPUOcclusionMinTriangles`): the pyramid and
+pass 2 cost more than hiding part of so few triangles saves. Police then equals the CPU path.
+
+| View | Switch | GPU ms median (min-max) | CPU scene pass ms median (min-max) | prepass / rest of the scene pass, GPU ms | launches kept |
+|---|---|---|---|---|---|
+| police | gpu | 0.880 (0.870-0.920) | 0.130 (0.110-0.200) | 0.016 / 0.423 | 3 of 3 |
+| police | frustum | 0.880 (0.860-0.900) | 0.120 (0.110-0.220) | 0.016 / 0.425 | 3 of 3 |
+| police | cpu | 0.880 (0.860-0.910) | 0.110 (0.090-0.140) | 0.014 / 0.440 | 3 of 3 |
+| bistro | gpu | 0.860 (0.840-0.910) | 0.170 (0.140-0.270) | 0.139 / 0.509 | 3 of 3 |
+| bistro | frustum | 0.860 (0.840-0.940) | 0.140 (0.130-0.230) | 0.160 / 0.480 | 3 of 3 |
+| bistro | cpu | 0.780 (0.740-0.830) | 0.470 (0.270-0.590) | 0.146 / 0.403 | 3 of 3 |
+| bistro_street | gpu | 0.620 (0.600-0.640) | 0.130 (0.130-0.200) | 0.036 / 0.364 | 3 of 3 |
+| bistro_street | frustum | 0.610 (0.590-0.630) | 0.130 (0.130-0.160) | 0.036 / 0.355 | 3 of 3 |
+| bistro_street | cpu | 0.780 (0.760-0.810) | 0.280 (0.260-0.410) | 0.120 / 0.455 | 3 of 3 |
+
+Beyond noise: only the Bistro from outside, +0.08 ms (every sample), all of it in the shading part of the scene pass. The prepass is
+equal, so not the per-draw cost of indirect draws or the record read in the vertex shader; not the order inside a run (an ordered
+variant measured the same in Release); not the cull (0.018 ms). Open: the order across runs and the hardware's coarse depth test, or the
+records pipelines themselves - it needs a GPU frame profiler (Nsight Graphics or RenderDoc: neither is installed). The street view: the
+GPU path is 0.16 ms faster; the CPU scene pass is half the CPU path's on the Bistro. SCENESPLIT (XLION_GPU_TIMES): the scene pass's
+prepass and the rest, per 120 frames.
+
 ## Milestones
 
 a) Cluster boxes and the instance/cluster buffers on the GPU. b) Frustum culling and indirect draws per run (pass 1 only, no

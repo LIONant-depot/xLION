@@ -81,6 +81,9 @@ def launch(out: Path, view: str, switch: str, k: int, samples: int) -> dict:
         res["valid"] = before["idle"] and after["idle"] and len(gpu) == samples
         res["gpu_ms"] = [number(l, r"shadows\+scene\+tonemap ([\d.]+)") for l in gpu]
         res["cpu_ms"] = [number(l, r"scene pass ([\d.]+)") for l in cpu]
+        split = [l for l in ed.log_text().splitlines() if "SCENESPLIT" in l][-samples:]     # (the scene pass: prepass, the rest)
+        res["prepass_ms"] = [number(l, r"prepass ([\d.]+)") for l in split]
+        res["rest_ms"]    = [number(l, r"blended\) ([\d.]+)") for l in split]
         cull = [l for l in ed.log_text().splitlines() if "CULLGPU" in l]
         res["cull"] = cull[-1].strip() if cull else ""
     finally:
@@ -104,14 +107,17 @@ def main(argv: list[str]) -> int:
                 runs.append(r)
     (out / "runs.json").write_text(json.dumps(runs, indent=1))
 
-    lines = ["| View | Switch | GPU ms median (min-max) | CPU scene pass ms median (min-max) | launches kept |", "|---|---|---|---|---|"]
+    lines = ["| View | Switch | GPU ms median (min-max) | CPU scene pass ms median (min-max) | prepass / rest of the scene pass, GPU ms | launches kept |", "|---|---|---|---|---|---|"]
     for view in views:
         for switch in switches:
             kept = [r for r in runs if r["view"] == view and r["switch"] == switch and r["valid"]]
             g = [v for r in kept for v in r["gpu_ms"] if v is not None]
             c = [v for r in kept for v in r["cpu_ms"] if v is not None]
             f = lambda v: f"{st.median(v):.3f} ({min(v):.3f}-{max(v):.3f})" if v else "-"
-            lines.append(f"| {view} | {switch} | {f(g)} | {f(c)} | {len(kept)} of {launches} |")
+            pre  = [v for r in kept for v in r.get("prepass_ms", []) if v is not None]
+            rest = [v for r in kept for v in r.get("rest_ms", []) if v is not None]
+            ps   = f"{st.median(pre):.3f} / {st.median(rest):.3f}" if pre and rest else "-"
+            lines.append(f"| {view} | {switch} | {f(g)} | {f(c)} | {ps} | {len(kept)} of {launches} |")
     table = "\n".join(lines)
     (out / "table.md").write_text(table + "\n")
     print(table)
