@@ -387,6 +387,14 @@ needs fine pages to compare against); R-C beside P1b. If all three say no, the r
 | Material previews, thumbnails | One host-granted budget per application; no main-view allocation |
 | Reflections | The GI thread's; lighting shares only the P3 screen trace with SSR |
 
+**Backlog (Tomas, 2026-10-27; not started, each waits for its go):**
+
+| Item | What | Notes |
+|---|---|---|
+| Contact-hardening sun shadows | Physically softer with the distance from the caster: sharp at the contact, wider penumbra farther | The sun's disc is ~0.53 degrees across. Unreal VSM: SMRT (rays toward the light's disc marched through the shadow map; r.Shadow.Virtual.SMRT.RayCountDirectional, the light's SourceAngle 0.5357); elsewhere PCSS (a blocker search, then a filter as wide as the penumbra). The requests must cover the wider filter (the dilation grows with it) |
+| The moving sun's blur | A sun turning fast blurs and shimmers (Tomas, the editor): past setup::m_EpochDegrees a frame every frame opens an epoch, the requests of older epochs are dropped, the coarse net shades | P1e (sec. 7, 11); Unreal: ResolutionLodBiasDirectionalMoving (coarser while it moves) and re-rendering the moving light's pages |
+| Shadow performance follow-ups | The request pass (~0.05 ms per million pixels: the world position, footprint and table walk per pixel); the remaining scene-pass gap to the clipmap (Tomas's Bistro view 1.14 vs 0.72 ms, 0.26 of it the request pass); a page's casters found by a loop over every draw (a spatial index) | Measured 2026-10-27, after the border reads (at most 4 pages a footprint) and the cached caster bounds |
+
 ## 9. Debuggability
 
 - **Per-pixel record from the real GPU path**, read back asynchronously like the cull stats: view and frame, surface id, cell or
