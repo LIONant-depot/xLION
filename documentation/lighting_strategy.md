@@ -3,7 +3,8 @@
 Status: v3.3 approved by the final review, with v3.4's corrections; **P1a-0 → P1a-1 → P1a-2 authorized by Tomas 2026-10-26**, nothing
 beyond. P0 built 2026-10-26 (xLIONRender e2b7318: 109 + 12 saved images bitwise, visibility reference 6.3% disagreement at the edges,
 ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`). P1a-0/1/2 built 2026-10-26/27
-(xLIONRender a10ef2c, a16d281, 14b3710, 270c982; XLION_VSM=1 switches the sun to pages, the clipmap stays the default): measured in
+(xLIONRender a10ef2c, a16d281, 14b3710, 270c982, 41fb7db, 401daac). Since 401daac the pages are the default (Tomas, 2026-10-27);
+XLION_VSM=0 keeps the clipmap as a fallback until P1e (the moving sun), then it goes. Level 0 is at most 2 mm whatever the scene's tile: measured in
 `R/tests/xlionrender_test_vsm.cpp` and the ledger (`smoke/lighting_ledger.py ... police_sun`: the saved Police level's Sun is
 editor-disabled, so Police measures the sun only that way). Waiting for the P1 report's review before P1b.
 
