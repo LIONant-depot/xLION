@@ -65,6 +65,31 @@ nothing about a light's view); a camera cut costs one slow frame (pass 1 draws l
 - Test: xlionrender_test_culling's field of cluster spheres. With the draws' own culling off, the GPU cull's image matches the CPU
   path's exactly, and it keeps exactly the spheres in the view.
 
+## As built (milestones c and d)
+
+- Occlusion, two passes: `gpu_cull::Cull` (mode 0) keeps the clusters in the view that were visible last frame. The scene pass
+  lays their depth (with the CPU path's prepass) and ends. `gpu_cull::Occlude` copies the depth into a buffer
+  (`xgpu::window::CopyTextureToBuffer`, new), builds the Hi-Z pyramid in it (`xlionrender_hiz_comp.glsl`, one dispatch a level, the
+  farthest depth of 2x2, sizes rounded up so the texels of a level cover exactly 2^L pixels), and tests every cluster in the view
+  against it (mode 1). The test takes the box's 8 corners to the screen and compares the nearest depth with the farthest Hi-Z
+  depth, at the level where the box covers at most 2x2 texels; a box crossing the near plane is visible. Mode 1 writes the
+  visibility for the next frame, and the visible clusters that pass 1 did not draw go into pass 2's lists. The scene pass is loaded
+  again (`render_view::m_ScenePassLoad`): pass 2's depth, then the shading of both passes' lists.
+- Visibility: one uint per (instance slot, cluster), with a range per slot kept while the slot keeps its cluster count. When the
+  1M entries are used up, everything starts again (one frame mostly in pass 2). Visibility only picks the pass that draws a cluster;
+  it never changes the picture.
+- The editor's frame budget (on by default) and GPU culling work together: the GPU culls the clusters the budget keeps. Only the
+  boxes-only view stays on the CPU path.
+- Freeze (`instance::m_bFreezeCull`): no cull, no Hi-Z; the last cull's lists are drawn again (both passes' lists) from wherever the
+  camera goes, so what was culled shows as missing. Ignored when the scene's runs change.
+- Editor: the Level editor's toolbar has Cull, Occl and Freeze (`xeditor::mesh_budget::CullButtons`; `view_options` m_bNoGPUCull,
+  m_bNoGPUOcclusion, m_bFreezeCull; xRenderEditor version 12). Their hints and `DescribeScene` give the GPUCull numbers:
+  candidates, runs, clusters drawn (prepass, pass 2) and triangles shaded, read back three frames late.
+- Switches: XLION_NO_GPU_CULL=1 (the CPU path), XLION_NO_GPU_OCCLUSION=1 (the frustum only).
+- Tests (xlionrender_test_culling): an occluder sphere in front of the field. With the camera moving, every one of 12 frames
+  matches the CPU path's picture exactly: nothing appears a frame late. With the camera still, 12 clusters are drawn against 30 for
+  the frustum alone, and pass 2 draws nothing. Also covered: the triangle count, the frame budget, and freeze.
+
 ## Milestones
 
 a) Cluster boxes and the instance/cluster buffers on the GPU. b) Frustum culling and indirect draws per run (pass 1 only, no

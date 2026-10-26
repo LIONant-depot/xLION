@@ -25,7 +25,35 @@ namespace xeditor::mesh_budget
         float   m_BudgetMs   = 33.0f;
 
         float   FrameBudgetMs() const noexcept { return m_bBudget ? m_BudgetMs : 0.0f; }
+
+        // GPU cluster culling (xlionrender::view_options m_bNoGPUCull, m_bNoGPUOcclusion, m_bFreezeCull): CullButtons
+        bool    m_bGPUCull   = true;
+        bool    m_bOcclusion = true;
+        bool    m_bFreeze    = false;
     };
+
+    // The GPU culling's buttons (the Level editor's toolbar): Cull, Occlusion, Freeze. pStats: what the last render kept (for the hints)
+    inline void CullButtons(state& S, bool bHorizontal, float ButtonHeight, const char* pStats) noexcept
+    {
+        const auto Toggle = [&](const char* pLong, const char* pShort, bool& bValue, float Width, bool bEnabled)
+        {
+            if (bHorizontal) ImGui::SameLine();
+            ImGui::BeginDisabled(!bEnabled);
+            const bool bOn = bValue;
+            if (bOn) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_Header]);
+            if (ImGui::Button(bHorizontal ? pLong : pShort, bHorizontal ? ImVec2(Width, ButtonHeight) : ImVec2(32.0f, ButtonHeight))) bValue = !bValue;
+            if (bOn) ImGui::PopStyleColor();
+            ImGui::EndDisabled();
+        };
+        Toggle("Cull###GPUCull", "C###GPUCull", S.m_bGPUCull, 40.0f, true);
+        if (ImGui::IsItemHovered()) xeditor::hint::Text("GPU culling (%s): the Meshes' clusters are culled on the GPU and drawn with indirect draws; off: on the CPU, one draw each.\n%s", S.m_bGPUCull ? "on" : "off", pStats);
+        Toggle("Occl###GPUOccl", "O###GPUOccl", S.m_bOcclusion, 40.0f, S.m_bGPUCull);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            xeditor::hint::Text("Occlusion culling (%s): what is hidden behind other Meshes is not drawn (two passes on the depth: nothing shows up a frame late).\n%s", S.m_bOcclusion ? "on" : "off", pStats);
+        Toggle("Freeze###GPUFreeze", "F###GPUFreeze", S.m_bFreeze, 52.0f, S.m_bGPUCull);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            xeditor::hint::Text("Freeze the culling (%s): what was drawn stays as it is while the camera moves - fly around to see what was culled.\n%s", S.m_bFreeze ? "on" : "off", pStats);
+    }
 
     // The buttons, after what is on the toolbar already (the Level editor's style: a button in the Header color is on). nBoxes: the boxes drawn now (for the hints)
     inline void Buttons(state& S, bool bHorizontal, float ButtonHeight, int nBoxes) noexcept
