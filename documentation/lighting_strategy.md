@@ -1,9 +1,8 @@
-# Lighting strategy: direct light, shadows, many lights (v3.3, 2026-10-26)
+# Lighting strategy: direct light, shadows, many lights (v3.4, 2026-10-26)
 
-Status: v3.1 adopted; v3.2 (virtual shadow maps as P1) agreed 2026-10-26; v3.3 = the final version after external reviews A and B
-(VSM hardening; visibility as what the renderer schedules). P0 built 2026-10-26 (xLIONRender e2b7318: 109 + 12 saved images bitwise,
-visibility reference 6.3% disagreement at the edges, ledger, counters, LightEval; the fixtures:
-`xLIONRender/documentation/lighting_fixtures.md`). **Nothing after P0 is built until Tomas says go.**
+Status: v3.3 approved by the final review, with v3.4's corrections; **P1a-0 → P1a-1 → P1a-2 authorized by Tomas 2026-10-26**, nothing
+beyond. P0 built 2026-10-26 (xLIONRender e2b7318: 109 + 12 saved images bitwise, visibility reference 6.3% disagreement at the edges,
+ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`).
 
 The GI belongs to its own thread: this document proposes interfaces the GI may adopt, never GI changes. Sources:
 documentation/many_lights_and_shadows_research.md, lighting_gi_material_synergies.md, gpu_cluster_culling.md, the GI notes in
@@ -40,6 +39,17 @@ xLIONRender/documentation. `R/` = `example.lionprj/Cache/dependencies/xLIONRende
 | Synergies: conservative rejection reuses the GPU cull's Hi-Z test and pyramid in light space; the direct-test backend *is* the GI's `Occluded` (P0's reference); R-C absorbs the "second layer" question; one request format for the diagnostic record and the residency telemetry | Sec. 7c, 9 | Me |
 | Deleted: the octahedral virtual map as the plan, "one request pass writes shadow and texture requests", "LRU eviction" as the policy, "VSM ties texels to pixels", "slow sun re-renders only where the change list says" | Sec. 5, 7, 7b, 12 | Reviews A and B |
 
+### v3.3 → v3.4 (the final review: approve, four corrections, two roadmap fixes; Tomas delegated the open decisions)
+
+| Change | Where |
+|---|---|
+| Filtering: dilation gets pages *requested*, not *adjacent* in the atlas. Hardware compare only when the footprint lies inside one physical page; boundary-crossing footprints filter manually with per-tap virtual translation; a missing tap takes the coarse fallback. "One indirection per lookup" becomes "one, more at page boundaries" | Sec. 7 |
+| R-A needs a coverage- *and depth*-conservative representation (the farthest depth of the covering triangle in the texel); ordinary shadow depth and its Hi-Z are never blocker evidence; uncovered texels propagate "cannot prove"; first experiment: hard-shadow point queries only | Sec. 7c |
+| The coarse net needs readiness, not just reserved slots: fine admission never takes the reserved capacity; valid coarse coverage renders first; if it cannot complete before shading, the frame reports the fallback, it does not claim coverage | Sec. 7 |
+| The moving-sun cross-fade is APPROXIMATE (two epochs valid for their own directions, not for the current one); projection and shading directions recorded apart, angular mismatch in diagnostics; the gate compares against a continuously moving reference; if the needed epoch interval is shorter than the rebuild time, the scheme is infeasible at that budget; 1.5x memory is a hypothesis | Sec. 7, 11 |
+| R-A reports its savings against normal VSM sampling, against a direct-test backend and from avoided page generation separately; it runs after the minimal VSM baseline is measured; P1e is a candidate pending its gate; the uncorroborated "neither chooses per region" claim removed | Sec. 1, 7c, 11 |
+| The open decisions answered (sec. 13) | Sec. 13 |
+
 Everything of v3.1 and v3.2 not named above stays in force.
 
 ## 1. Goal and hypothesis
@@ -65,7 +75,7 @@ typed contract.
 | Our sun and key lights are noise-free, like Unreal's | Unreal: the sun uses VSM, and MegaLights leaves directional lights out by default (`r.MegaLights.DirectionalLights=0`) | Temporal luminance deviation on a still scene, sun + key lights |
 | The tail costs less per quality because static shadow work is cached | MegaLights guides its sampling by history (GuideByHistory, a visible-light hash per tile) and ships on hardware RT; a software path exists | Equal-time error against the reference on the stress city |
 | We avoid re-tracing static visibility for key lights | GigaLights: every sample's shadow ray is traced each frame (`GigaLightsLightingKernels.hlsl`: shadow rays from `GL_ShadowRayStart`, e.g. lines 1005, 1228); it remembers *which* lights a tile saw, not per-light visibility. Read 2026-10-26 in `E:\source_code\gigalights`, learning only | Shadow-pass ms with 0 / 50 movers |
-| Unresolved work picks its backend per region (page vs direct test), not per light forever | Unreal resolves every receiver through pages (+ SMRT over the depth); MegaLights traces every sample. Neither chooses per region | R-B (sec. 7c): page refinement vs direct BVH tests vs the hybrid rule, same reference |
+| Unresolved work may pick its backend per region (page vs direct test) | A hypothesis of ours; we make no claim about what the competitors do there | R-B (sec. 7c): page refinement vs direct BVH tests vs the hybrid rule, same reference |
 | Runs without RT | xGPU has no acceleration structures; the GI's software BVH exists | All of P0–P4 run on the no-RT path |
 
 ## 2. What exists and what is new
@@ -238,7 +248,7 @@ centimetres at contact come from the P3 screen trace, as Unreal pairs its VSM wi
    the level whose texel fits it, and marks that page needed; requests are **dilated by the filter footprint** (PCF kernel, source
    angle) so every tap lands on a requested page; deduplicated; then admitted (below). "~1 texel per pixel" is the debug view's
    target, not a gate: the gates are reference error and temporal stability (sec. 11).
-3. **Pool and page table:** a physical pool and a per-level page table read through one indirection per lookup. **Start at today's
+3. **Pool and page table:** a physical pool and a per-level page table read through one indirection per lookup (more at page boundaries, item 6). **Start at today's
    sun budget: 4096² x 16-bit = 32 MiB = 1024 pages of 128², configurable.** Separate pools per format and consumer (sec. 7b).
 4. **Protected admission, not pure LRU.** Slots carry a class: *pinned* (the coarse safety net), *frame-protected* (referenced by the
    published snapshot), *in flight* (requested, clearing, rendering, restoring, awaiting completion), *evictable*. A recency policy
@@ -247,10 +257,16 @@ centimetres at contact come from the P3 screen trace, as Unreal pairs its VSM wi
 5. **The coarse safety net.** Enough coarse pages to cover the active view are pinned (start: 25% of the pool, configurable; today's
    4 levels x 4x4 tiles at 256² per tile = 256 pages = 8 MiB); fine pages degrade to the pinned level under pressure. Overflow is a
    designed resolution loss (APPROXIMATE with a level delta, counted), never a hole; only unsupported semantics reach unshadowed.
-   The request pass pins the coarse set first, then admits fine pages by demand.
-6. **Filter-safe residency:** request dilation + the pinned coarse fallback (rule chosen; replicated gutters and per-tap translation
-   stay as alternatives if dilation overhead shows in the ledger). Today's local maps already fold a 2-texel border for the same
-   problem. Fixtures: page boundaries, level boundaries, screen edges, thin blockers, large source angles. Unreal mitigates unmapped
+   The request pass pins the coarse set first, then admits fine pages by demand. **Readiness:** pinning prevents eviction, it does
+   not create contents. Fine admission never takes the reserved capacity; rendering the valid coarse set is the first work of a frame
+   (mandatory, beyond the usual budget, the overrun counted; its cost is bounded by the reserved pages); if it still cannot complete before shading
+   (a teleport, a new epoch), the frame reports the declared fallback and its counters, never claimed coverage. 25% is a starting
+   allocation, validated against the required coarse set including filter margins.
+6. **Filter-safe residency and addressing:** dilation makes the neighbour pages *requested*; it does not make them *adjacent* in the
+   atlas, so a hardware bilinear compare near a physical-page edge would read an unrelated page. Rule: hardware compare only when the
+   filter footprint lies wholly inside one physical page; a boundary-crossing footprint filters manually, each tap translated through
+   the page table; a tap whose virtual page is not VALID takes the coarse fallback. Replicated gutters stay an alternative if the
+   manual path costs too much. Today's local maps already fold a 2-texel border for the same problem. Fixtures: page boundaries, level boundaries, screen edges, thin blockers, large source angles. Unreal mitigates unmapped
    pages under filtering with dilated mappings and still leaks occasionally (review A); we count the boundary-tap fallback rate.
 7. **States per page:** sec. 3's ABSENT / VALID / DIRTY / BUILDING; a requested page not yet VALID uses the pinned coarser page
    (APPROXIMATE), never a stale page.
@@ -283,15 +299,18 @@ committed bytes, fragmentation, working/static ratio, copy bandwidth, memory und
   and reveals holes); it could only ever be APPROXIMATE. Rejected as a correctness path.
 - *Quantized direction epochs with a cross-fade:* the shadow projection steps by θ while the shading direction (N·L) stays
   continuous; the next epoch is built ahead within budget (pinned coarse first, then the on-screen pages nearest the camera by
-  demand); when it is VALID where it is needed, the shadow term blends from the old epoch to the new over a few frames (two evidence
-  samples, both VALID, blended; labelled). Two epochs resident at the transition: the on-screen set at most, not the pool.
+  demand); when it is VALID where it is needed, the shadow term blends from the old epoch to the new over a few frames. Each epoch is
+  valid for its own quantized direction, not for the current one: the blend is **APPROXIMATE**, the projection direction is recorded
+  apart from the shading direction, and the angular mismatch shows in the diagnostics. Two epochs resident at the transition: the
+  on-screen working set at most (the 1.5x peak below is a hypothesis).
 - *Budgeted refresh by age:* pages refreshed oldest-first under a fixed budget; stale pages sampled as evidence contradict sec. 3.
 
-**Recommendation: quantized epochs with a cross-fade, rebuilt nearest-pages-first within budget.** θ is configurable; the start
-value makes the shadow displacement at the mid level under one texel, and never smaller than cycle speed x the measured time to
-rebuild the on-screen set. Gate: on B5 at cycle speed (B5b) no visible pop (temporal deviation under the still-scene threshold),
-page renders per frame bounded, pool peak < 1.5x the single-epoch peak, the old epoch released within a bounded number of frames.
-Tomas decides the cycle length and whether θ is user-visible.
+**Candidate (pending its gate): quantized epochs with a cross-fade, rebuilt nearest-pages-first within budget.** θ is configurable;
+the start value makes the shadow displacement at the mid level under one texel. Gate (B5b at cycle speed): error against a
+*continuously moving* reference (not a still-scene threshold: real moving shadows vary), page renders per frame bounded, the old
+epoch released within a bounded number of frames, the pool peak measured against the 1.5x hypothesis. If the angular error allowed
+needs an epoch interval shorter than the measured rebuild time, the scheme is infeasible at that budget: report it, never enlarge θ
+to call it solved.
 
 **The static/mover split, per page (restore-then-draw; P1b):** the static depth of a page holds static casters only. Each frame,
 every page whose previous or current dynamic footprint touches it is restored from the static copy, then the movers are drawn.
@@ -303,7 +322,7 @@ leaves; no dynamic work when static-only). **Restore-then-draw versus composing 
 both stay behind the query interface. Transition tests, per page, each against a full re-render: a mover enters a page; crosses into
 another; leaves the visible region; is deleted; becomes cache-eligible; moves again after being cached.
 
-**Costs and risks:** the request pass (ledger); one page-table indirection per lookup; page thrash on teleports (fallback counted,
+**Costs and risks:** the request pass (ledger); one page-table indirection per lookup, more for boundary-crossing filter footprints; page thrash on teleports (fallback counted,
 the recovery curve measured); many page/caster pairs (6.4's amplification gate); the moving sun (above); deformers and
 world-position-offset materials are always dynamic.
 
@@ -340,7 +359,7 @@ fences, a moving sun, many tiny lights, cold teleports; never only big opaque wa
 
 | | What | How, with what we have | Go / no-go |
 |---|---|---|---|
-| **R-A** Conservative rejection | Fixed sun, opaque rigid: a coarse coverage-aware blocker representation classifies visible receivers proven-blocked vs unresolved; the unresolved are compacted and resolved by the reference-capable path; compare with resolving everyone | The pinned coarse pages, rendered with **inner-coverage conservative rasterization** (`VK_EXT_conservative_rasterization` underestimate mode; else a full-coverage flag per texel), then **the cull's max-depth pyramid and `Occluded` test in light space** (`hiz_comp.glsl`, `cull_comp.glsl:44-71`, with the comparison turned to "the receiver's nearest depth is beyond the farthest blocker"); `MaterialVisibilityOf` keeps masked out | Every rejected receiver blocked in the reference (else it is a heuristic, kept only as prediction); total cost (generation, classification, compaction, sync, resolution) below resolving everyone at matched error on at least the Police and stress city, and reported on the adverse scenes |
+| **R-A** Conservative rejection | Fixed sun, opaque rigid, **hard-shadow point queries only** (one blocked central direction proves nothing for a filtered or area-light query): a dedicated representation conservative in **coverage and depth** classifies visible receivers proven-blocked vs unresolved; the unresolved are compacted and resolved by the normal path | Its own coarse pages: a texel holds a blocker only if a supported opaque caster fully covers it (inner-coverage conservative rasterization, `VK_EXT_conservative_rasterization` underestimate, else a full-coverage flag per texel) **and** the stored depth is at or beyond the covering triangle's farthest point in the texel (Tokuyoshi & Mizokuchi store this farther, biased depth). Ordinary shadow depth and its Hi-Z are never blocker evidence. The cull's pyramid code (`hiz_comp.glsl`, `cull_comp.glsl:44-71`) is reused once this base level holds, the reduction propagating "cannot prove blocked" from uncovered texels; `MaterialVisibilityOf` keeps masked out | Every rejected receiver blocked in the reference (else a heuristic, prediction only). Savings reported **separately**: against normal VSM sampling, against a direct-test backend, and from page generation it actually avoids; total cost includes generation, classification, compaction, sync; Police, stress city and the adverse scenes |
 | **R-B** Page vs direct test for unresolved work | Fine page refinement vs direct software-BVH queries vs a simple hybrid rule (many unresolved receivers share a page → raster; few + complete BVH coverage → direct tests; else the declared coarse approximation) | The GI's `Occluded` any-hit (P0's reference, already on the GPU: `gi_pass_common.glsl:120`) within its opaque-rigid coverage; the BVH's maintenance cost counted even though the GI shares it; the same visibility model and reference for all three | At matched error, the hybrid beats both pure paths on total cost including scheduling; otherwise pages only (and P4 keeps direct tests for the tail only) |
 | **R-C** Dynamic composition | Restore-then-draw vs V_total = V_static x V_dynamic (query static; if conclusively blocked stop; else query a small dynamic layer or a direct dynamic-geometry test; combine per sampled light direction, never per independently filtered factor) for a small mover in a mostly static scene | P1b's restore path vs a second small raster layer; extra lookups, dynamic upkeep and divergence counted | Net timing and memory against P1b's measured restore cost on 1 / 10 / 50 movers; the loser is deleted, not kept behind a flag |
 
@@ -348,7 +367,7 @@ fences, a moving sun, many tiny lights, cold teleports; never only big opaque wa
 mixed → subdivide); research after R-A. Unreal's SMRT samples a depth representation (plausible, not geometry-tested); we keep that
 distinction in the labelling (APPROXIMATE).
 
-Sequence: R-A first (the smallest experiment that could change the architecture), after P1a-1 exists to host it; R-B after P1a-2 (it
+Sequence: R-A after the minimal VSM baseline (P1a-2) is measured, never a prerequisite and independent of P1b; R-B after P1a-2 (it
 needs fine pages to compare against); R-C beside P1b. If all three say no, the result is a conventional, well-measured VSM and sec. 3's
 `BLOCKED_CONSERVATIVE` is removed. If R-A and R-B say yes, they become the basis of P4/P5 and the per-region rule enters sec. 3's table.
 
@@ -476,5 +495,10 @@ overlapping lights; B11 forced overflow; **B12 filter boundaries** (page, level,
 5. **GI coordination:** the interface notice (handle and revisions, change-event schema, the entry points' quantities, spatial
    coverage) plus one new item: whether `Occluded` may be dispatched for R-B's direct tests under lighting's budget, read-only.
    Code adoption proposed only after P1b's measurements.
-6. **Open for Tomas:** the day/night cycle length and whether θ is exposed; the pinned-net share (25% proposed); the memory option
-   before P1b (working copies only for occupied pages proposed); whether R-A runs before or after P1b when both are ready.
+6. **Answered (Tomas delegated them, 2026-10-26):**
+   1. The day/night cycle length is a configurable game setting (test default 24 minutes per day); θ is an engine/debug setting, not
+      user-facing.
+   2. 25% of the pool pinned for the coarse net as a start, validated against the required coarse set with filter margins.
+   3. Working copies only for pages with dynamic occupancy (confirmed on P1a data before P1b).
+   4. R-A runs after the P1a-2 baseline is measured, independent of P1b.
+   5. Lighting may dispatch the GI's `Occluded` read-only, under its own budget, for R-B; it goes into the GI notice; no GI code changes.
