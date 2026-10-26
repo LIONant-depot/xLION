@@ -124,6 +124,47 @@ class EditorCrashed(RuntimeError):
     pass
 
 
+# ---------------------------------------------------------------------- what is compiling (timings are only valid when nothing is)
+def compiler_processes() -> list[dict]:
+    """Every resource compiler running on this machine, whoever started it (a harness editor, a person's editor): its process id, its parent's,
+    its executable and the descriptor it compiles. System-wide and read-only - it never talks to another editor."""
+    if os.name == "nt":
+        ps = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*_compiler*' } | "
+              "ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CommandLine }")
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True).stdout
+    else:
+        out = subprocess.run(["ps", "-eo", "pid=,ppid=,comm=,args="], capture_output=True, text=True).stdout
+        out = "\n".join(f"{p[0]}|{p[1]}|{p[2]}|{p[3] if len(p) > 3 else ''}" for l in out.splitlines() if "_compiler" in l and (p := l.split(None, 3)))
+    procs = []
+    for line in out.splitlines():
+        parts = line.strip().split("|", 3)
+        if len(parts) < 4 or not parts[0].isdigit():
+            continue
+        m = re.search(r'-DESCRIPTOR\s+"?([^"]+?)"?(\s+-|$)', parts[3])
+        procs.append({"pid": int(parts[0]), "parent": int(parts[1]), "exe": parts[2], "descriptor": m[1] if m else ""})
+    return procs
+
+
+def parse_compile_status(text: str) -> dict:
+    """CompileStatus's reply: Compiling, Waiting, Failed (ints) and the waiting resources' names."""
+    out = {k: int(m[1]) for k in ("Compiling", "Waiting", "Failed") if (m := re.search(rf"\b{k}=(\d+)", text))}
+    out["waiting_names"] = re.findall(r"\[L\d+:([^\]]*?) guid=", text)
+    return out
+
+
+def compile_snapshot(editor: "Editor | None" = None) -> dict:
+    """What is compiling now: the compiler processes on this machine and (given an editor of ours) its queue. idle: nothing anywhere."""
+    snap = {"processes": compiler_processes()}
+    if editor is not None:
+        try:
+            snap["editor"] = parse_compile_status(editor.cmd("CompileStatus", timeout=30))
+        except Exception as e:                          # (a timing run records it; it never fails because of it)
+            snap["editor"] = {"error": str(e)}
+    e = snap.get("editor", {})
+    snap["idle"] = not snap["processes"] and e.get("Compiling", 0) == 0 and e.get("Waiting", 0) == 0
+    return snap
+
+
 class CommandError(AssertionError):
     """An edit command answered with an error text instead of an empty success reply."""
 
@@ -590,6 +631,23 @@ class Editor:
         m = re.search(rf"^\s*{re.escape(path)} = (\S+)", self.describe(session, scene, entity), re.M)
         assert m, f"{path} not found in DescribeEntity for {entity}"
         return m[1]
+
+    # ------------------------------------------------------------------ compilation (timings are only valid when nothing compiles)
+    def wait_compile_idle(self, timeout: float = 1800.0, poll: float = 5.0, settle: float = 3.0) -> dict:
+        """Waits until nothing compiles - this editor's queue empty and no compiler running anywhere on the machine - for settle seconds
+        in a row; returns the last snapshot (idle False: it timed out). Call it before and after every timing measurement."""
+        deadline, quiet_since = time.monotonic() + timeout, None
+        while True:
+            snap = compile_snapshot(self)
+            if snap["idle"]:
+                quiet_since = quiet_since or time.monotonic()
+                if time.monotonic() - quiet_since >= settle:
+                    return snap
+            else:
+                quiet_since = None
+            if time.monotonic() > deadline:
+                return snap
+            time.sleep(poll)
 
     # ------------------------------------------------------------------ libraries / assets (resource editors)
     def libraries(self) -> list[tuple[str, str]]:
