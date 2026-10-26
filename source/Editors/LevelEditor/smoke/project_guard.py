@@ -19,7 +19,7 @@ from harness import REPO
 
 PROJECT = REPO / "example.lionprj"
 WATCHED = [PROJECT / "Descriptors", PROJECT / "Project.config"]
-RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game", PROJECT / "Descriptors" / "Prefab", PROJECT / "Descriptors" / "MaterialInstance", PROJECT / "Descriptors" / "GeomStatic"
+RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game", PROJECT / "Descriptors" / "Prefab", PROJECT / "Descriptors" / "MaterialInstance", PROJECT / "Descriptors" / "GeomStatic", PROJECT / "Descriptors" / "GeomSkin"
               , PROJECT / "Project.config" / "Script.config.txt", PROJECT / "Project.config" / "SystemOrder.config.txt"]   # what a saved level rewrites, and a resource editor's Compile; the material instances UpgradeProject writes in the new form; the Game's module list and which Game the project builds; the saved order of the systems
 
 _state = {}

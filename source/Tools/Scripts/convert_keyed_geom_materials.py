@@ -1,8 +1,8 @@
-"""GeomStatic descriptors: the materials addressed by place ("MaterialDetailsList[G:0]/...", their instances in a list beside them, "MaterialInstance[G:0]")
+"""GeomStatic and GeomSkin descriptors: the materials addressed by place ("MaterialDetailsList[G:0]/...", their instances in a list beside them, "MaterialInstance[G:0]")
 rewritten by the material's name ("MaterialDetailsList[G:<key>]/...", each with its "Instance"), key = FNV-1a 64 of the name's bytes
-(xgeom_static::material_details::NameKey).
+(xmaterial_instance::import::MaterialKey).
 
-What xgeom_static::descriptor::Serialize writes for the same materials and instances, as a text edit: every value stays, and each file keeps its
+What the descriptors' Serialize writes (xmaterial_instance::import::SlotsToMaterials) for the same materials and instances, as a text edit: every value stays, and each file keeps its
 modification time - what the file means did not change, so nothing has to be compiled again (the pipeline compiles a resource whose
 descriptor is newer than it).
 
@@ -16,10 +16,8 @@ import re
 import sys
 from pathlib import Path
 
-NAME = re.compile(rb'^(\s*)"GeomStatic/MaterialDetailsList\[G:(\d+)\]/Name"\s+;string\s+"([^"\\]*)"', re.M)
-REF  = re.compile(rb'^\s*"GeomStatic/MaterialInstance\[G:(\d+)\]"\s+;full_guid\s+(#\S+\s+#\S+)', re.M)
-ROW  = re.compile(rb'"GeomStatic/MaterialDetailsList\[G:(\d+)\]/')
 HEAD = re.compile(rb'\[ xProperties : (\d+) \]')
+KINDS = (b"GeomStatic", b"GeomSkin")              # the descriptor's name: its rows' first section, and its folder
 
 
 def name_key(name: bytes) -> int:
@@ -30,9 +28,13 @@ def name_key(name: bytes) -> int:
     return h
 
 
-def convert(text: bytes):
+def convert(text: bytes, kind: bytes = b"GeomStatic"):
     """The converted text, or None when there is nothing to convert (or it cannot be)."""
-    if b'"GeomStatic/MaterialInstance[G:' not in text and b'"GeomStatic/MaterialInstance[]"' not in text:
+    k = re.escape(kind)
+    NAME = re.compile(rb'^(\s*)"' + k + rb'/MaterialDetailsList\[G:(\d+)\]/Name"\s+;string\s+"([^"\\]*)"', re.M)
+    REF  = re.compile(rb'^\s*"' + k + rb'/MaterialInstance\[G:(\d+)\]"\s+;full_guid\s+(#\S+\s+#\S+)', re.M)
+    ROW  = re.compile(rb'"' + k + rb'/MaterialDetailsList\[G:(\d+)\]/')
+    if b'"' + kind + b'/MaterialInstance[G:' not in text and b'"' + kind + b'/MaterialInstance[]"' not in text:
         return None
     eol = b"\r\n" if b"\r\n" in text else b"\n"
     names = {int(i): (ind, n) for ind, i, n in NAME.findall(text)}
@@ -43,7 +45,7 @@ def convert(text: bytes):
     out, removed, added, first_row = [], 0, 0, None
     lines = text.split(eol)
     for line in lines:
-        if b'"GeomStatic/MaterialInstance[' in line:
+        if b'"' + kind + b'/MaterialInstance[' in line:
             removed += 1
             continue
         m = ROW.search(line)
@@ -53,11 +55,11 @@ def convert(text: bytes):
                 return None
             if first_row is None:
                 first_row = len(out)
-            line = ROW.sub(lambda r: b'"GeomStatic/MaterialDetailsList[G:%d]/' % keys[int(r[1])], line)
+            line = ROW.sub(lambda r: b'"' + kind + b'/MaterialDetailsList[G:%d]/' % keys[int(r[1])], line)
             out.append(line)
             if b'/RefCount"' in line:                                   # the last of an element's rows: its Instance after it
                 ind = names[i][0]
-                out.append(ind + b'"GeomStatic/MaterialDetailsList[G:%d]/Instance"  ;full_guid  ' % keys[i] + refs.get(i, b"#0 #B673C5DA4A4A70AD"))
+                out.append(ind + b'"' + kind + b'/MaterialDetailsList[G:%d]/Instance"  ;full_guid  ' % keys[i] + refs.get(i, b"#0 #B673C5DA4A4A70AD"))
                 added += 1
             continue
         out.append(line)
@@ -72,14 +74,14 @@ def convert(text: bytes):
 
 
 def main():
-    root = Path(sys.argv[1]) / "GeomStatic"
     dry = "--dry-run" in sys.argv
     done, left = 0, []
-    for f in sorted(root.rglob("Descriptor.txt")):
+    for kind in KINDS:
+      for f in sorted((Path(sys.argv[1]) / kind.decode()).rglob("Descriptor.txt")):
         text = f.read_bytes()
-        if b'"GeomStatic/MaterialInstance[' not in text:
+        if b'"' + kind + b'/MaterialInstance[' not in text:
             continue
-        new = convert(text)
+        new = convert(text, kind)
         if new is None:
             left.append(f)
             continue

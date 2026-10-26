@@ -1,4 +1,4 @@
-"""A GeomStatic descriptor's materials are addressed by their name ("MaterialDetailsList[G:<key>]/...", key = FNV-1a 64 of the name), each with its own
+"""A GeomStatic (and GeomSkin) descriptor's materials are addressed by their name ("MaterialDetailsList[G:<key>]/...", key = FNV-1a 64 of the name), each with its own
 Instance; the MaterialInstance list the editor shows (by place) is not saved any more. A file of the old form (by place, the instances beside them) reads
 the same; source/Tools/Scripts/convert_keyed_geom_materials.py rewrites one. The descriptor the test saves is put back when the run ends (project_guard)."""
 import re
@@ -35,19 +35,41 @@ def test_the_converter_writes_a_material_by_its_name_with_its_instance():
     assert convert(new) is None, "a converted file is left alone"
 
 
-def test_the_editor_reads_and_saves_the_materials_by_name(editor):
-    text = DESC.read_text()
-    names = re.findall(r'"GeomStatic/MaterialDetailsList\[G:(\d+)\]/Name"\s+;string\s+"([^"]*)"', text)
+def test_the_converter_does_a_skin_the_same_way():
+    old = OLD.replace(b'"GeomStatic/', b'"GeomSkin/')
+    new = convert(old, b"GeomSkin")
+    key = name_key(b"Red")
+    assert new is not None and b"MaterialInstance" not in new and b"GeomStatic" not in new
+    assert re.search(rb'"GeomSkin/MaterialDetailsList\[G:%d\]/Instance"\s+;full_guid\s+#5E1CE0A110000003' % key, new)
+    assert convert(old, b"GeomStatic") is None, "the rows of another descriptor are not touched"
+
+
+SKIN       = "5C1A5C1A5C1A0F1D"             # one material
+SKIN_ASSET = SKIN + "0615D479BCA3267B"      # instance + type (GeomSkin)
+SKIN_DESC  = REPO / "example.lionprj" / "Descriptors" / "GeomSkin" / "1D" / "0F" / f"{SKIN}.desc" / "Descriptor.txt"
+
+
+def check_editor(editor, kind, asset, desc):
+    text = desc.read_text()
+    names = re.findall(rf'"{kind}/MaterialDetailsList\[G:(\d+)\]/Name"\s+;string\s+"([^"]*)"', text)
     assert names and "MaterialInstance[" not in text, "the project's descriptor is of the new form (converted)"
     for key, name in names:
         assert int(key) == name_key(name.encode()), "the key is the name's"
-    instance = re.search(rf'"GeomStatic/MaterialDetailsList\[G:{names[0][0]}\]/Instance"\s+;full_guid\s+#(\w+)', text)[1]
+    instance = re.search(rf'"{kind}/MaterialDetailsList\[G:{names[0][0]}\]/Instance"\s+;full_guid\s+#(\w+)', text)[1]
 
     lib = editor.libraries()[0][0]
-    editor.ok(f"OpenResourceEditor -Asset {ASSET} -Library {lib}", timeout=30)
-    listed = editor.cmd(f"ResourceEditorCommand -Asset {ASSET} -Cmd {quote('ListProperties -Filter MaterialInstance')}")
+    editor.ok(f"OpenResourceEditor -Asset {asset} -Library {lib}", timeout=60)
+    listed = editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd {quote('ListProperties -Filter MaterialInstance')}")
     assert re.search(rf"MaterialInstance\[G:0\]\s*=\s*{instance}", listed, re.I), f"the editor's list (by place) holds the material's instance: {listed}"
 
-    editor.cmd(f"ResourceEditorCommand -Asset {ASSET} -Cmd Save", allow_disk=True)
-    saved = DESC.read_text()
+    editor.cmd(f"ResourceEditorCommand -Asset {asset} -Cmd Save", allow_disk=True)
+    saved = desc.read_text()
     assert "MaterialInstance[" not in saved and f'MaterialDetailsList[G:{names[0][0]}]/Instance' in saved, "saved by name, each with its instance"
+
+
+def test_the_skin_editor_reads_and_saves_the_materials_by_name(editor):
+    check_editor(editor, "GeomSkin", SKIN_ASSET, SKIN_DESC)
+
+
+def test_the_editor_reads_and_saves_the_materials_by_name(editor):
+    check_editor(editor, "GeomStatic", ASSET, DESC)
