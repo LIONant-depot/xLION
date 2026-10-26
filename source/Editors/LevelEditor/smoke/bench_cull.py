@@ -4,7 +4,7 @@
     python -I bench_cull.py <out_dir> [launches=3] [samples=7] [views=police,bistro,bistro_street] [switches=gpu,frustum,cpu]
 
 Views: the Police level from inside; the Bistro's GeomStatic preview as it opens (outside) and at street level. Switches: GPU culling
-(occlusion adaptive), frustum only (XLION_NO_GPU_OCCLUSION), the CPU path (XLION_NO_GPU_CULL). The Debug editor, maximized, no validation,
+(occlusion adaptive), frustum only (XLION_NO_GPU_OCCLUSION), the CPU path (XLION_NO_GPU_CULL). The Release editor (BENCH_CONFIG=Debug: the Debug one), maximized, no validation,
 no frame budget. A launch whose samples overlapped a compile (harness.compile_snapshot before and after) is dropped.
 """
 import ctypes
@@ -24,7 +24,7 @@ from harness import Editor, REPO
 BISTRO   = "4854F8D7DA54C001" + "E5359948C52D26D1"      # GeomStatic: instance + type
 POLICE   = "EF31687D49834DD9"                           # Level
 SWITCHES = {"gpu": {}, "frustum": {"XLION_NO_GPU_OCCLUSION": "1"}, "cpu": {"XLION_NO_GPU_CULL": "1"}}
-BASE     = {"XLION_FRAME_TIMES": "1", "XLION_GPU_TIMES": "1", "XLION_NO_FRAME_BUDGET": "1", "XLION_NO_VALIDATION": "1"}
+BASE     = {"XLION_FRAME_TIMES": "1", "XLION_GPU_TIMES": "1", "XLION_NO_FRAME_BUDGET": "1", "XLION_NO_VALIDATION": "1"}     # (Release: validation off already)
 
 
 def maximize(pid: int) -> list[tuple[int, int]]:
@@ -66,7 +66,8 @@ def launch(out: Path, view: str, switch: str, k: int, samples: int) -> dict:
     tag = f"{view}_{switch}_{k}"
     (out / "logs" / tag).mkdir(parents=True, exist_ok=True)
     extra = {k: v for k, v in os.environ.items() if k.startswith(("XLION_", "XGPU_"))}      # (experiments: e.g. XLION_NO_PREPASS=1 for every run)
-    ed = Editor(harness.DEFAULT_EXE, log_dir=out / "logs" / tag, extra_env={**BASE, **extra, **SWITCHES[switch]})
+    exe = harness.DEFAULT_EXE.parent.parent / os.environ.get("BENCH_CONFIG", "Release") / harness.DEFAULT_EXE.name     # (Release: its timings are the real ones)
+    ed = Editor(exe, log_dir=out / "logs" / tag, extra_env={**BASE, **extra, **SWITCHES[switch]})
     ed.start()
     res = {"tag": tag, "view": view, "switch": switch}
     try:

@@ -97,9 +97,15 @@ namespace level_editor
         if (!bHeadless)
         {
             xeditor::diagnostics::Log("startup: creating xgpu instance");
-            // The Vulkan validation layers stay on (they keep us honest); XLION_NO_VALIDATION=1 is the switch for timing without them - they
-            // cost every draw and bind on the CPU (the Bistro's scene pass: 10 ms with them, 0.6 without), as a game's build runs
-            if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = std::getenv("XLION_NO_VALIDATION") == nullptr, .m_pLogErrorFunc = xeditor::LogGpuError, .m_pLogWarning = xeditor::LogGpuWarning }); Err)
+            // The Vulkan validation layers: on in Debug (they keep us honest; XLION_NO_VALIDATION=1 turns them off), off in Release - its timings are
+            // the real ones (Tomas 2026-10-26; XLION_VALIDATION=1 turns them on). They cost every draw and bind on the CPU (the Bistro's scene pass:
+            // 10 ms with them, 0.6 without)
+#ifdef NDEBUG
+            const bool bValidation = std::getenv("XLION_VALIDATION") != nullptr;
+#else
+            const bool bValidation = std::getenv("XLION_NO_VALIDATION") == nullptr;
+#endif
+            if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = bValidation, .m_pLogErrorFunc = xeditor::LogGpuError, .m_pLogWarning = xeditor::LogGpuWarning }); Err)
             {
                 xeditor::diagnostics::Log("startup: xgpu instance creation failed");
                 xeditor::diagnostics::RemoveCrtReportHook();
