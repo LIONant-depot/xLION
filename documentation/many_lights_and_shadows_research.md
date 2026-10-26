@@ -49,6 +49,67 @@ So, today:
 | **o3de (Atom)** | Cascades plus a projected-shadow atlas, ESM/PCF | Every frame | Basic | Raster | None | - |
 | **CryEngine** | Cascades, a cached far cascade, point-light shadow budget | - | - | Raster | Far cascade | - |
 
+## GigaLights (Unity asset, read 2026-10-26: E:\source_code\gigalights - learning only, no code copied)
+
+Shader source is included: HLSL compute and the denoiser package. What it does:
+
+- **Light sampling.**
+  - The lights go into a froxel grid over the view each frame, as clustered shading does.
+  - Each pixel picks lights from two candidate sets: a short per-tile list (8 entries) of lights found visible and contributing in
+    earlier frames, and the froxel's full light list.
+  - Large cell lists are not walked whole: a strided subset (8 lights, or 32 when the tile list is empty) stands for the cell, its
+    weights scaled by the stride.
+  - One streaming weighted pick runs over each set (importance: the light's estimated contribution at the surface). The pick
+    between the two sets caps the "unknown" set's share relative to the known-visible lights.
+  - Lights found shadowed age out of the tile list; they are down-weighted, never to zero.
+  - The random numbers are spatiotemporal blue noise.
+  - Budget: 1-16 samples per pixel at full resolution, or 1 sample on a 2x-16x downsampled grid (edge-aware upsampling and a
+    longer history).
+- **Visibility: one shadow ray per sample, ray traced.**
+  - Hardware ray queries where the platform has them. Otherwise their own **software ray tracing**: a two-level BVH (instances over
+    per-mesh triangle BVHs), traversal in compute with the stacks in shared memory, refit passes for skinned and deformed meshes, a
+    lower LOD for tracing beyond a detail distance, and a memory budget and a step budget (128-2048, can miss occluders).
+  - The world trace starts a little away from the surface. A **screen-space trace covers exactly that skipped span and may only
+    conclude "blocked", never "visible"**: contact shadows without the self-shadowing the coarser traced geometry would cause.
+  - Tracing stops at a ray-trace distance (10-2000 m).
+- **Variable-rate ray tracing.** Where the history has converged (low relative variance), fewer rays; the saved rays go to pixels
+  whose history was just lost.
+- **Denoiser: SVGF-style** (temporal accumulation with reprojection, then a variance-guided a-trous spatial filter).
+  - Two signals are filtered as a pair.
+  - The history is deliberately short. After a disocclusion it uses fixed recovery levels by sample support (at 1 sample per pixel:
+    frames 1-2, 3-4, 5-8) with extra spatial taps, instead of claiming convergence early.
+- **Add-ons on the same rays:** volumetric fog (froxels lit by the same lights, its shadows every 1-4 frames), AO, GI and
+  reflections (hemisphere traces through the same BVH; a "world space" mode lights off-screen surfaces for GI and reflections).
+- **Limits:**
+  - at most 4 directional lights (their visibility is packed in one value);
+  - noise and lag under fast motion and at low budgets;
+  - the software BVH's memory and step budgets;
+  - tracing against LODs.
+
+### Compared with MegaLights and our options
+
+- **Like MegaLights:** a few samples per pixel, history-guided selection, a denoiser.
+- **Unlike MegaLights:**
+  - it has no virtual shadow maps at all: every light, the sun included, is ray traced;
+  - its software BVH makes it run everywhere (Vulkan, Metal, mobile, WebGPU), where MegaLights needs hardware ray tracing (its
+    software path is off by default).
+- **Our B is this design.** Our C differs: shadow pages for the sun and a few key lights (stable, cached, no noise), and surfel
+  visibility for far lights.
+
+### Worth adopting
+
+1. **A per-tile list of lights known visible**, with an age for shadowed ones, as the main candidate set; the cell's list only as
+   the "discovery" set with a capped share. Cheap and stable, and it bounds the per-pixel work whatever the cell's light count
+   (strided subset).
+2. **A screen trace that may only prove "blocked"**, covering the span next to the surface that the world-space tier skips. This
+   is exactly what our far tiers need. Surfels, cluster boxes or a coarse BVH are all approximate geometry; contact shadows come
+   from the screen, the rest from the approximate world, and the two never disagree in the "visible" direction.
+3. **Rays by variance (variable-rate ray tracing):** converged pixels give their rays to pixels that just lost their history.
+4. **A software BVH fallback** for shadow rays, with a trace LOD and a memory budget. We already build a BVH for the GI (the GI
+   sections: a BVH per GI instance), and our clusters are a natural BLAS. The same structure can answer shadow rays where hardware
+   ray tracing is missing: the C path without new geometry.
+5. **A short denoiser history with recovery levels** after disocclusion (instead of a long history that smears).
+
 ## Candidate architectures
 
 ### A. Virtual shadow pages, GPU-driven (Unreal's VSM, done our way)
