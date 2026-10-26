@@ -68,10 +68,12 @@ nothing about a light's view); a camera cut costs one slow frame (pass 1 draws l
 ## As built (milestones c and d)
 
 - Occlusion, two passes: `gpu_cull::Cull` (mode 0) keeps the clusters in the view that were visible last frame. The scene pass
-  lays their depth (with the CPU path's prepass) and ends. `gpu_cull::Occlude` copies the depth into a buffer
-  (`xgpu::window::CopyTextureToBuffer`, new), builds the Hi-Z pyramid in it (`xlionrender_hiz_comp.glsl`, one dispatch a level, the
-  farthest depth of 2x2, sizes rounded up so the texels of a level cover exactly 2^L pixels), and tests every cluster in the view
-  against it (mode 1). The test takes the box's 8 corners to the screen and compares the nearest depth with the farthest Hi-Z
+  lays their depth (with the CPU path's prepass) and ends. `gpu_cull::Occlude` builds the Hi-Z pyramid
+  in one dispatch straight from the depth texture (`xlionrender_hiz_comp.glsl`, in the manner of AMD's single pass downsampler: no
+  copy, level 0 at half the view's size, a work group's 128 x 128 pixels to levels 0-6 through shared memory, the last group - an
+  atomic counter - the levels past 6; the farthest depth of 2x2, sizes rounded up so a texel of level L covers 2^(L+1) pixels; no
+  subgroup operations, so no fallback is needed; xGPU compute can now sample textures: `compute::setup::m_nTextures`), and tests
+  every cluster in the view against it (mode 1). The test takes the box's 8 corners to the screen and compares the nearest depth with the farthest Hi-Z
   depth, at the level where the box covers at most 2x2 texels; a box crossing the near plane is visible. Mode 1 writes the
   visibility for the next frame, and the visible clusters that pass 1 did not draw go into pass 2's lists. The scene pass is loaded
   again (`render_view::m_ScenePassLoad`): pass 2's depth, then the shading of both passes' lists.
@@ -85,10 +87,29 @@ nothing about a light's view); a camera cut costs one slow frame (pass 1 draws l
 - Editor: the Level editor's toolbar has Cull, Occl and Freeze (`xeditor::mesh_budget::CullButtons`; `view_options` m_bNoGPUCull,
   m_bNoGPUOcclusion, m_bFreezeCull; xRenderEditor version 12). Their hints and `DescribeScene` give the GPUCull numbers:
   candidates, runs, clusters drawn (prepass, pass 2) and triangles shaded, read back three frames late.
+- Adaptive occlusion (`gpu_cull::WantOcclusion`): when it hides under 10% of what pass 2 tests for 30 frames in a row, it is skipped for
+  120 frames (pass 1 then draws every cluster in the view - never a pop), then tried again; a camera cut (2 m, 45 degrees) tries it
+  at once. Stats: OcclusionSkipped, OccludedShare; GPU times of pass 1's cull and of the pyramid + pass 2 (XLION_GPU_TIMES: CULLGPU).
 - Switches: XLION_NO_GPU_CULL=1 (the CPU path), XLION_NO_GPU_OCCLUSION=1 (the frustum only).
 - Tests (xlionrender_test_culling): an occluder sphere in front of the field. With the camera moving, every one of 12 frames
   matches the CPU path's picture exactly: nothing appears a frame late. With the camera still, 12 clusters are drawn against 30 for
   the frustum alone, and pass 2 draws nothing. Also covered: the triangle count, the frame budget, and freeze.
+
+## Measured (2026-10-26, Debug editor maximized 3778x1600, no validation, no frame budget, nothing compiling)
+
+GPU = shadows + scene (cull, pyramid, both passes) + tone map, ms (XLION_GPU_TIMES). Paths: GPU culling with occlusion, the CPU path
+(XLION_NO_GPU_CULL), GPU culling frustum only (XLION_NO_GPU_OCCLUSION).
+
+| View | GPU: occlusion / CPU path / frustum | pyramid + pass 2 | CPU scene pass: occlusion / CPU path | Triangles shaded: occlusion / frustum | CPU draws |
+|---|---|---|---|---|---|
+| Police level (inside) | 0.88 / 0.85 / 0.86 | adaptive: skipped (hides 3%) | 0.69 / 0.55 | 74k-167k / 167k | 2 / 57 |
+| Bistro preview (outside) | 0.94 / 1.04 / 1.08 | 0.062 | 0.72 / 0.84 | 1.73M / 2.02M (588 / 2140 clusters) | 176 / 2316 |
+| Bistro preview (street) | 1.16 / 1.28 / 1.05 | 0.074 | 0.71 / 0.77 | 726k / 768k (344 / 939 clusters) | 176 / 2316 |
+
+The GPU path is within noise of the CPU path on Police and 0.10-0.12 ms faster on the Bistro. Occlusion pays where what it hides is big
+(outside: -0.14 ms against the frustum only) and costs ~0.1 ms where it hides many small clusters (street: 63% of the clusters, 5% of
+the triangles). Next for the adaptive rule: the share of triangles hidden, not of clusters. The 176 CPU draws: the Bistro's blended
+and double-sided parts.
 
 ## Milestones
 
