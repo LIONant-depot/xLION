@@ -292,6 +292,18 @@ class Editor:
         """Everything the editor process has printed so far (its stdout is redirected to this run's log file)."""
         return (self.log_dir / f"editor_{self.launches}.log").read_text(errors="replace")
 
+    def log_samples(self, marker: str, n: int, timeout: float = 600.0) -> list[str]:
+        """The next n lines with marker the editor prints (after the ones already printed): the periodic timing lines (XLION_FRAME_TIMES,
+        XLION_GPU_TIMES) as samples. Fewer when it times out."""
+        seen = sum(1 for l in self.log_text().splitlines() if marker in l)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            lines = [l for l in self.log_text().splitlines() if marker in l]
+            if len(lines) >= seen + n:
+                return lines[seen:seen + n]
+            time.sleep(0.5)
+        return [l for l in self.log_text().splitlines() if marker in l][seen:]
+
     def describe_exit(self) -> str:
         code = self.exit_code()
         return "running" if code is None else f"{code & 0xFFFFFFFF:#010x}"

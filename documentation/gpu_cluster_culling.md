@@ -113,6 +113,28 @@ GPU 0.99 ms against 1.16 frustum only and 1.24 the CPU path; from outside it sta
 path 0.89 in that run (1.04 in the one before) - run-to-run noise is about 0.15 ms: single runs decide nothing finer. The 176 CPU
 draws: the Bistro's blended and double-sided parts.
 
+## Benchmark (smoke/bench_cull.py: 3 launches x 7 samples of 120-frame means each, compile-idle checked, switches interleaved)
+
+GPU ms = shadows + scene + tone map; CPU = the scene pass's CPU time (Debug, maximized 3778x1600, no validation).
+
+| View | Switch | GPU ms median (min-max) | CPU scene pass ms median (min-max) | launches kept |
+|---|---|---|---|---|
+| police | gpu | 0.960 (0.930-1.000) | 0.640 (0.610-0.720) | 3 of 3 |
+| police | frustum | 0.870 (0.840-0.890) | 0.620 (0.590-0.700) | 3 of 3 |
+| police | cpu | 0.860 (0.830-0.900) | 0.520 (0.490-0.700) | 3 of 3 |
+| bistro | gpu | 0.960 (0.910-1.060) | 0.720 (0.700-0.800) | 3 of 3 |
+| bistro | frustum | 0.990 (0.920-1.050) | 0.710 (0.680-0.830) | 3 of 3 |
+| bistro | cpu | 0.890 (0.840-1.030) | 0.740 (0.720-0.830) | 3 of 3 |
+| bistro_street | gpu | 0.840 (0.670-0.940) | 0.720 (0.680-1.070) | 3 of 3 |
+| bistro_street | frustum | 0.870 (0.690-0.920) | 0.710 (0.690-0.740) | 3 of 3 |
+| bistro_street | cpu | 0.850 (0.810-1.070) | 0.750 (0.710-0.910) | 3 of 3 |
+
+Beyond noise: Police with occlusion, +0.10 ms over the CPU path (every sample) - the pyramid and the split pass cost more than hiding 56% of
+its 167k cheap triangles saves (frustum only = the CPU path); and the Bistro from outside frustum only, +0.10 ms (84% of the sample pairs)
+- on the shading side (0.14 ms with the prepass off). Not the cause: the cull (0.018 ms), the draws' order inside a run (an ordered
+variant changed nothing), the record read per vertex (gl_BaseInstance changed nothing) - both experiments reverted. Open: a GPU profile.
+The Bistro street view: all three paths equal.
+
 ## Milestones
 
 a) Cluster boxes and the instance/cluster buffers on the GPU. b) Frustum culling and indirect draws per run (pass 1 only, no
