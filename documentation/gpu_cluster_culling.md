@@ -88,7 +88,7 @@ nothing about a light's view); a camera cut costs one slow frame (pass 1 draws l
   m_bNoGPUOcclusion, m_bFreezeCull; xRenderEditor version 12). Their hints and `DescribeScene` give the GPUCull numbers:
   candidates, runs, clusters drawn (prepass, pass 2) and triangles shaded, read back three frames late.
 - Adaptive occlusion (`gpu_cull::WantOcclusion`): when it hides under 10% of what pass 2 tests for 30 frames in a row, it is skipped for
-  120 frames (pass 1 then draws every cluster in the view - never a pop), then tried again; a camera cut (2 m, 45 degrees) tries it
+  120 frames (pass 1 then draws every cluster in the view - never a pop); the share is of triangles, not clusters, then tried again; a camera cut (2 m, 45 degrees) tries it
   at once. Stats: OcclusionSkipped, OccludedShare; GPU times of pass 1's cull and of the pyramid + pass 2 (XLION_GPU_TIMES: CULLGPU).
 - Switches: XLION_NO_GPU_CULL=1 (the CPU path), XLION_NO_GPU_OCCLUSION=1 (the frustum only).
 - Tests (xlionrender_test_culling): an occluder sphere in front of the field. With the camera moving, every one of 12 frames
@@ -108,8 +108,10 @@ GPU = shadows + scene (cull, pyramid, both passes) + tone map, ms (XLION_GPU_TIM
 
 The GPU path is within noise of the CPU path on Police and 0.10-0.12 ms faster on the Bistro. Occlusion pays where what it hides is big
 (outside: -0.14 ms against the frustum only) and costs ~0.1 ms where it hides many small clusters (street: 63% of the clusters, 5% of
-the triangles). Next for the adaptive rule: the share of triangles hidden, not of clusters. The 176 CPU draws: the Bistro's blended
-and double-sided parts.
+the triangles). The adaptive rule now uses the share of triangles hidden: re-measured, the street view skips occlusion (it hides 5%):
+GPU 0.99 ms against 1.16 frustum only and 1.24 the CPU path; from outside it stays on (14%): 1.08 against 1.13 frustum only, the CPU
+path 0.89 in that run (1.04 in the one before) - run-to-run noise is about 0.15 ms: single runs decide nothing finer. The 176 CPU
+draws: the Bistro's blended and double-sided parts.
 
 ## Milestones
 
