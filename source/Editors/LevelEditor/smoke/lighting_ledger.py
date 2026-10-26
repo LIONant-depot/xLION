@@ -9,7 +9,7 @@ police: the Police level in a Release harness editor (never the user's), twice: 
         the CPU from RENDERCPU (120-frame means), and the LEDGER lines when the editor prints them (XLION_LEDGER). Compile idle is
         checked before and after; a run that overlapped a compile is marked invalid.
 police_sun: the same with the level's Sun enabled (it is editor-disabled in the saved level; the tag is removed in the harness editor, never
-        saved) and an outside camera (40 m): the sun's shadows, clipmap or pages (XLION_VSM=1).
+        saved) and an outside camera (40 m): the sun's shadows (its virtual pages).
 Clocks: nvidia-smi sampled every 500 ms during each run (pstate, graphics and memory MHz).
 """
 import json

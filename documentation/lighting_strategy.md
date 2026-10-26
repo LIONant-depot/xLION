@@ -1,12 +1,13 @@
 # Lighting strategy: direct light, shadows, many lights (v3.4, 2026-10-26)
 
-Status: v3.3 approved by the final review, with v3.4's corrections; **P1a-0 → P1a-1 → P1a-2 authorized by Tomas 2026-10-26**, nothing
-beyond. P0 built 2026-10-26 (xLIONRender e2b7318: 109 + 12 saved images bitwise, visibility reference 6.3% disagreement at the edges,
-ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`). P1a-0/1/2 built 2026-10-26/27
-(xLIONRender a10ef2c, a16d281, 14b3710, 270c982, 41fb7db, 401daac). Since 401daac the pages are the default (Tomas, 2026-10-27);
-XLION_VSM=0 keeps the clipmap as a fallback until P1e (the moving sun), then it goes. Level 0 is at most 2 mm whatever the scene's tile: measured in
-`R/tests/xlionrender_test_vsm.cpp` and the ledger (`smoke/lighting_ledger.py ... police_sun`: the saved Police level's Sun is
-editor-disabled, so Police measures the sun only that way). Waiting for the P1 report's review before P1b.
+Status: v3.3 approved by the final review, with v3.4's corrections. P0 built 2026-10-26 (xLIONRender e2b7318: saved images, the
+visibility reference, ledger, counters, LightEval; the fixtures: `xLIONRender/documentation/lighting_fixtures.md`). P1a-0/1/2 built
+2026-10-26/27 (xLIONRender a10ef2c ... af8f7a0): the sun's virtual pages, level 0 at most 2 mm, a 2048-slot pool with dynamic
+resolution; the low sun's bias (989b73c); **P1e, the moving sun** (771ee86: requests moved across epochs, the previous epoch shading
+while the new one builds, a cross-fade); **the clipmap removed** once P1e passed B5b (Tomas, 2026-10-27) - its numbers are the
+gates' references in `R/tests/xlionrender_test_vsm.cpp`. Tomas's overnight mandate (2026-10-27): P1e, contact-hardening, the slope
+bias, P1b, then the rest of the roadmap. The ledger: `smoke/lighting_ledger.py ... police_sun` (the saved Police level's Sun is
+editor-disabled, so Police measures the sun only that way).
 
 The GI belongs to its own thread: this document proposes interfaces the GI may adopt, never GI changes. Sources:
 documentation/many_lights_and_shadows_research.md, lighting_gi_material_synergies.md, gpu_cluster_culling.md, the GI notes in
