@@ -227,9 +227,10 @@ The rig (`R/tools/bench_many_lights`, 60 warmed frames; the scene pass with the 
 | 4096 | 7.41 / 15.75 | 0.57 + 0.01 + 0.13 + 0.06 = 0.76 | 1.17 + 0.02 + 0.28 + 0.12 = 1.59 | 0.386 / 0.093 |
 
 CELLS costs less up to ~300 lights: the threshold 512. At 4096 lights SCREEN is ~10x faster than CELLS with a quarter of the inline
-tail's per-frame error. **Not built yet:** the materials' compiled G-buffer variant (the xmaterial compiler's `XLION_GBUFFER_OUTPUT`
-variant, data_file v7 - its recompile scope waits for Tomas: until then the project's materials shade their tail exactly in SCREEN; the
-built-in constant materials and the tests have their variants); a skinned pose's own motion (its instance's is kept: "The bias and the
+tail's per-frame error. **The materials' compiled G-buffer variant** (xmaterial data_file v7, plain + bindless; kept only where the
+define changes the shader): built 2026-10-27 - the project's 8 Materials and their 390 MaterialInstances recompiled; Police forced into
+SCREEN (`XLION_LIGHT_MODE=screen`, the ledger's screen tail line): 42 G-buffer draws, none left out, 0 validation errors. **Not built yet:**
+a skinned pose's own motion (its instance's is kept: "The bias and the
 movers"); the specular's own denoising beyond the shared passes (its history is shorter on glossy surfaces).
 
 ### The bias and the movers (2026-10-27)
