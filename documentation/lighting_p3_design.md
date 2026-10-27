@@ -112,6 +112,36 @@ the resampled tail from ~1000 lights in reach (3.5x faster than CELLS at 1024, 2
 lights CELLS (exact) is as fast or faster. The CPU cell build (0.5 - 7 ms) is now the largest cost at high densities: change 3 (the GPU
 build) is next. A denoiser would turn the resampled tail's 30-40% into a usable image; it pays from ~1000 lights in reach.
 
+**3. The cells built on the GPU** (`R/shaders/xlionrender_light_cells_comp.glsl`, default `m_bLightCellsGPU`): a count pass (a thread a
+cell, a workgroup a 4^3 block; each 64-light chunk's ranges and lights in shared memory, the lights whose range misses the block
+skipped), a scan, a fill that also keeps the cell's head and the tail's largest in registers, then the head/tail split in two passes. It
+runs in a device-local scratch (the cell ring is host memory: the first version, built in place, took 4.2 ms for 256 lights) and is
+copied into the ring; the CPU keeps the windows, an upper bound of the entries (for the ring's size) and the probes' boxes (0.004 -
+0.2 ms). Measured against the CPU's Build in `R/tests/xlionrender_test_light_lab.cpp` (256 lights, 30% spots): the same counts, heads and
+light order in every cell; CELLS' image bitwise; the tail's cumulative probabilities within 7.6e-6 (gate 5e-5: the GPU's sqrt and
+division are not correctly rounded, and the tail is summed from its end) - a few stratified samples pick the neighbouring light, so
+SAMPLED's images moved by ~10-20 values an image (saved images refreshed: `Build/lighting_baseline/f_gpu_cells`). **Both builders now
+skip the hidden cells**: a coarse level's cell that the finer window covers is never read (the shader shades with the finest level
+holding the point) - those were the cells next to the camera where every light reaches (a power of two cell size only: the levels'
+floors then nest exactly). The CPU's Build went 6.9 -> 5.8 ms at 4096 lights from that alone.
+
+| Lights | CPU Build | GPU build CELLS / SAMPLED | CELLS | SAMPLED plain | resampled | resampled + visibility |
+|---|---|---|---|---|---|---|
+| 64 | 0.13 | 0.12 / 0.13 | 0.18 / 0.36 | 0.17 / 0.34 | 0.23 / 0.47 | 0.23 / 0.52 |
+| 256 | 0.44 | 0.17 / 0.20 | 0.50 / 1.29 | 0.22 / 0.50 | 0.52 / 1.15 | 0.54 / 1.17 |
+| 1024 | 1.52 | 0.33 / 0.45 | 1.81 / 3.82 | **0.25 / 0.56** | **0.66 / 1.47** | **0.68 / 1.51** |
+| 2048 | 2.91 | 0.56 / 0.74 | 3.69 / 7.83 | **0.26 / 0.59** | **0.71 / 1.59** | **0.73 / 1.63** |
+| 4096 | 5.80 | 0.97 / 1.33 | 6.96 / 14.91 | **0.28 / 0.64** | **0.78 / 1.76** | **0.81 / 1.81** |
+
+(ms; the scene pass at 1920x1080 / 3093x1493; the build's GPU time is the same at both sizes. The errors are unchanged: 0.06 - 0.88
+plain, 0.01 - 0.39 resampled.) SAMPLED's scene pass is faster than the table above shows at the same lists: with the CPU's build (`--cpu
+1`) the resampled tail at 4096 lights costs 1.19 / 3.49 ms, 2.23 / 4.64 with visibility, against 0.78 / 1.76 and 0.81 / 1.81 here; CELLS
+is unchanged (6.95). The likely cause - not isolated - is the GPU's clock: it idled while the CPU built 7-10 ms a frame. **Where SAMPLED
+wins now:** resampled with visibility, from ~300 lights in reach (256: 0.54 against 0.50 at 1080p, 1.17 against 1.29 big; 1080p: 0.68 against 1.81 ms at 1024, 0.81 against 6.96 at 4096 - 8.6x);
+its cost grows ~20% from 1024 to 4096 lights. With the GPU build at 4096 lights a frame's cells cost 1.33 ms of GPU and 0.2 ms of CPU
+(was 5.8 - 7 ms of CPU). Next (none built): the build is latency bound - a thread walks every light of its block in series, with 640
+warps on the GPU; a light-parallel count and fill or dirty cells would cut it further.
+
 Before these fixes, three pipeline changes would (each its own decision, none built): **the tail's candidates by binary search**
 of the cumulative probabilities (O(log n), not the list walk); **the cells built on the GPU** (P2's plan: the CPU build is linear); **a
 larger or adaptive cell buffer** (no EXACT fallback at 4096 lights). With those, SAMPLED's cost stops growing with the density and the
