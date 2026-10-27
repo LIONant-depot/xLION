@@ -23,6 +23,23 @@ publishes and what it would like to use. **Proposals only:** no GI file was chan
 3. **Emission:** `material::m_Emissive` is in the renderer's constant material; a flag set by the material compiler (6.2,
    `MaterialVisibilityOf` + emissive) would let both systems agree on what emits.
 
+## Proposal: the BVH for lighting's traced visibility (P4, 2026-10-27)
+
+Lighting's P4 traces the screen tail's shadow rays through the GI's any-hit (`Occluded` / `GICast` in
+`R/shaders/xlionrender_gi_bvh.glsl`, which lighting would include unchanged, declaring the four buffers at its own bindings). What it
+needs from the GI, read only, no change to the GI's behaviour:
+
+1. **A read accessor on `gi::gpu_trace`** (`R/features/gi/xlionrender_surfel_gi_gpu.h`: the buffers are protected today), e.g.
+   `struct bvh_view { const xgpu::buffer *pNodes, *pTri4, *pInstances, *pTlas; int TlasRoot, PrimOffset; bool bEmpty; }; bvh_view getBvh() const;`
+   - valid for the frame it is asked in (the GI may repack them between frames: lighting asks every frame).
+2. **The see-through rule:** lighting's shadow rays would block on see-through triangles as `Occluded` does (no alpha any-hit until the
+   GI agrees one, strategy P4).
+3. **Coverage:** the BVH holds the opaque rigid GI geometry only; lighting labels a ray through anything else (skinned, masked, meshes
+   without GI) unknown, never clear (strategy sec. 3), and keeps its screen trace for them.
+4. **World space:** the BVH's world is the absolute one; lighting adds its camera position to its camera-centred points.
+
+Until then lighting's tail keeps its screen trace (P3) for lights without shadow pages.
+
 ## Not proposed
 
 - No GI code changes from lighting; no shared mutable state; no lighting dependency on GI buffers in the main view's shading.
