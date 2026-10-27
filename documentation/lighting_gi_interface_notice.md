@@ -40,6 +40,27 @@ needs from the GI, read only, no change to the GI's behaviour:
 
 Until then lighting's tail keeps its screen trace (P3) for lights without shadow pages.
 
+## Proposal: emissive surfaces as lights (2026-10-27, reviewed with Fable)
+
+Emissive materials (signs, screens, lava) should light their surroundings directly - contact detail and highlights - not only through the
+GI's diffuse bounce. Lighting's many-lights path (the cells, the screen tail: 4096 lights in ~0.6 ms at 1080p) can take thousands of
+small emitters. The GI already holds exactly what they are: its emitter surfels (`m_Emitters`, the captured emission over its threshold,
+`EmitterRadiance`, `m_Em[k].m_A`, the surfels' position, normal and radius, `EmitGen`). Building a second emitter sampler in lighting
+would duplicate the capture, the area weighting and the level policy, and the two would disagree on where the emission is. What lighting
+needs, read only:
+
+1. **An emitter view:** `struct emitter_view { fvec3 Pos, Normal; float Area; fvec3 Radiance; int Instance; }` - world space, level-0
+   surfels only - and `std::span<const emitter_view> Emitters() const` (or a ForEachEmitter), with a global emitters generation so lighting
+   rebuilds its emitter lights only when it changes.
+2. **Double counting:** with emitter lights on, the GI's bounce already holds the emitters' first bounce onto other surfaces; a flag
+   (e.g. `m_bEmitterDirectExternal`) that leaves the emission's direct term to lighting (the GI keeps the bounces after it).
+3. **The same energy:** lighting shapes each emitter as a one-sided disc of the surfel's area (power = luminance x area; a hemisphere
+   cone; the form factor A cos cos / (d^2 + A), the GI's own link weight), so the two agree; a shared test compares the GI's emitted flux
+   with lighting's sum within 5%.
+
+Lighting's side (once the view exists): the top N emitters by power (2048; the rest folded into their neighbours, the flux kept),
+contact-shadowed by the screen trace, no shadow pages; never lighting their own surface.
+
 ## Not proposed
 
 - No GI code changes from lighting; no shared mutable state; no lighting dependency on GI buffers in the main view's shading.
