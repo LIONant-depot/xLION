@@ -1,275 +1,357 @@
-# Reflections strategy (design v2.1, 2026-10-28 - not built)
+# Reflections strategy (v4 - the implementation contract, 2026-10-28 - not built)
 
 Tomas (2026-10-27): "the diffuse seems working but specular / reflection proves is lacking ... lets design it first, make sure we aim to
-leap over our competition again", then, after an external review of v1: "revise doc then try again to leap what we have ... iterate a
-little to make sure we have the best design possible before spending a lot of tokens building it". Design only. v1 -> v2 -> v2.1:
-sec. 13 (an external correctness review, then a Fable challenge "clearly better, not just correct").
-`R/` = `example.lionprj/Cache/dependencies/xLIONRender/src/`.
+leap over our competition again"; (2026-10-28) "this is the last round of feedback ... after that we are ready to start". v1 -> v2 -> v2.1
+-> v3 -> **v4**: v4 folds the final external review (sec. 13 lists each correction and where it landed) and freezes the architecture.
+What is built is what this document says; a deviation is a change to this document first. `R/` =
+`example.lionprj/Cache/dependencies/xLIONRender/src/`.
 
-**The contract every part below obeys:** every reflection sample has a declared transport model (sec. 4), a typed visibility result
-(sec. 5), a precisely defined outgoing-radiance quantity at its hit (sec. 3), and approximation metadata (fresh / reused / fallback, the
-cache's age). Expensive hit shading *replaces* a compatible cached term; it never adds overlapping light.
+**The rule:** cache what is direction-independent, sample what is expensive with guaranteed support, re-evaluate what changed, never let
+a supported hit pass for complete visibility, and never claim a decomposition the data does not hold. Every sample carries its transport
+model (sec. 3), its hit and prefix classes (sec. 4), the quantity it returns and its approximation state (fresh / cached / fallback, ages).
 
-## 1. What we have today
+**The target picture** (the acceptance of the whole): Lily correctly reflected in Police's floor; a chrome object keeping the secondary
+highlights of the lights it reflects; a lamp switched off disappearing from every reflection within a measured number of frames and
+without ghosts; a documented, bounded cost on the declared GPU.
 
-| Piece | Where | What it does | Its limit |
+## 1. What we have (facts) and what the competition does
+
+| Piece | Where | Fact used here |
+|---|---|---|
+| Direct specular of the lights | `R/shaders/xlionrender_local_lights.glsl`, `xlionrender_shadow_vsm.glsl`, the screen tail (`xlionrender_tail_screen_frag.glsl`, `_denoise_comp.glsl`) | Every light's GGX at the first surface, shadowed: sun and local virtual shadow pages (request pass `xlionrender_vsm_request_comp.glsl` from a depth + clip-to-world), the tail by RIS over the cell's lights with a one-tap visibility, screen trace, BVH ray; the emitter lights (GIEmitterLights) |
+| Light cells | `R/features/lights/xlionrender_light_cells.h`, `_comp.glsl` | A camera-centred **world** clipmap of light lists (head exact + tail distribution), GPU-built: any world point inside it has a cell |
+| Sky, probes | `xlionrender_environment.glsl` `EnvSample`, `ProbeAdd` / `ProbeBoxProject` | Split-sum atlas + DFG; box-projected static captures that hold *everything* they saw (emitters, highlights, walls) - no transport decomposition |
+| GI | `R/features/gi/xlionrender_surfel_gi*.h`, `gi_*.glsl` | Surfels hold indirect irradiance only; the links (E = D + F + T E) relight on light revisions / `m_FrameChanged`; the triangle BVH over opaque rigid GI meshes (`getBvh`), a spatial coverage query owed; captured albedo and emission per surfel and triangle; the emitter view; `Direct()` at a hit |
+| Instances | `R/xlionrender_instance.h` | Slots keep the previous transform (motion), skinned previous bones; `m_FrameChanged` lists this frame's moved bounds (old and new boxes) |
+| Reflections | - | **none**: probes and sky only. Lily is not in the floor; movers never reflect; a mirror is impossible; a probe keeps a lamp that is off |
+
+Competition (read in E:\source_code and the papers; v2.1's table, kept short): Lumen traces to roughness 0.4 and lights hits from its
+surface cache (card resolution, budgeted updates) or HW hit lighting; AMD / Frostbite SSSR and hybrid reflections take screen colour, then
+probes; Capsaicin a hash-grid radiance cache; ReBLUR's virtual motion is the reconstruction reference; RTXDI has world-space light sampling
+for secondary surfaces (ReGIR) and reservoir resampling. **No claim of beating anyone:** every comparison in this document is a measured
+quality / time / memory number on the declared GPU (sec. 11). Our opportunity is the integration: one world light structure, one shadow
+residency, one software BVH, one surfel cache with ages - at the first surface and at the hit alike.
+
+## 2. The hit contract: D(y) + S(y, wo)
+
+    L_o(y, -w) = D(y) + S(y, -w)
+    D(y)       = L_e(y) + rho_d(y)/pi ( E_direct(y) + E_indirect(y) )        direction-independent: cached per surfel, shared by rays
+    S(y, -w)   = SecondaryDirectSpecular(y, -w) + SecondaryIndirectSpecularApprox(y, -w)   re-evaluated toward the actual receiver
+
+A stored total L_o is never reused across receivers. **E_direct(y)**: the base is `E_direct,cached` per surfel (the GI's `Direct()` at
+the centre on the links' budget, with its own validity and age - the declared baseline and the exhaustion fallback, built in B); a
+**fresh** E_direct at the actual hit position replaces it where selected (sec. 6). Replacement, never addition.
+
+**Four records, one owner each:**
+| Record | Fields | Owner |
+|---|---|---|
+| Surface | instance id + generation, triangle, barycentrics, Ng / Ns, the captured material approximation (base colour, metallic, roughness, emission, flags: see-through, emitter, proxy, deformed) | trace (the hit), the GI's capture (the material) |
+| Lighting | `E_direct,cached`, `E_indirect`, `L_e`, state VALID / STALE / REBUILDING, ages (lighting, material, geometry epochs) | the GI |
+| Directional evaluation | S(y, -w) for this receiver: the lights evaluated at the actual hit with their visibility class, the environment term with its label | hit lighting, per ray |
+| Reflection sample | endpoint (finite: instance-local; or a true environment direction), estimator state (pdf, W, M, confidence), hit + prefix class, model, fresh / cached / fallback, current validity, history provenance | trace, reconstruction, (optional) reservoirs |
+
+## 3. Transport models and radiance ownership
+
+| Model | Secondary hit returns | Known missing |
+|---|---|---|
+| **T0** | D(y) + SecondaryIndirectSpecularApprox | the hit's direct highlights; mirror-in-mirror; texture below the capture's density (flagged) |
+| **T1** | D(y) + **SecondaryDirectSpecular** (the hit's lights' GGX toward -w, shadowed as sec. 6) + SecondaryIndirectSpecularApprox | glossy hits' indirect specular approximate; one mirror level |
+| T2 | a second specular bounce | earns its place (sec. 12) |
+
+**Ownership (the review's main correction, adopted verbatim in substance):**
+- *T1's secondary direct specular is evaluated explicitly.* The path receiver -> y -> lamp is secondary direct; receiver -> y -> another
+  surface -> lamp is secondary indirect: different paths, no overlap between an explicit T1 and a *true* indirect term.
+- *Secondary probe specular remains an approximate additional-bounce estimate* - a combined probe texel cannot be decomposed (an
+  emitter's glow, a lamp's highlight on a wall, diffuse light, sky all mixed); **no per-light subtraction and no occlusion-ratio
+  "decomposition" is claimed** from it. Its overlap with T1 (the probe also saw the lamp's highlight on y's neighbours, and the lamps
+  themselves) is a **labelled overlap approximation**, reported as bias on the chrome and lamp scenes.
+- **Diagnostic mode** `SecondaryProbeSpecular = off`: T1 alone (an under-count, labelled); the two modes bracket the reference. Should a
+  capture with a transport decomposition (a separate emissive component) ever exist, it replaces the label - sec. 12.
+- Restricted secondary specular from B: T1's lights at the hit are the hit's cell head (the sun + K key lights); the tail at the hit
+  comes with sec. 6's sampling. The secondary-material record (roughness, metallic added to the GI's capture) comes with B; no material
+  shader runs at a hit.
+- **Turquin's compensation** `1 + F0 (1/E(mu) - 1)`: one formula in the shared BRDF, the main view, probes, secondary hits and references
+  alike; its own milestone (B2). Until then single-scattering GGX everywhere, references included.
+
+## 4. Tracing: hit class and prefix class, separate
+
+    HitClass:    HIT_SCREEN_APPROXIMATE | HIT_WORLD_SUPPORTED | HIT_PLANAR_SUPPORTED | MISS_WORLD | NONE_WORK_LIMIT
+    PrefixClass: PREFIX_COMPLETE | PREFIX_INCOMPLETE { coverage hole | unrepresented caster | screen-only | step budget | log expired }
+
+1. **World trace** (the GI's BVH, closest hit from the ray's offset origin; a screen-rejected segment is never skipped). The prefix is
+   `PREFIX_COMPLETE` only when the GI's coverage query says the extent is resident **and** the prefix crosses no box of an instance the
+   BVH does not represent (sec. 7's change log holds those boxes).
+2. **Screen trace** (min-depth pyramid, thickness, max distance, edge fade): an acceleration for glossy receivers only, always
+   `PREFIX_INCOMPLETE (screen-only)`; never the mirror path. It is *not* a world hit: its Q is the screen texel's current material and
+   normal, a world hit's record is the capture's - the **discrepancy is measured** (C), not assumed zero.
+3. **Planar view** (sec. 8): `HIT_PLANAR_SUPPORTED` - geometrically complete for the mirrored view's frustum and depth range (its
+   coverage limit, labelled); its shading carries the same approximations as the main view (coarse pages, the GI, finite resolution).
+4. **Mirror path** (sharp receivers, r < 0.1) = a planar hit or `HIT_WORLD_SUPPORTED + PREFIX_COMPLETE`; anything else on a sharp
+   receiver is approximate: short history, fallback weight.
+5. **Misses:** `MISS_WORLD + PREFIX_COMPLETE` -> the sky (a true environment direction). `PREFIX_INCOMPLETE` or `NONE_WORK_LIMIT` ->
+   the probes, **evaluated outside any reservoir** as a labelled fallback (receiver- and probe-dependent, not a path).
+6. **`PREFIX_INCOMPLETE` changes confidence, history length and the fallback choice. It never attenuates radiance.**
+
+## 5. The pass graph (no cycle) and the composite's units
+
+    1  depth prepass + sharp guides (full-size normal, roughness, F0, flags for materials whose roughness range is sharp)
+    2  VSM requests from the main depth -> admission -> page render                    [existing]
+    3  GI update: surfels, links, BVH valid for the frame, coverage query, change log (sec. 7)
+    4  materials' pass (opaque): colour WITHOUT environment / probe / reflection specular; thin G-buffer (half); receiver state;
+       Q = (E_direct + E_indirect)/pi and L_e apart (one variant first); instance + triangle id
+    5  reflection trace: VNDF -> [screen] -> world -> Surface record, classes
+    6  VSM requests from the hit-position buffer, hard-limited (sec. 9)               [a frame late]
+    7  hit lighting: D from the Lighting record (screen hit: Q x captured albedo + L_e, never a divide); S toward x; fresh where selected
+    8  reconstruction on U (temporal with virtual motion, spatial)                     [optional reservoirs: F]
+    9  composite: C_final = C_nonreflection + B(x) Reconstruct(U)(x)
+
+**Units.** `R^(x)` = the estimated reflected radiance *including the receiver's BRDF weighting* (the VNDF estimate `F G2/G1 x L_o`).
+`B(x) = max(F0 DFG.x + DFG.y, eps)`, eps = 1e-3. `U = R^ / B` is what passes 7-8 store and filter. Pass 9 multiplies by B **once**; no
+pass before it remodulates. **Tests:** reconstruction off -> demod / remod reproduces R^ to float precision; a constant environment of
+radiance L gives `R^ = B L` from the direct estimator, the probes, the planar path and the composite alike (missing or doubled BRDF
+factors show as a ratio).
+
+**Receiver state at every output pixel:** the composite reads normal, roughness, F0 and flags at *full* resolution for every opaque
+pixel (the guides for sharp, the half-size thin G-buffer upsampled by depth / normal for the rest, with the boundary texels flagged and
+reconstructed from the nearest same-surface texel) - the minimum state, stored; a half-size G-buffer alone is not enough at material
+boundaries.
+
+**Q on metallic pixels:** Q is the irradiance sum whatever the material's rho_d; a material that skips its diffuse term still evaluates
+and writes Q (its lights' irradiance, the GI's). Blended / translucent materials keep the probes in their shader, labelled; pass 9 is
+for opaque. Any previous-frame source is flagged approximate.
+
+**Estimator.** GGX VNDF with the true normal and view (Heitz 2018), weight `F(v.h) G2/G1`; the dominant direction only for hit-distance
+and virtual motion. Budget: sharp full-size tiles, one ray; glossy half size, one ray; past 0.6 one ray per 4 texels rotating with GI
+layer 1 as a labelled prior. One scheme over 0..1.
+
+## 6. Fresh lighting at the actual hit: support-guaranteed sampling
+
+At a world hit y selected for the fresh term (selection: `visible detail x error` - the ray cone against the surfel radius, the
+Lighting record's age and state, light revisions since, a penumbra flag; hysteresis of a few frames; a history reset on a flip):
+
+- **Head:** the hit's cell head (the world clipmap gives any point inside it a cell: the main view's `LocalLightUnshadowed`, `SunShadow`,
+  `LocalLightShadow` at y, unchanged code). Outside the clipmap: no cell -> the cached D only, labelled.
+- **Tail, with guaranteed support.** The proposal is the known-pdf mixture
+  `q_mix(l | y) = (1 - eps) q_shared(l | s) + eps q_safe(l | y)`: `q_shared` the cell tail's distribution at the hit (the existing RIS
+  candidates' weights, or - optional, sec. 12 - a surfel's shared proposal), `q_safe` a distribution with **nonzero probability for
+  every tail light that can contribute at y** (uniform over the cell's tail list), eps = 0.1 to start. Every contribution is divided by
+  the **actual** `q_mix` - no light that is dark at a surfel's centre (a spot cone cutting the surfel, range, an opposite normal, centre
+  shadowed, newly enabled) is lost; it is only sampled less often. Importance is evaluated **at the actual hit**.
+- **Visibility is evidence only where measured:** the shadow at y from a VALID page or a BVH ray (sec. 9's limits). Cached centre
+  visibility may *guide* the selection; it is **not** visibility at y. If the hit has no fresh visibility, the sample returns the
+  declared cached baseline (D with `E_direct,cached`) - no hybrid of a hit's falloff times the centre's shadow, unless declared as its
+  own approximation and measured (not planned).
+- A finalized reservoir's W is not a selection pdf; if a reservoir ever feeds a proposal (sec. 12), it follows RTXDI's combination
+  rules, never `q_mix`'s division.
+
+## 7. Visibility reuse: epochs and a bounded change log
+
+Reusing a validated segment (a path's V(x, y), an environment direction's V_inf, a temporal history's correspondence) is safe only when:
+the same segment, the same visibility semantics, no relevant scene change since its **last validation**, no change in representation
+coverage. Mechanism, small first:
+- A **visibility epoch** counter and a **bounded change log** (N frames deep) of every instance change relevant to reflection
+  visibility - not only shadow casters: moved / deleted / created instances with **old and new bounds**, deformation (skinned: always
+  changed), alpha-test or visibility-flag changes, streaming, a BVH coverage change, a see-through change. The log is the instance
+  table's change list (`m_FrameChanged` extended), so it costs what the shadow pairs already pay.
+- A sample stores the epoch of its last validation. Reuse: walk the log from that epoch; any box crossing the segment -> retrace (or the
+  sample is dropped); if the epoch is older than the log -> **retrace** (`log expired`). Either endpoint moving changes the segment ->
+  retrace, unless a conservative segment-equivalence rule is declared (none in B-E).
+- **Two certificates**, separately: *geometry* (the segment unchanged) and *lighting* (the endpoint's Lighting record age and the light
+  revisions since: a lamp switched off changes radiance with no box moving). A sample is reused only with both; a lighting change
+  re-evaluates radiance without a retrace.
+- The same log supplies sec. 4's "boxes of unrepresented instances" for the prefix class.
+
+## 8. Backends: a complete path per receiver class
+
+| Class | Trace | Lighting | Reconstruction | Dynamics | Fallback |
+|---|---|---|---|---|---|
+| **Planar, smooth** (Police floor, water; r < 0.1 over a plane) - **first** | the planar view: the scene rasterized mirrored in the plane and clipped to it, bounded to the receiver's screen extent, its own culling, its depth through the VSM request pass (sec. 9's limits) | the main view's materials at the mirrored pixels: T1 complete by construction | a filter for the finite image (the main view's AA, no stochastic denoiser) | **skinned movers drawn** | - |
+| Planar, rough | the same image filtered by the receiver's roughness and the mirrored depth | same | the filter | same | **after** a comparison with the world-ray reference (filtering an ideal image cannot reveal surfaces the ideal view lacks; it is an approximation, labelled) |
+| **Sharp non-planar** (chrome) | full-size world rays from the guides | T1 restricted (B), fresh by selection (E) | temporal, no spatial blur | unrepresented -> `PREFIX_INCOMPLETE` | probes |
+| **Glossy** (0.1..0.6) | half-size VNDF, [screen] then world | D cached + S; fresh by selection | temporal + spatial, virtual motion by roughness and curvature | sec. 7 | probes |
+| Very rough (> 0.6) | 1 ray / 4 texels | D cached | wide spatial + layer 1 prior | - | layer 1 |
+| Off-screen dynamics | the skinned triangle BVH **if** its benchmark passes (sec. 11) | - | - | explicit `PREFIX_INCOMPLETE (unrepresented caster)`; the planar view where the receiver is planar | probes, short history |
+
+**Planar acceptance tests:** reflection-plane clipping (nothing behind the mirror plane drawn), mirrored winding / culling, and **no
+feedback** (a reflective receiver drawn in the mirrored view takes its probes, never the reflection result). `HIT_PLANAR_SUPPORTED`
+keeps geometry coverage (the frustum and depth range) and shading approximations as separate labels. Planar ships after B.
+
+## 9. Shadow demand at hit positions: hard limits
+
+The hit-position buffer (half size, the footprint from the ray cone) runs through the existing request shader a frame late. Per hit the
+report records **desired LOD** (the projected reflection footprint), **admitted LOD** (budget, residency) and **the approximation
+used**; coarse is a label, not a rule - a glossy receiver's near, high-contrast hit may desire a fine page.
+1. Admission at most 25% of the frame's page budget (tunable), after the main view; its protected classes untouched.
+2. Residency AND validity: a resident STALE page counts as absent.
+3. Directional coverage: outside the finest resident levels -> the pinned coarse pages, labelled; no requests beyond the main view's levels.
+4. Cold cache: the first frame uses the cached term; fresh starts when its pages are VALID.
+5. Fallback BVH shadow rays capped per frame (N from A's benchmark).
+6. Exhausted -> the cached approximation, labelled; never black, never unshadowed.
+
+## 10. Emitters: ownership, exactly once
+
+| Light source | At the receiver x | At a secondary hit y | Identity |
 |---|---|---|---|
-| Direct specular of the lights | `R/shaders/xlionrender_local_lights.glsl`, `xlionrender_shadow_vsm.glsl`, the screen tail | Every light's GGX highlight, shadowed (sun and local pages, the tail's RIS + screen trace + BVH ray); emitter lights when GIEmitterLights is on | Complete for lights |
-| Sky environment | `R/shaders/xlionrender_environment.glsl` `EnvSample` | Split-sum: an octahedral atlas prefiltered by roughness, the DFG table | Infinitely far, unoccluded |
-| Reflection probes | same file, `ProbeAdd` / `ProbeBoxProject`; captures in `plan_forward.cpp` | Box-projected cube captures in an octahedral atlas, nested, found through the light cells | Static captures, no dynamic objects, exact only on the box, fade to the sky at a room's walls |
-| GI reflections, layer 1 | `GIPixelGI` (`mb_standard_pbr.frag`), the half-size GI pass | The surfels' 3 basis colors weighed toward R (`g_GIRefl`): normalizes the probes by the local light; takes over from roughness 0.3 to 0.7 | Cosine-wide lobe: rough only; half size and reused over frames (approximate for a view-dependent term) |
-| Specular occlusion | `EnvLighting` | The GI's light ratio along R | A heuristic |
-| Screen-space reflections | - | **none** | - |
-| Traced reflections | - | **none** (the GI's BVH and `getBvh` exist since P4) | - |
+| Analytic lights | lighting's direct term; not in any reflection | E_direct (cached / fresh) + T1's S | `local_light::m_Handle` |
+| Emissive geometry, **traced endpoint identified** (the hit is an emitter surfel) | traced `L_e(y)` weight `w(r)`; the emitter lights' specular weight `1 - w(r)` | E_direct includes the emitter lights; `L_e(y)` is y's own glow - different paths | the emitter view's surfel id, instance + material region |
+| Emissive geometry, **not identifiable** (a probe fallback, the sky) | the emitter lights' specular whole; the probe keeps whatever glow it captured: a **labelled overlap approximation** - no w(r) on a probe, no global probe fade | the hit's probe term likewise | the capture's emitter generation; a probe older than the emitter view is STALE |
+| Proxy replacement (if ever) | the proxy's mean emission, approximate | - | the proxy's instance |
 
-What it looks like (pictures in the lighting thread, 2026-10-28): Lily on Police's polished floor is not reflected, nor are the walls -
-only the probes' and the sky's blur; movers never appear in a reflection; a mirror is impossible; the probes ignore a lamp switched off.
-The GI plan's §7b probe items (specular occlusion, blend order, fading to the sky, SH9 diffuse, split AO, atlas seams, capture contract,
-typed records, tests) are all open.
+`w(r)`: 1 below 0.2, 0 above 0.4, smooth between - **temporary**, a partition of unity, applied only to identifiable traced emissive
+endpoints; its bias reported on the ramp test; MIS (a disc pdf for the emitter lights) earns its place (sec. 12). Tests: textured sign
+in a mirror (texture visible, energy within 5% of the emitter light's); roughness ramp under the sign (no seam, the bias curve); near
+field (10 cm); occlusion (a box between); switching (both legs off within the emitter generation's latency, in frames).
 
-**What the GI already has that matters here** (read in its code): a surfel's shown light is **indirect irradiance only** - lighting
-shades the direct term, the GI computes direct light fresh at its own ray hits (`Direct()` in `xlionrender_gi_pass_common.glsl`: the sun
-and its point lights, a BVH shadow ray each); the captured albedo (per triangle and per surfel) and emission (`SurfaceAt`); the BVH.
+## 11. References, metrics, benchmarks - the declared GPU
 
-## 2. The competition (read in E:\source_code and the papers; v1's corrections kept)
+Every number in reports states **GPU, resolution, scene, build (Release)**. The declared GPU is the development machine's (the lighting
+RTX 4070 Ti SUPER, Vulkan 1.4); a gate passed on another GPU is recorded as such, not as passed.
 
-| Engine / technique | Smooth | Rough | Hit lighting | Fallback | Denoising | Dynamic | No RT |
-|---|---|---|---|---|---|---|---|
-| **Unreal Lumen** | Rays to `MaxRoughnessToTrace` (0.4), faded over 0.1 into the screen probes' gather; full res above quality 0.25 | Rays shortened from 0.2, radiance cache from 0.35 | SW: surface cache (cards: albedo, every light's direct light with shadows, indirect - card resolution, lagging); HW: real materials and lights at the hit (slow) | Screen (HZB) -> SDF / HW -> sky / radiance cache | Temporal 12 frames, BRDF-reweighted reconstruction, bilateral, intensity clamp 40 | SDF / HW BVH; skinned only via HW or screen | SDF tracing (leaks on thin geometry) |
-| **Frostbite SSSR** (2015) | Half-res stochastic SSR, GGX samples, rays shared by neighbors (BRDF/pdf) | Same, wider | Screen color | Probes | Temporal + reuse | Screen | Its baseline |
-| **AMD FidelityFX SSSR** | Min-Z pyramid traversal; 1 ray per 2x2 where variance is low; rays skipped past a roughness threshold | Probes | Last frame's color | Probes | Spatio-temporal, variance-guided | Screen | SSR only |
-| **NVIDIA ReBLUR / ReLAX** | - | - | - | - | Hit-distance radius; virtual + surface motion blended by roughness and curvature, a virtual-history confidence; demodulation by the environment BRDF | - | - |
-| **Unity HDRP** | SSR or RT; planar probes | Probes | Screen / RT shading | Probes, sky | Own | RT / screen | SSR + probes |
-| **Godot 4** | SSR, roughness limiter | SDFGI / VoxelGI cones | SDF / voxel radiance | Probes | Light | Re-voxelize; screen | SSR + probes |
-| **AMD Capsaicin GI-1.0** | Traced glossy rays, roughness thresholds, half-res option | Screen probes | Hash-grid radiance cache | Sky | Firefly marking + à-trous | HW BVH | - |
-| **AMD hybrid reflections** (FidelityFX Hybrid Reflections) | SSR first, rays only where SSR fails; screen color or a re-shade of the hit | Probes | Screen color / re-shaded hit | Probes | Spatio-temporal | HW | - |
+- **References:** (1) *same-model*: many samples of the declared model with the **frozen approximation state** (the surfel cache, ages,
+  page residency, captures snapshotted) - integration and reconstruction only; (2) *independent*: the CPU path tracer on small scenes
+  (real materials, analytic lights, explicit visibility, 3+ bounces) - what the model misses.
+- **RMAE** `= mean |a - r| / max(mean r, L_floor)`, dark pixels **included**, `L_floor` an absolute radiance per test (default 1e-3 of the
+  test's exposure reference), linear HDR, before and after reconstruction, per roughness bucket and per object mask.
+- **Dark-leak** over pixels with `r < L_floor`: `mean max(0, a - r) / L_floor`.
+- **Bias vs variance:** bias = the mean over **repeated independent runs** (or a converged mean) minus the reference; variance apart;
+  reconstruction error apart (before / after); the approximation state frozen for every estimator comparison. One residual is never a
+  bias.
+- **Temporal:** `E_t = A_t - R_t`; **flicker** `T_t = mean |E_t - W(E_t-1)|` with W the declared correspondence (the receiver's motion
+  for surfaces, the virtual motion for the reflection); **lag** = frames after a switch until the error is under 1.5x the still error;
+  **ghosting** = error inside the mover's previous mask. Sequences (120 frames): an orbit; a mover crossing; a **fixed-camera light
+  switch**.
+- **Invariants** (each a test): constant environment (sec. 5's units); light-intensity scaling (double a light -> double its unclamped
+  reflection); zero radiance (no light in a black scene from fresh lighting, stale histories, probes or emitter ownership).
+- **Adversarial scenes:** a big triangle across a hard shadow; two receivers seeing one shiny surface; an omitted skinned mover before a
+  supported wall (`PREFIX_INCOMPLETE` on every ray through her box; coverage label only - her appearance is the planar path's test);
+  a textured emitter on a ramp; a lamp off; off-screen geometry outside shadow coverage; tiny sharp roughness patches (the guides'
+  tiles, the seam); page exhaustion.
+- **Benchmarks (A):** mirror-coherent and rough-incoherent rays, world-only and after the screen trace, traversal alone and with hit
+  lighting, warm and cold; the planar view's ms on Police; the sharp guides' prepass cost; **the skinned BVH's full cost**: skinning
+  inputs, refit, TLAS update, sync, traversal quality (its leaf fatness) against the rays' cost - a target of 0.3 ms on the declared
+  GPU for Lily alone, the whole chain counted; the memory ledger (each target at 1080p / 4.6 MP, shared with the tail or not, alive
+  when; the peak).
 
-**The room to leap:** hit lighting is low-res and lagging (Lumen SW, Capsaicin) or right and slow (HW hit lighting); the smooth/rough
-handoff joins two different estimators; the many-lights direct light at a reflected point is a cache's or costs per light; dynamic and
-skinned objects need HW RT off screen; without HW RT quality falls to SSR + static probes; none of them says what each reflection
-sample's approximation is.
+## 12. Milestones (entry / exit on the declared GPU) and what earns its place
 
-## 3. The hit contract: what a reflection ray returns
-
-At a secondary hit y, seen along -w (toward the receiver):
-
-    L_o(y, -w) = L_e(y) + rho_d(y) / pi * ( E_direct(y) + E_indirect(y) )                        [initial transport model]
-               + f_s,y(-w, ...) terms                                                            [extended model, sec. 4]
-
-**The cache (the GI's, extended - contract C3, separable with replacement):** per surfel the GI already holds `E_indirect` (its shown
-light). v2 adds a **cached direct irradiance** `E_direct,cached` per surfel (the GI's `Direct()` at the surfel's centre, updated on the
-GI's budget: the lights' change triggers the same relight the links' F has) - a cheap, low-resolution, lagging baseline. Then:
-
-    E_direct(y) = E_direct,cached(y)                                   (the base: every hit, cheap)
-    E_direct(y) = E_direct,fresh(y)          where selected (sec. 6)   (a replacement, never an addition)
-
-The GI accessor (the GI thread's note 3) returns, per hit: `E_indirect`, `E_direct,cached`, `rho_d` (triangle albedo, else surfel), `L_e`,
-and the epochs/ages of each (lighting, material, geometry). Screen hits and world hits use **one hit-lighting function** over this record
-(sec. 6); a screen hit reads its record from the hit texel's instance and triangle (the thin G-buffer gains an instance + triangle id
-target - R1), not the composited color.
-
-**Emission exactly once.** Two transports see an emitter: (a) a reflection ray that hits it (`L_e`), (b) the emitter lights (GIEmitterLights)
-- lighting's direct term at the receiver *and* at secondary hits. Rule:
-- At a **secondary hit**, `E_direct` includes the emitter lights; `L_e(y)` is the hit surface's own emission. Different paths
-  (emitter -> y -> receiver vs y's glow seen directly): no overlap.
-- At the **receiver** (the first surface), the emitters' light reaches it by both (a) and (b). A partition of unity by the receiver's
-  roughness r: weight `w(r)` (1 below 0.2, 0 above 0.4, smooth between - tuned against the reference) on the reflection rays' `L_e` of a
-  surfel that is an emitter light (its id is in the emitter view) and `1 - w(r)` on the emitter lights' specular at the receiver; the
-  emitter lights' diffuse is always lighting's. A mirror shows the sign's texture, a rough floor the lights' smooth highlight, and a
-  roughness-mapped floor (wet patches) has no seam: the two estimates of the same light are weighted, never both whole. (MIS proper needs
-  a pdf for the emitter lights' evaluation; a measured upgrade.)
-- The sky: the sun is a light, not in the sky map - no overlap. A sky with a sun disc would take the same partition.
-
-## 4. Transport models (declared per sample)
-
-| Model | Secondary hit returns | Known missing | Where |
+| | Builds | Entry | Exit gate |
 |---|---|---|---|
-| **T0 initial** | `L_e + rho_d/pi (E_direct + E_indirect)` (diffuse + emission) **+ the hit's probe/sky specular** (its F0 x the probe or sky along the reflected direction at its roughness - from the secondary-material record; without it a metal in a reflection is black, rho_d = 0) | The hit's direct highlights; mirror-in-mirror; texture detail below the capture's resolution | R1 - R3a |
-| **T1 extended** | T0 + the hit's **direct specular** toward the ray (its lights' GGX at the hit's roughness/F0, from a compact **secondary-material record**: normal, base color, metallic, roughness, emission, flags) + its indirect specular from the probes / layer 1 | Indirect specular of glossy hits is approximate; mirror-in-mirror one level | R3b |
-| **T2 later** | A second reflection bounce for mirrors / near-mirrors seen in mirrors | - | measured need |
+| **A** Contracts, benchmarks | records and the GI accessor spec (with the GI thread); references, metrics, invariants, adversarial scenes; the pass graph in the plan; ray / planar / guides / skinned benchmarks; the ledger | this document | today's error table; the costs; planar vs compute on Police; the ledger; the budget numbers for B-E |
+| **B** Planar + plain world reflection (**the baselines, preserved**) | the planar view (smooth receivers) with its three tests; sharp guides; VNDF; world closest hit; hit + prefix classes with the change log's boxes; `E_direct,cached` with validity and age; T0 + restricted T1; the composite with its units and receiver state; one ray per texel, no reuse | A's gates | chrome and mirror box < 10% RMAE vs same-model; dark-leak < 1%; invariants pass; the omitted mover labelled; **Lily in the floor** via planar; cost table. **Scope:** supported rigid geometry exact to the model, unsupported dynamics labelled; skinned accuracy is the planar path's or sec. 11's benchmark's |
+| **B2** | Turquin, consistently | B | rough metal vs independent |
+| **C** Screen acceleration | pyramid trace (glossy), Q from one material variant, id target | B | glossy floor at lower ms with the **screen / world discrepancy measured** and under the same-model gate; Q's per-material cost before any migration |
+| **D** Reconstruction | specular temporal (virtual motion, secondary-hit identity), spatial, metadata, the roughness budget, the visibility epoch for histories | B (C independent) | flicker / lag / ghosting on the three sequences at P3's level; continuous error over 0..1 |
+| **E** Fresh lighting at hits | hit-position requests with the limits; `q_mix` with `q_safe`; selection with hysteresis; the lighting certificate | B, D | penumbra error vs independent at **equal total time** against D (visibility rays counted); exhaustion keeps the cached term; a lamp off disappears from every reflection within the measured lag, no ghost |
 
-The secondary-material record is captured with the materials (the GI's capture already renders albedo/emission per surfel and triangle;
-it gains roughness/metallic) - no material shader runs at a hit. Texture detail at a sharp reflection's hit is limited by the capture's
-texel density: the record says so (an approximation flag), and R5's measured option is reading the material's textures at the hit's UV
-for sharp receivers (the bindless table makes it possible).
-
-## 5. Tracing and typed coverage
-
-    TraceResult: HIT_SCREEN_APPROXIMATE | HIT_WORLD_SUPPORTED | MISS_WORLD_COMPLETE | UNKNOWN_COVERAGE | UNKNOWN_WORK_LIMIT
-
-1. **Screen trace** (new, not P3's short march): a min-depth pyramid over the depth (the half-size depth for glossy rays, the full-size
-   depth for sharp ones), a constant thickness tuned against the reference, a maximum distance, a screen-edge fade. An accepted hit is
-   `HIT_SCREEN_APPROXIMATE` ("on screen through the supported screen-depth approximation": half resolution, thickness, first layer only).
-2. **World trace** (the GI's BVH, closest hit): a ray the screen rejected or missed **restarts at its offset origin** - the screen depth
-   does not certify the skipped segment (a blocker hidden behind a foreground object) - unless an empty interval is proven (none is, in
-   v2). Hits are `HIT_WORLD_SUPPORTED` when the hit instance is in the BVH's coverage (opaque rigid GI meshes, sec. 9's proxies labelled).
-3. **A world miss** is `MISS_WORLD_COMPLETE` only when the BVH is complete for the ray's extent (the scene's GI meshes resident, no
-   coverage hole - the GI's coverage query, lighting strategy "spatial coverage"); then the sky. A miss through incomplete coverage is
-   `UNKNOWN_COVERAGE` -> the probes (never the sky). A traversal cut by its step budget is `UNKNOWN_WORK_LIMIT` -> the probes.
-4. **Probes and sky** are fallbacks with their own label; specular occlusion of the fallback from the GI's moments along R (§7b item 1).
-
-## 6. The leap
-
-The structure (trace -> hit records -> shade) is parity: Lumen HW and AMD's hybrid reflections already compact and sort before hit
-lighting. What none of the compute-only pipelines has - and what this engine already owns - is below; it is the design's centre.
-
-**6.1 Exact, shadowed many-lights at reflected points.** A reflected street with 4096 lamps shows every lamp's light at the reflected
-point with *its own shadow*: the cell's head exactly and the tail by RIS (`LocalLightDemod`), the sun's and the local lights' **virtual
-shadow pages** - reflection hits **request pages like the main view** (first-class demand, weighted by how visible the hit is through the
-receiver's lobe; a frame late, its own page budget), BVH shadow rays where a page is not resident - and the emitter lights. Lumen SW has
-it at card resolution (lagging), Lumen HW pays per light per hit, SSR-based pipelines have only the screen. This is the leap.
-
-**6.2 Glossy reflection reservoirs (ReSTIR with reconnection).** The compute BVH makes rays the bottleneck, so samples are reused: each
-half-size texel keeps a reservoir `{y, L_o(y), p, W, age}` - its hit, its outgoing radiance under the declared model, its pdf. Temporal
-reuse reprojects it (virtual motion, sec. 8) and **reconnects** x -> y (the hit's diffuse-like T0 term makes the shift cheap); target
-`f_s(x, y) L_o(y) cos`; spatial reuse from 3-5 neighbours with one visibility ray each (BVH), or none above roughness ~0.5 (biased,
-measured). One ray per texel looks like 8-16; glossy reflections of movers stop boiling. Not for mirrors (a fixed direction gains nothing
-from reuse) - they keep one ray and temporal reconstruction. Lumen reuses nothing but its denoiser. ~32 B per half-size texel, 1-3
-extra visibility rays per texel; correlation the denoiser must tolerate (measured).
-
-**6.3 Screen hits reuse the main view's shading.** The main pass already shaded every screen point exactly (every light, its shadow, the
-GI). The materials write a **demodulated lit-diffuse target** - `rho_d/pi (E_direct + E_indirect)` divided by `rho_d`, plus `L_e` apart
-(B10G11R11, full size: one more output of the materials' pass - a layout change and a recompile, the approved pattern) - and a
-`HIT_SCREEN_APPROXIMATE` hit reads it times its albedo: exact T0 at no shading cost, and a floor's reflection agrees with the floor's own
-shadow. The whole correction budget goes to world hits. (The instance/triangle id target stays for the hit identity, sec. 8.)
-
-**6.4 Shade once per unique hit, not per ray.** World hits go to a per-frame **hit cache** keyed by surfel id (triangle for sharp hits):
-the rays that hit one surfel pay one fresh `E_direct` (6.1) - a hash/atomic pass instead of a sort. The selective corrections become
-affordable for glossy receivers, where many rays share hits.
-
-**6.5 The cached base and the selection.** Every world hit starts from the cache (T0 with `E_direct,cached`); the fresh `E_direct`
-replaces it where `visible secondary detail x hit-shading error` is high - visible detail from the **ray cone** at the hit (the receiver's
-roughness and the hit distance against the surfel / page / texel size: also the hit's LOD - surfel, triangle albedo or a texture mip),
-error from the cache's age, the lights' revisions since, a penumbra flag. With **hysteresis** (a hit selected stays selected a few
-frames) and a history reset through the metadata when it flips - fresh and cached differ visibly, a moving boundary would flicker.
-
-**6.6 Honest samples.** Every sample carries its TraceResult, transport model, fresh/reused/fallback state and its cache's age (sec. 5,
-8): good engineering, not a picture by itself - it is what lets the references say *why* a pixel is wrong.
-
-## 7. The estimator
-
-- **Sampling:** GGX **VNDF** with the true shading normal and view (Heitz 2018); the weight `F(v.h) G2/G1`. The **dominant direction** is
-  used only for reconstruction (hit-distance tracking, cache queries, the denoiser's virtual motion), never to rotate the sampling lobe.
-- **Demodulation:** the resolved radiance divided by the receiver's environment BRDF (`F0 DFG.x + DFG.y`), floored at 1e-3 (a near-black
-  factor), multiplied back after denoising - the receiver's factor only; the secondary surface's shading is the hit's (sec. 3/4).
-- **BRDF for the correctness tests:** single-scattering GGX in the renderer and the references alike. **Multiple-scattering**
-  compensation is a separate, measured BRDF change (R1b): **Turquin 2019** (the specular scaled by `1 + F0 (1/E(mu) - 1)`, E from the
-  DFG table) - one formula in the shared BRDF code, the main view's direct specular, the probes and the reflections alike.
-- **Roughness:** one sampling scheme over 0 .. 1; the ray budget by roughness (full-size sharp tiles below 0.1, half size above, 1 in 4
-  texels rotating past 0.5), the reconstruction wider with roughness. Rough receivers (past ~0.6) may take GI layer 1 as a **labelled
-  reconstruction prior**, not a correction.
-- **No control variate.** v2 kept it as an experiment (f - c on shared rays, C the integral of c); the reservoirs (6.2) dominate it for
-  the same rays, so it is dropped. (Were it ever tried: C must be the integral of c, signed residuals never clamped as radiance.)
-
-## 8. Denoising and stability
-
-The screen tail's machinery (allocation, dispatch, records, the temporal/spatial passes) with specular's own rules:
-- **Virtual motion, curvature-aware, never "exact":** the history fetched where the reflection's correspondence was last frame - the hit
-  point reprojected through the *reflecting* surface's motion and curvature (ReBLUR's blend of virtual and surface motion by roughness
-  and curvature, a virtual-history confidence).
-- **Secondary-hit identity:** a world hit carries its instance and that instance's previous transform (the instance slots keep it; the
-  skinned pose motion too), so a moving reflected object is reprojected as itself; proxies (sec. 9) without correspondence are rejected
-  conservatively (short history).
-- **Mirrors:** temporal reconstruction without spatial blur.
-- **History:** by roughness and motion (the 4-frame cap for moving texels is a measured setting, not a ghosting guarantee); disocclusion
-  short history + a wider spatial pass for a few frames.
-- **Fireflies:** clamped against the neighborhood's statistics (positive radiance only; residuals never).
-- **Metadata per texel:** fresh / reused / fallback, the TraceResult class, the hit cache's age - accepted history never hides a stale
-  cache (an age past its bound shortens the history).
-- A hashed seed for the RIS tail at hits makes it repeatable, not exact (structured error): measured against a per-frame seed.
-
-## 9. Backends, guides, dynamics
-
-- **Full-size sharp guides from R1:** the depth prepass writes the normal and roughness at full size for materials classified sharp (by
-  the material's roughness range, known before the frame - no current-frame tile list, no circular dependency); the sharp tiles come
-  from that target.
-- **Planar backend, benchmarked in R0** (for the Police floor likely the best picture per ms without HW RT, skinned movers exact): one bounded planar-reflection view (the scene rasterized mirrored, its own culling and shadow demand)
-  for a large coherent planar receiver (a polished floor, water) - against the compute path on Police (ms, quality, skinned movers seen
-  exactly). Chosen per receiver region where it wins; not universal.
-- **Off-screen dynamics:** skinned/moving objects through a per-frame dynamic BVH of coarse proxies (bone capsules / boxes, the mesh's
-  mean albedo), labelled approximate; the planar backend or HW RT where exact matters.
-- **Translucent front layer and water:** a nearest-translucent depth pre-pass, one layer (glass over water: the water takes probes).
-
-## 10. Probes: freshness split
-
-They stay the fallback. Two freshness states to start (more when probes matter more): **geometry** (what it captured is still there: a
-mover in its box, a door opened, a material recompiled -> recapture) and **lighting** (relit from its captured G-buffer by the lights and
-the GI: a lamp off -> relight only; its prefiltered levels rebuilt after either). A probe
-weighs nothing until published; its ages are visible. Plus the §7b items. "Surfel lighting is always current" becomes "the cache
-publishes an update state and age".
-
-## 11. References, metrics, budgets
-
-- **Two references:**
-  1. *Same-model reference*: many samples of exactly the declared transport model (T0/T1, the same cache and captured materials) - tests
-     integration and reconstruction.
-  2. *Independent small-scene reference*: a CPU path tracer with the real materials (analytic: the test scenes' constant materials and
-     a textured one), analytic lights, explicit visibility, 3+ bounces - exposes what T0/T1 miss (glossy hits, texture detail, stale
-     lighting, bounce limits).
-- **The metric:** relative mean absolute error of the reflection term in **linear HDR**, normalized by the reference's mean over the
-  region, pixels below 1e-3 of the region's mean excluded from the denominator, measured **before and after** denoising; per roughness
-  bucket (0, 0.1, 0.25, 0.5, 0.75, 1) **and per object mask** (a missing reflected person is its own number, never averaged away).
-- **Representative ray benchmarks (R0):** mirror-coherent and rough-incoherent rays; world-only and the SSR-failure distribution;
-  traversal alone and with hit shading; warm and cold caches; dynamic BVH maintenance apart; full-size sharp coverage. The budget is
-  set from these.
-- **Memory ledger:** a resource-lifetime table (each target and buffer: size at 1080p / 4.6 MP, shared with the screen tail or not,
-  alive when) and the peak concurrent - 40 MB at 4.6 MP is a hypothesis (32 B per half-size texel is ~37 MB before the pyramid,
-  histories, guides, queues, scratch, sharp tiles).
-
-## 12. Phases (never two correctness-changing pieces in one milestone)
-
-| Phase | Builds | Gate |
+**Earns its place** (each optional; each only after the plain path is correct; each wins or is dropped at equal total GPU time):
+| Candidate | Condition to build | Gate |
 |---|---|---|
-| **R0** | The hit contract and the accessor's spec (with the GI thread), both references and the metric, the representative ray costs, the memory ledger, **the planar backend's benchmark on Police** | Today's error table; the costs; the ledger; planar vs compute |
-| **R1** | Sharp guides (prepass), VNDF sampling, the pyramid screen trace, the materials' demodulated lit-diffuse target (6.3) and the id target, the common hit-lighting function (T0 with the hit's probe specular), the resolve, the materials reading it | Screen-hit error vs the same-model reference under 10% (glossy floor, mirror box, **a chrome object**); below the cache's error |
-| **R1b** | Multiple-scattering compensation (Turquin), alone | Rough metal vs the independent reference |
-| **R3a** | World closest hit from the origin, typed coverage, the cache accessor | Off-screen / behind-the-first-surface error; no sky through a coverage hole |
-| **R2** | Specular temporal with secondary-hit identity, curvature-aware virtual motion, metadata | Flicker and moving-camera error at P3's level; movers rigid and skinned |
-| **R3b** | The hit cache (6.4) and the fresh direct replacement by selection with the shadow pages' reflection demand (6.1, 6.5); then (separate milestone) T1's restricted secondary specular | Each measured against the references; penumbra error at hits |
-| **R4** | Glossy reservoirs with reconnection (6.2); the adaptive budget across roughness | Error at equal ray count vs R3b; effective samples per roughness bucket; continuous error across 0 .. 1 |
-| later | Planar backend (benchmark first), relit probes and freshness, off-screen proxies, translucency, water | each its own |
+| Surfel light proposals (a per-surfel `q_shared`, RTXDI's ReGIR shape on our surfels) | E's per-hit RIS is the bottleneck on the dense lab | lower error at equal time; the centre-vs-hit bias on the big-triangle scene under the per-hit variance |
+| Glossy path reservoirs (sec. 12.1) | D's plain path validated; the unresampled estimator passes B's gates | sec. 12.1's gate |
+| Skinned triangle BVH | sec. 11's full-chain benchmark within 0.3 ms | off-screen Lily vs independent; else capsules as a distinct, labelled approximation |
+| Rough planar | smooth planar shipped | vs the world-ray reference on Police's floor |
+| Emitter MIS, textures at the hit, a decomposed probe capture, relit probes, T2 | a measured need | each its own |
 
-## 13. What changed from v1 and why
+**12.1 Glossy path reservoirs - the fenced experiment, specified so it can be judged.** Scheme: **GRIS / RTXDI ReSTIR PT** for one-vertex
+paths x -> y, its normalization intact; every extra heuristic labelled below and measured on its own. **No blanket unbiasedness claim.**
+- *Endpoints:* finite (instance-local: instance + generation, triangle, barycentrics) or a **true sky miss** (an environment direction).
+  Probe fallbacks (unknown coverage) are **not** reservoir samples: evaluated outside, labelled.
+- *Measures and targets.* VNDF pdf `q_w`; finite endpoints in area measure `q_A = q_w |n_y.-w| / |y - x|^2`. The RGB integrand
+  `f_A(x, y) = f_s(x, wo, w) L_o,model(y, -w) V(x, y) |n_x.w| |n_y.-w| / |y - x|^2`; the **scalar target** `p^_A = lum(f_A)` (luminance
+  informs the target; it is not the integrand), floored at `p^_min` (= 1e-6 of the receiver's mean) so a zero target gives weight 0 and no
+  division. Sky directions keep solid angle: `f_w = f_s L_sky(w) V_inf |n_x.w|`, `p^_w = lum(f_w)`. The two domains never shift into each
+  other.
+- *Stored:* the endpoint, `W = (1/p^(Y)) sum_i w_i`, `w_i = m_i p^(y_i) / p_i`, M, confidence c, the validation epoch, current validity.
+  *Reconstruction:* the RGB estimate is `f(Y) W` in Y's measure, converted to the composite's `R^` (the geometric terms cancel into the
+  solid-angle integrand); `U = R^ / B` as sec. 5.
+- *Shift:* reconnection x' -> x with y fixed - **Jacobian 1 only for a static endpoint or a rigid, area-preserving motion** (the
+  instance's transform delta applied to y); non-uniform scale and deformation (skinned) are **rejected** as reuse candidates until their
+  mapping is implemented and tested. The target is re-evaluated at x; V(x, y) by one BVH ray per spatial candidate, by sec. 7's log for
+  the temporal one.
+- *Four rejection cases, each with its own normalization:* (i) valid candidate, zero current contribution (newly occluded): kept in the
+  MIS normalization with `p^ = 0`; (ii) invalid mapping (instance destroyed / regenerated): removed from the candidate set, its M not
+  merged; (iii) outside the supported domain (deformed endpoint, a shift across domains): never a candidate; (iv) discarded by a
+  numerical or compatibility heuristic (normal > 25 deg, depth > 10%, c < 0.25): **a labelled heuristic that biases**; measured with and
+  without. M capped at 20 temporally, 3-5 spatial candidates.
+- *Metadata:* **current validity** (endpoint alive, this frame's classes, the lighting certificate) separate from **history provenance**
+  (the ages and classes merged over time, used only to limit trust, never to poison the current result).
+- *Order:* the unresampled estimator first (B, D), temporal reuse, then spatial (RTXDI's advice).
+- *Gate:* at equal total GPU time against D (reservoir passes and visibility rays counted): lower RMAE before and after reconstruction on
+  the glossy floor, the mover crossing and the fixed-camera lamp switch; the error's autocorrelation at lags 1-4 reported; the two-receiver
+  scene unbiased (repeated runs); the zero-radiance invariant. Fails -> dropped, D stays.
 
-| v1 | v2 | Why |
+## 13. The final review (v3): what was adopted, and where we still differ
+
+| Review point | Landed in |
+|---|---|
+| 1 Probe ownership: no decomposition of a combined probe; T1 explicit; secondary probe specular = labelled additional-bounce estimate; diagnostic mode; w(r) only on identifiable traced emissive endpoints; probes keep a labelled overlap, no global fade | sec. 3, 10 |
+| 2 Support-guaranteed sampling: `q_mix` with `q_safe`, division by the actual mixture; importance at the hit; centre visibility guides, is not evidence; no undeclared hybrid; a reservoir's W is not a pdf; surfel reservoirs optional; novelty = the integration (ReGIR exists) | sec. 1, 6, 12 |
+| 3 Reservoirs: scalar p^ vs RGB f, W, reconstruction, floors; Jacobian 1 limited to static / rigid area-preserving; four rejection cases; no blanket unbiasedness, a named scheme, labelled heuristics; finite / true sky / fallback separate, fallbacks outside; validity vs provenance; unresampled first; F optional | sec. 12.1 |
+| 4 Visibility reuse: epoch + bounded log, old and new bounds, all reflection-relevant geometry, since last validation, retrace on expiry, two certificates; `PREFIX_INCOMPLETE` never attenuates radiance | sec. 4, 7 |
+| 5 Planar: `HIT_PLANAR_SUPPORTED`; clipping / winding / feedback tests; smooth first; filtered, not "no reconstruction" | sec. 4, 8 |
+| 6 Composite units R^, B, U, C_final; the two tests; full-res receiver state; Q real on metallic pixels | sec. 5 |
+| 7 Desired / admitted / used LOD; screen hits measured, not "exact T0"; B's scope; the skinned benchmark's full chain on a declared GPU | sec. 9, 4, 12, 11 |
+| 8 Metrics: error-change flicker with correspondence; fixed-camera light sequence; bias from repeated runs; the three invariants | sec. 11 |
+| 9 The approve-now table | sec. 14 |
+
+**Where we still differ (little):**
+1. *"Use all geometry relevant to reflection visibility, not only shadow casters."* Agreed in substance; the note is that in this engine
+   every drawn instance has bounds and a change entry in the instance table (the shadow pairs filter a subset of the same list), so the
+   log is the full list at no new cost - the review's worry about coverage of the log is answered by construction, not by a new system.
+2. *Planar blur for glossy planar receivers.* Agreed it is an approximation and goes after the world-ray comparison; we expect it to
+   win on Police's floor at r 0.1-0.2 (a filtered ideal image misses only surfaces the ideal view lacks, which on a floor is the
+   near-grazing band) - a hypothesis with the review's own gate, not a claim.
+3. *Screen path "discrepancy measured".* Agreed; one addition: the discrepancy has a known direction (the screen hit uses the current
+   material and this frame's shading; the world hit the capture and the cache), so for a *disagreement* between them the screen value
+   is the fresher one - the measurement decides whether the world path should learn from it (a lighting-age update), which is why the
+   screen path stays even where the world path could afford the ray.
+Everything else in the review is right and is in the contract as written.
+
+## 14. Decisions (final; the review's "approve now" folded in)
+
+| Decision | Status |
+|---|---|
+| The central opaque composite owns the receiver's environment / probe / reflection specular (materials stop adding it); units of sec. 5; receiver state at every pixel | **Decided** |
+| `E_direct,cached` per surfel from B as the declared baseline and exhaustion fallback, its own validity and age; the GI thread's conditions | **Decided** |
+| The planar path for Police first (smooth receivers), `HIT_PLANAR_SUPPORTED`, its three tests; shippable after B | **Decided** |
+| Screen Q export: one material variant, total cost and screen / world discrepancy measured before any migration | **Decided** |
+| Fresh actual-hit lighting (E) with `q_mix` / `q_safe` and sec. 9's limits | **Decided** |
+| Surfel light proposals, glossy path reservoirs, skinned BVH, rough planar, emitter MIS, decomposed probe capture, T2 | **Earn their place** (sec. 12), none a prerequisite |
+| Changed-box visibility reuse only with validation epochs and the complete change log | **Decided** |
+| The emitter blend w(r): temporary, identifiable traced endpoints only, bias reported | **Decided** |
+| Competitor claims replaced by measured quality / time / memory on the declared GPU | **Decided** |
+| The architecture is frozen; a deviation edits this document first | **Decided** |
+
+## 15. Changes
+
+**v3 -> v4** (the final review):
+| v3 | v4 | Why |
 |---|---|---|
-| "The surfel radiance already holds direct light" | It holds **indirect only**; the hit contract (sec. 3) with a cached direct term replaced by fresh where selected | v1 was wrong about our GI and would have double counted (cached total + fresh direct) |
-| Emission not accounted | Exactly once: secondary hits vs the receiver's partition by roughness (sec. 3) | Traced emission and emitter lights overlap at the receiver |
-| Diffuse hit lighting as "correct" | Declared models T0/T1/T2 | Glossy objects seen in a reflection lose their highlights in T0 |
-| A control variate on layer 1 (then f - c with C from layer 1) | An experiment with a convergence gate; layer 1 a labelled prior | C must be the integral of c; residuals are signed |
-| World trace resumed at the screen exit | Restarts at the origin; typed TraceResult; misses through holes go to probes | The screen depth does not certify the skipped segment |
-| Dominant direction for ray generation | Only for reconstruction; VNDF with the true normal | Rotating the lobe changes the pdf |
-| MS compensation inside the first correctness phase (both names) | Turquin, its own milestone after single-scattering tests | One correctness change at a time |
-| "Virtual motion exact", mirrors not denoisable, a fixed cap against ghosting | Curvature-aware, never exact; hit identity; mirrors temporal-only; metadata | Over-promises |
-| Full-size mirror guides in R4 | From R1, from the prepass by material class | R1's mirror gate needed them |
-| One reference (same cache) | Two, a defined metric, per-object masks | The same-cache reference cannot test the cache |
-| One random-ray benchmark, 40 MB | Representative benchmarks; a lifetime ledger | The budget depends on the ray mix |
-| Relit probes "never stale" | Four freshness states | Relighting cannot reveal geometry |
-| The "one estimator" as the leap | Tracing separated from hit shading, selective corrections | Coherent shading, honest metadata |
+| T1 "replaces the probe term for the lights it covers"; w(r) on the probe fallback | No decomposition claimed; probe specular = labelled additional bounce + diagnostic off mode; w(r) on traced emissive endpoints only | a combined probe cannot be decomposed |
+| Shared candidates from a surfel reservoir as E's mechanism | `q_mix` with a `q_safe` floor; surfel proposals optional | support conditions; a dark centre must not lose a light |
+| Reservoir section with Jacobian 1 for movers, "rejected still counted", weakest-status merge, env + probe misses one domain | sec. 12.1: scalar target, W and reconstruction defined, static / rigid only, four rejection cases, validity vs provenance, fallbacks outside, named scheme, no blanket claim | the review's point 3 |
+| This frame's changed boxes as reuse evidence | Visibility epoch + bounded log since last validation, old and new bounds, two certificates | a lamp off moves no box |
+| `HIT_PLANAR_EXACT`, "no reconstruction", rough planar at once | `HIT_PLANAR_SUPPORTED`, filtered, smooth first, three tests | an ideal mirror image is still an approximation |
+| Composite `final += F_env x resolved` | R^, B, U, C_final with the two tests; receiver state at full res; Q on metals | a double remodulation was possible |
+| "Glossy hits never request fine pages"; screen hits "exact T0" | desired / admitted / used LOD; discrepancy measured | too strong |
+| Flicker `mean|a_t - a_t-1| - mean|r_t - r_t-1|`; bias = a residual | error-change with correspondence; repeated runs; three invariants | cancellation; one residual is not bias |
+| Sec. 13 "beyond the review" (four leaps) | Folded: the hit-as-receiver into sec. 6 (a fact of the cells, not a leap), surfel reservoirs and reservoirs into "earns its place", the boxes into sec. 7's log, the planar requests into sec. 8 | no speculative prerequisites; the edge is the buildable contract |
+| 16 sections, 41 KB | 15 sections, the history folded | shorter |
 
-**v2 -> v2.1 (Fable's challenge, 2026-10-28: "clearly better, not just correct"):**
+Older: v1 -> v2 fixed the GI's content (indirect only), emission, declared models, the restart at the origin, two references; v2 -> v2.1
+made pages at hits and reservoirs the leap, dropped the control variate; v2.1 -> v3 adopted the first review (D/S split, records, the
+pass graph, hit / prefix classes, the emitter table, metrics, A-G). v2.1 is in git (97bb970); v3 was reviewed uncommitted and v4 is the first version committed after it.
 
-| v2 | v2.1 | Why |
-|---|---|---|
-| The leap = hit records + sorting + selective corrections | The leap = **exact shadowed many-lights at reflected points** (6.1) + **glossy reservoirs** (6.2); records/sorting are parity | Lumen HW and AMD hybrid already sort; the shadowed many-lights at hits is what we own and they lack |
-| Shadow pages at hits "a measured option" | First-class reflection demand on the pages, BVH rays where not resident | It is the differentiator |
-| No sample reuse (stochastic VNDF + denoiser, 2015-class) | ReSTIR with reconnection for glossy; the control variate dropped | On a compute BVH rays are the bottleneck; reuse is 10-30x effective samples |
-| Screen hits re-read the cache | The materials' demodulated lit-diffuse target: exact T0, free | The main view already shaded those points |
-| A sort/bin pass | A hit cache keyed by surfel: one fresh evaluation per unique hit | Cheaper, and makes the corrections affordable |
-| Emission partition at 0.3 | A blend band 0.2-0.4 (partition of unity) | A roughness-mapped floor showed a seam |
-| Selection by error, no memory | Hysteresis + a history reset on a flip | Fresh vs cached differ visibly: flicker |
-| T0 = diffuse + emission | + the hit's probe/sky specular | A metal in a reflection was black |
-| Planar backend "later" | Benchmarked in R0 | Likely best per ms for Police's floor |
-| Four probe freshness states | Two to start | Over-engineered before probes matter |
-| Rejected from the challenge | Per-surfel specular lobes (spherical Gaussians), a point+direction reflection cache, hit-space denoising | Small terms for their memory/relight cost; the surfel cache is the world cache; virtual motion already covers it |
+## 16. The last questions - answered (Tomas, 2026-10-28: "go ahead and get started")
 
-## 14. Open questions for Tomas
-1. The hit contract C3 (a cached direct term per surfel, replaced by fresh where selected) needs the GI to cache `E_direct` per surfel -
-   lighting writes that accessor as with the BVH and the emitter view?
-2. The emission partition at the receiver as a roughness blend (0.2-0.4): acceptable until an MIS version is measured?
-3. The planar backend as a benchmarked option (it renders skinned movers exactly in a floor or water) - worth the second view's cost?
-4. Off-screen skinned movers: proxies (approximate) or wait for HW RT?
-5. The budget set after R0's measurements (not promised before) - agreed?
-6. The materials' extra output (the demodulated lit-diffuse target, 6.3: every material recompiled, ~18 MB at 4.6 MP) - worth it for
-   exact, free screen hits?
-7. The reservoirs (6.2) as R4's leap - accept their correlation artefacts (measured) for 8-16x effective samples?
+Approved as recommended. His principles, the frame for every milestone: better than the competition *and* something worth
+contributing (clean code, smart ideas, simplicity); no wasted tokens or time; doing the right thing first - A may take as long as B
+when justified; the order comes from the logical dependencies, not from a decree; Police may grow test content (a more formal level)
+where the gates need it.
+
+1. **A's time box.** The benchmarks and references of A are the gates' foundation; recommended: A is allowed to take as long as B, and
+   the budget numbers it produces are the only ones B-E are held to.
+2. **The planar view's second scene pass** on Police (bounded to the floor's extent) - accepted as the floor's cost even if the compute
+   path later wins elsewhere? Recommended: yes; it is the one path that draws Lily exactly today.
+3. **The composite's recompile scope** (every opaque material stops adding its environment specular; a layout change): with the Q
+   variant's prototype in the same scope, or apart? Recommended: the composite's change first (B needs it), Q's variant in C.
