@@ -93,7 +93,26 @@ What it says:
 - The visibility in the resampling weights changes nothing here (the shadowed torches land in the heads); it pays behind walls
   (the lab: 0.41 -> 0.26).
 
-So before a denoiser can pay, three pipeline changes would (each its own decision, none built): **the tail's candidates by binary search**
+### After the fixes (2026-10-27)
+
+**1. No overflow** (xLIONRender 9abc3bf): 2-uint cell headers (a cell never shades every light) and a cell ring that grows (no EXACT
+fallback; 6.5 MB at first, 9 MB at 4096 lights on the big view). **2. The tail's samples by binary search** (9fc94ea): bitwise the same
+images. GPU scene ms, 1920x1080 / 3093x1493:
+
+| Lights | CELLS | SAMPLED plain | resampled | resampled + visibility | error plain / resampled |
+|---|---|---|---|---|---|
+| 64 | 0.18 / 1.00 | 0.17 / 0.39 | 0.23 / 0.49 | 0.23 / 0.50 | 0.057 / 0.011 |
+| 256 | 0.50 / 1.21 | 0.31 / 0.50 | 0.81 / 1.15 | 0.88 / 1.62 | 0.31 / 0.115 |
+| 1024 | 2.42 / 3.82 | **0.27 / 0.57** | **0.69 / 1.48** | **0.75 / 1.99** | 0.65 / 0.30 |
+| 2048 | 3.78 / 7.81 | **0.30 / 0.60** | **1.15 / 2.71** | **1.81 / 3.65** | 0.78 / 0.31 |
+| 4096 | 6.95 / 14.78 | **0.34 / 0.84** | **2.56 / 5.47** | **3.21 / 4.57** | 0.88 / 0.40 |
+
+**Where SAMPLED wins now:** the plain tail from 64 lights up (flat: 0.3 ms at 1080p whatever the density, but 30-90% noise per frame);
+the resampled tail from ~1000 lights in reach (3.5x faster than CELLS at 1024, 2.7x at 4096; 30-40% noise per frame). Below ~500
+lights CELLS (exact) is as fast or faster. The CPU cell build (0.5 - 7 ms) is now the largest cost at high densities: change 3 (the GPU
+build) is next. A denoiser would turn the resampled tail's 30-40% into a usable image; it pays from ~1000 lights in reach.
+
+Before these fixes, three pipeline changes would (each its own decision, none built): **the tail's candidates by binary search**
 of the cumulative probabilities (O(log n), not the list walk); **the cells built on the GPU** (P2's plan: the CPU build is linear); **a
 larger or adaptive cell buffer** (no EXACT fallback at 4096 lights). With those, SAMPLED's cost stops growing with the density and the
 denoiser turns its noise into a usable image.
