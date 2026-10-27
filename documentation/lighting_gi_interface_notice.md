@@ -83,6 +83,24 @@ needs, read only:
 Lighting's side (once the view exists): the top N emitters by power (2048; the rest folded into their neighbours, the flux kept),
 contact-shadowed by the screen trace, no shadow pages; never lighting their own surface.
 
+## Proposal: what reflections read from the GI (reflections milestone A, 2026-10-28; documentation/reflections_strategy.md sec. 2)
+
+Reflections shade a secondary hit y as `D(y) + S(y, -w)` with `D(y) = L_e + rho_d / pi (E_direct + E_indirect)` cached per surfel. The
+GI holds part of it today; the rest is asked for here, read-only, in the GI's files written by reflections as the two accessors were:
+
+| Need | Today | Asked for |
+|---|---|---|
+| The hit: instance, triangle, barycentrics (world rays) | `getBvh()` + the GPU walk (`xlionrender_gi_bvh.glsl` `GICast`); measured by `instance::m_ReflTraceBench` | - |
+| `E_indirect` at the hit | the surfels' shown light (indirect only), read through the instance's level | the surfel of a hit (instance, triangle -> its surfel: the read grid's lookup the materials use), GPU side |
+| `E_direct,cached` at the hit | not stored: the GI's `Direct()` runs at its own ray hits and is not kept | per surfel, `Direct()` at the centre (the sun, the point lights, a BVH shadow ray each) on the links' budget, relit on the links' triggers, with its age; a buffer beside the shown light. Its own validity (VALID / STALE / REBUILDING) and age |
+| `rho_d`, `L_e` at the hit | the capture: albedo and emission per surfel and per triangle | - |
+| Roughness, metallic at the hit (T1's secondary specular) | not captured | the capture's two more channels (the materials' capture pass writes them as it writes albedo) |
+| Coverage: is the ray's extent resident, is the hit instance represented | the BVH covers opaque rigid GI meshes; no query | a coverage query (a box -> resident or not), and the list of drawn instances the BVH does not represent (skinned, masked, no GI) with their old and new bounds per frame - the visibility change log of reflections_strategy.md sec. 7 |
+
+The GI's conditions on the BVH hold for all of it (read after the GI's update in the frame; never walked when empty). Nothing here
+changes the GI's own light or its tests; each item lands with the milestone that first reads it (B: `E_direct,cached`, the hit's
+surfel, roughness / metallic, the coverage list; E: the cached term's validity in the selection).
+
 ## Not proposed
 
 - No GI code changes from lighting; no shared mutable state; no lighting dependency on GI buffers in the main view's shading.
