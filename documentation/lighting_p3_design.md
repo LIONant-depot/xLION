@@ -288,6 +288,26 @@ material without a G-buffer variant). SCREEN at 4096 lights: 0.57 ms at 1080p wi
 the test's per-frame error 0.037 -> 0.041, the mean 0.996. (The rig's SCREEN error now holds the screen trace's contact shadows,
 which its CELLS reference does not have: 0.12 - 0.15.)
 
+### The perf pass (2026-10-27)
+
+Measured with the bench's split (G-buffer, tail, the denoiser's temporal and spatial passes: a timestamp between them), the rig at
+3093 x 1493, 4096 lights; every gate green, the baseline images bitwise.
+
+- **The light rings in device memory:** the cell ring and the light ring were host memory (HOST_VISIBLE | COHERENT picks system RAM
+  first): every shader read of a light list crossed PCIe. xGPU's `buffer::setup::m_bWriteOnly` puts a CPU_WRITE_GPU_READ buffer in
+  device-local memory the CPU can map (resizable BAR), host memory where there is none or the heap is full; opt-in, a readback through
+  it still works (uncached, slow - only the tests read the cells back). The GPU cell build 0.15 -> 0.021 ms (its copy into the ring was
+  most of it), the tail pass 0.364 -> 0.338, mode 2 (plain) 0.689 -> 0.600, SCREEN's total 0.714 -> 0.670.
+- **The denoiser's tile** packed in two vec4 arrays (the distance in the diffuse's w): temporal 0.135 -> 0.129 ms. Spatial 0.044.
+- **Tried and dropped:** a sparser 7 x 7 window - 16 taps at stride 2 (temporal 0.084 ms) and a 25-tap checkerboard (0.103) - fail the
+  bias gate (-1.69%, -0.79%): fewer taps, a noisier deviation, the clamp shaves more. The 49 taps stay.
+- **The tail pass, 0.34 ms:** 8 candidates, each a binary search of the cell's distribution, a light and a one-tap shadow, then the
+  pick's filtered shadow and the screen trace (~0.08 ms). Left as it is (4 candidates were inconclusive earlier).
+- **The sun on Bistro** (Tomas's view, maximized, Release, XLION_GPU_TIMES): the scene pass 1.21 ms (prepass 0.09, shading 1.12);
+  shadows + scene + tone map 1.88. The clipmap's reference was 0.72, the virtual pages' 1.14 when the gap was recorded (0.26 of it the
+  request pass); the sun's lookups are ~0.08 ms per million pixels (~0.37 ms here), the request pass 0.42 - the gap stays the
+  documented follow-up (strategy sec. 8), not the tail's.
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?
