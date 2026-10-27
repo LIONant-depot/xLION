@@ -163,32 +163,74 @@ material, last frame's result read by the material, a screen pass) and the coord
 tail shaded and denoised in screen space, the material remodulating it.** Both the tail's diffuse and its specular are denoised (as
 MegaLights does); the same screen data serves the GI, reflections and AO later.
 
-1. **The thin G-buffer** (half resolution): every lit draw that is not blended - opaque, masked, double sided, skinned - drawn again with
-   its own material pipeline into a half-size pass: the lighting block's G-buffer flag makes `PBRLighting` (`R/shaders/mb_standard_pbr.frag`,
-   which every lit material includes) return the surface's octahedral normal and roughness instead of lighting it, which the material
-   writes as its color. No material template, compiler or resource format changes: the PBR materials recompile once for the new code in
-   the shared file. Its own depth. A masked material discards in its own code, so its holes are right; a material that does not include
-   `mb_standard_pbr.frag` (unlit) is left out. Rejected: new material outputs (MRT) - xGPU would need independent blending, the material
-   templates and every material's outputs would change, and unlit and blended materials need a different output set, for the same data;
-   stores from the material - a fragment cannot know it is the visible one without early depth tests, which break `discard`.
+1. **The thin G-buffer** (half resolution): every lit draw that is not blended - opaque, masked, double sided, skinned - drawn again into
+   a half-size pass with its material's **G-buffer variant**: the xmaterial compiler compiles every material once more with
+   `XLION_GBUFFER_OUTPUT` (data_file v7: plain and bindless, as the bindless HDR variant was added in v5), where `PBRLighting`
+   (`R/shaders/mb_standard_pbr.frag`, which every lit material includes) returns the surface's octahedral normal and roughness and no
+   lighting code is compiled in - the material's own code writes it as its color, a masked material discards in it. A material that does
+   not include `mb_standard_pbr.frag` (unlit) has no such output and is left out. The variant serves the later attribute passes too
+   (velocity, the GI's material capture). Its own depth. **Measured against writing the G-buffer from the depth prepass** (Release,
+   maximized, `XLION_GPU_TIMES`: SCENESPLIT, SCREENSPLIT): the full-resolution depth prepass costs 0.088 ms on Bistro (0.017 Police),
+   the GI's half-size depth redraw of the same clusters 0.076 ms (0.012) - a second geometry submission is cheap; the prepass route would
+   evaluate the materials' normal and roughness for 4x the pixels (and its overdraw), keep ~37 MB of full-resolution targets, turn the
+   prepass's one depth pipeline a geometry run into a material's, and change the exact path (masked, double sided and skinned are not
+   prepassed today). Rejected also: new material outputs in the main pass (MRT: xGPU's independent blending, every material's outputs,
+   unlit and blended materials' different sets) and stores from the material (no early depth test with `discard`).
 2. **The tail screen pass** (half resolution, a full-screen pass with the materials' pipeline layout, so `xlionrender_local_lights.glsl`
    is shared, not copied): per pixel the world position from the G-buffer's depth, the normal and roughness from it; the cell's tail
    resampled (RIS with visibility, the head left out) and shaded **demodulated**: diffuse with albedo 1, specular with F = 1 - the
    material multiplies its own terms back, so nothing is divided (no fireflies on black or metal surfaces). Two targets: diffuse, specular.
 3. **The denoiser** (compute, half resolution), MegaLights' shape: temporal - last frame's result reprojected by the camera (and by the
-   movers' motion, the second step), rejected by depth and normal against last frame's G-buffer, clamped to the current neighbourhood,
+   movers' motion, the second step), rejected by distance and normal against last frame's records ("Built" below), clamped to the current neighbourhood,
    up to 12 frames accumulated -, then spatial - 4 taps weighted by depth, normal and roughness, wider where the history is short (a
    disocclusion). Specular's history is shorter where the surface is glossy (its lobe moves with the view).
 4. **The material** (the main pass): with the screen tail on, the head is shaded exactly as before; the tail is the denoised result,
    upsampled from the 4 half-resolution texels around the pixel weighted by depth and normal (as the GI's screen read), times its own
-   diffuse and specular terms. A pixel no half-resolution texel matches (a silhouette, a blended surface in front) shades its tail inline
-   (the sampled path: unbiased, noisy) - blended surfaces always do.
-5. **When:** a light count threshold set from the night-market rig switches between CELLS (exact) and the screen tail; below it nothing
-   of this runs and the images are bitwise what they were.
+   diffuse and specular terms. A pixel no half-resolution texel matches (a silhouette, a blended surface in front) shades the rest of its
+   list exactly - blended surfaces always do.
+5. **When:** a light count threshold set from the night-market rig (512) switches between CELLS (exact) and the screen tail
+   (`light_mode::AUTO`); below it nothing of this runs and the images are bitwise what they were.
 
-Memory (half resolution of 3093 x 1493, 1.15 M texels): G-buffer RGB10A2 + depth, this frame's and last frame's (2 x 9.2 MB), the tail
-2 x R11G11B10 (9.2 MB), the history 2 x RGBA16F ping-ponged (36.8 MB) - **~64 MB** (the target 61). Costs: measured in the rig and the
-ledger once built (a geometry pass at a quarter of the pixels, the tail at a quarter, the denoiser's passes).
+### Built (2026-10-27)
+
+`light_mode::SCREEN` (`R/plans/forward/xlionrender_plan_forward.cpp` renderTail; `R/shaders/xlionrender_tail_screen_frag.glsl`,
+`xlionrender_tail_denoise_comp.glsl`; the material side in `xlionrender_local_lights.glsl` LocalTailScreen; the G-buffer variant in
+`mb_standard_pbr.frag` under `XLION_GBUFFER_OUTPUT`), and `light_mode::AUTO`, the default: CELLS below `m_LightScreenThreshold` (512)
+lights, SCREEN from it. As built, against the plan above:
+
+- **One G-buffer**, not two: last frame's distance and normal travel in the denoiser's records (a uvec4 a texel: the diffuse and the
+  specular in halves; the distance, the normal at 4 + 4 bits and the frames in the last word), so last frame's targets are not kept.
+- **The spatial pass's result is the history** (SVGF's first level, fed back): what the materials read and what the next frame
+  reprojects - two record buffers, no third for the materials.
+- **A pixel the screen tail does not cover** (a silhouette, a blended surface, a material without a G-buffer variant) shades the rest of
+  its list **exactly**, not with the inline sample: no noise anywhere, and a scene whose materials have no variant yet looks as with CELLS.
+- xGPU grew two formats (`A2B10G10R10_UNORM`, `B10G11R11_UFLOAT`, appended): the G-buffer and the tail pass's two targets.
+- **Memory: 48 B a half-size texel - 52.9 MB at 3093 x 1493** (23.7 MB at 1920 x 1080): G-buffer 4 + depth 4, the tail 2 x 4, the
+  records 2 x 16 (under the 61 MB target).
+
+Measured (`R/tests/xlionrender_test_screen_tail.cpp`, the rig's street at 1024 lights, 640 x 360, against CELLS of the same frame in a
+second view; Release, the same in Debug with Vulkan validation, no error):
+
+| | inline SAMPLED (RIS + visibility) | SCREEN |
+|---|---|---|
+| per-frame error, still camera | 0.301 | 0.048 - 0.053 |
+| flicker (frame to frame) | 0.397 | 0.018 - 0.023 |
+| 16-frame mean's error (bias) | 0.074 | 0.043 (2.8% darker: the demodulation's approximations) |
+| moving camera / moving lights / a box crossing (disocclusion) | 0.30 / 0.30 / 0.30 | 0.053 / 0.058 / 0.049 |
+
+The rig (`R/tools/bench_many_lights`, 60 warmed frames; the scene pass with the head + the screen tail's passes; ms):
+
+| Lights | CELLS 1080p / 4.6 MP | SCREEN: scene + G-buffer + tail + denoiser, 1080p | 4.6 MP | error: inline RIS / SCREEN |
+|---|---|---|---|---|
+| 256 | 0.52 / 1.04 | 0.42 + 0.01 + 0.08 + 0.06 = 0.57 | 1.20 + 0.02 + 0.23 + 0.18 = 1.63 | 0.115 / 0.023 |
+| 1024 | 1.89 / 4.06 | 0.48 + 0.01 + 0.10 + 0.06 = 0.65 | 1.00 + 0.02 + 0.21 + 0.12 = 1.35 | 0.301 / 0.081 |
+| 4096 | 7.41 / 15.75 | 0.57 + 0.01 + 0.13 + 0.06 = 0.76 | 1.17 + 0.02 + 0.28 + 0.12 = 1.59 | 0.386 / 0.093 |
+
+CELLS costs less up to ~300 lights: the threshold 512. At 4096 lights SCREEN is ~10x faster than CELLS with a quarter of the inline
+tail's per-frame error. **Not built yet:** the materials' compiled G-buffer variant (the xmaterial compiler's `XLION_GBUFFER_OUTPUT`
+variant, data_file v7 - its recompile scope waits for Tomas: until then the project's materials shade their tail exactly in SCREEN; the
+built-in constant materials and the tests have their variants); motion vectors for movers (a moving object's tail ghosts until the clamp
+drops it); the specular's own denoising beyond the shared passes (its history is shorter on glossy surfaces).
 
 ## Decisions (Tomas)
 
