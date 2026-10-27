@@ -58,8 +58,8 @@ object's tail ghosts until the history clamp drops it.
 | Velocity (moving objects) | RG16F | 18 MB | 5 MB |
 | **Total** | | **~245 MB** | **~61 MB** |
 
-GPU time: MegaLights' temporal + spatial at half resolution is documented by Epic in the 0.3-0.6 ms range on current GPUs at 1080p
-(their numbers, not ours); ours would be measured in the ledger's "reconstruction" row. Shading would also change: the tail sampled at
+GPU time: not estimated from others' numbers - measured in the ledger's "reconstruction" row once a prototype exists (the work per
+pixel: a temporal pass reading ~4 history texels and a spatial pass of 4 samples, at a quarter of the pixels). Shading would also change: the tail sampled at
 half resolution (1 sample per 2x2) cuts its cost about 4x.
 
 ## Recommendation
