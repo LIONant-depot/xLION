@@ -322,6 +322,42 @@ paths x -> y, its normalization intact; every extra heuristic labelled below and
 - **Not measured in A (owed):** the skinned refit (needs the refit; earns its place), the planar view's ms (it is B's first build), the
   sharp guides' prepass (B builds them).
 
+**12.3 Milestone B's results (2026-10-28; the same GPU and settings).**
+- **Built** (xLIONRender c0c9fba .. c572617): the world trace with fresh hit lighting from the GI's model (B1); the planar view -
+  the scene mirrored in the floor's plane, oblique near plane, resolved 1:1 into the records (B2a), the floor found through the GI's
+  geometry and the Environment's settings (B2b), its coverage-weighted pyramid for rough planar receivers (B2c); the hit's own
+  specular (T1 restricted) and the sharp receivers at full size (B3); PREFIX_INCOMPLETE for rays crossing drawn things the BVH does not
+  hold (B4). Police's test content: the floor's material more reflective, a sphere grid (dielectric / metal x roughness 0 .. 1).
+- **The lab against the independent reference** (RMAE of R^ | dark-leak; xlionrender_test_reflections):
+
+  | Receiver | today (probes / sky) | traced | + the floor's planar view |
+  |---|---|---|---|
+  | floor | 0.937 / 0 | 0.355 / 0 | **0.259** / 0 |
+  | chrome | 0.429 / 0 | **0.094** / 0 | 0.095 / 0 |
+  | rough gold | 0.302 / 0 | 0.302 / 0 | 0.302 / 0 (above the traced roughness: B2's) |
+  | floor at roughness 0.3 | 0.760 | 0.422 (one ray a texel) | **0.310** (the pyramid) |
+
+  Gates: chrome under 10% (9.4%); dark-leak 0; the invariants pass; Lily in the floor through the planar view. Not met: the floor's
+  0.26 - the remaining error is the hit's lighting (the GI's model at the hit against the path-traced reference), not the
+  reflection's geometry; it is the GI's error, measured in the lab's GI tests, and E's to reduce.
+- **Bitwise neutral when off:** light_lab, screen_tail and probes (1023 + 861 + 4 images) at every step.
+- **Cost on Police** (maximized 3778 x 1600, the trace at half size 1574 x 756; GPU ms of shadows + scene + tone map, the
+  reflection pass alone in brackets):
+
+  | View | off | traced to roughness 0.5 | traced + planar floor |
+  |---|---|---|---|
+  | the sphere grid | 2.66 | 4.48 (trace 1.45: 402k rays, 277 Mrays/s) | 5.52 (pass 1.02: 3k rays + 401k planar texels) |
+  | Lily | 3.27 | 5.12 (trace 1.51: 569k rays, 377 Mrays/s) | 6.34 (pass 1.20: 64k rays + 508k planar texels) |
+
+  The trace is within A's budget (3-4 ms). The planar view adds ~1.0-1.2 ms over the trace alone, and the reflection pass still costs
+  1.0 ms when the planar view leaves it 3k rays: the planar texels' resolve (the pyramid's taps) runs in the trace's dispatch - owed: a
+  resolve of its own, measured against the 0.1 ms it should cost. The tail's thin G-buffer (~0.35 ms) is shared with SCREEN.
+- **Found on the way (the GI's, not the reflections'):** the sphere grid showed the GI's diffuse as a patch per surfel - the display
+  filter's neighbour rule rejected a curved surface's neighbours (fixed and tested: test 6p); rough metals black on their shadowed half
+  - the GI reflection layer reads the 3-lobe basis at R, not convolved with the lobe. Both are in
+  `gi_surfel_reconstruction_proposal.md` (for review), with the surfels' move off the faces.
+- **Next:** D (reconstruction) - the traced rough receivers' noise (the sphere grid's sparkle at roughness 0.2-0.4) is its input.
+
 ## 13. The final review (v3): what was adopted, and where we still differ
 
 | Review point | Landed in |
