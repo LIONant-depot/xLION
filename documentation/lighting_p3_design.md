@@ -272,6 +272,22 @@ against the same lights shadowed by pages: the error 17.4 -> 13.8 (what remains 
 without a shadow: the lights pages are for). Cost: the tail pass +0.03 ms at 1080p, +0.08 ms at 4.6 MP (the rig). The denoiser's gates run
 without it (CELLS, their reference, does not shadow unshadowed lights).
 
+### Two performance fixes (2026-10-27)
+
+**The cells' build reused:** a render with the same lights and windows (a still camera over static lights - a light's or the camera's
+cell change rebuilds) copies the last build's lists from the device-local scratch instead of building them again (`light_cells::Key`).
+The rig: the GPU build 0.35 - 1.34 -> 0.04 - 0.15 ms (1024 - 4096 lights, CELLS / SAMPLED; it is still the copy into the ring).
+
+**The fallback where the screen tail does not apply:** the exact list (built after "Built") was measured only now: 3.4 ms of SCREEN's
+scene pass at 4096 lights against 0.25 without it - with no visible pixel taking it. The cost was the overdraw's hidden fragments where no
+depth prepass ran (the rig's and the tests' meshes; in the levels: masked, double-sided, skinned) and the helper invocations at the
+triangles' edges: off their surface, they never match and walked the whole list. Now: the most alike of the 4 texels when none is weighed
+(its view depth within 25%: a silhouette, a thin object - the GI's screen read does the same); none for a hidden fragment (the texel
+nearest it holds a nearer surface) and a helper invocation; else mode 2's inline resampled tail (unbiased, noisy - blended surfaces, a
+material without a G-buffer variant). SCREEN at 4096 lights: 0.57 ms at 1080p with its passes (CELLS 7.46), 1.29 ms at 4.6 MP (15.78);
+the test's per-frame error 0.037 -> 0.041, the mean 0.996. (The rig's SCREEN error now holds the screen trace's contact shadows,
+which its CELLS reference does not have: 0.12 - 0.15.)
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?
