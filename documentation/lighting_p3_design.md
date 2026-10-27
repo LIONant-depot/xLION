@@ -308,6 +308,26 @@ Measured with the bench's split (G-buffer, tail, the denoiser's temporal and spa
   request pass); the sun's lookups are ~0.08 ms per million pixels (~0.37 ms here), the request pass 0.42 - the gap stays the
   documented follow-up (strategy sec. 8), not the tail's.
 
+### P4 and emissive surfaces as lights (2026-10-27)
+
+**P4, the tail's traced visibility:** a picked tail light without shadow pages is shadowed by the screen trace (P3) and now also by a
+shadow ray through the GI's BVH (`gi::gpu_trace::getBvh`; `xlionrender_tail_screen_frag.glsl` TailBvhShadow: the GI's own any-hit,
+`GICast` with `g_GIBvhAnyHit`, stopped 5% short of the light: a fixture is not its light's blocker). It sees off screen and behind the
+first surface; what the BVH does not hold (skinned, masked, meshes without GI) stays the screen trace's. `instance::m_bTailTraceBvh` (on).
+Test (`xlionrender_test_screen_tail`, the wall off screen, 32 unshadowed lights against their paged reference): untraced 0.870, the screen
+trace 0.868 (it cannot see the wall), with the BVH 0.692 - what remains is the head's lights (shaded exactly, unshadowed: pages are for
+them). Cost: the tail pass 0.39 -> 0.59 ms at 4.6 MP on the rig with a small BVH bound.
+
+**Emissive surfaces as lights** (`instance::m_bEmitterLights`, off by default): the GI's emitter view as lights after the scene's (no
+shadow pages; the cells, the tail and the BVH ray treat them as any unshadowed light). Each a one-sided disc of its surfel's area, its
+radiance the GI's (the emissive scale in): irradiance radiance x A cos cos / (d^2 + A), the GI's own link weight (`LocalEmitterAtt`), its
+reach where A / (d^2 + A) x its luminance falls under `m_EmitterCutoff`; the strongest `m_EmitterLightsMax` (2048) by power, the rest left
+out (counted: `light_stats::m_nEmittersLeftOut`; ponytail: not folded into their neighbours). Remade only when `EmittersGen()` changes.
+The energy test (a 1 x 1 m panel 2 m over the floor): the view's flux 4.158 against the panel's 4.160, the discs' irradiance under it
+0.4639 against the panel's integral 0.4660 (both within 0.5%). **Double counting:** the GI's bounce already holds the emitters' light on
+the surfaces around them; with the emitter lights on as well, it counts twice - hence off until Tomas decides the GI's side (each surfel's
+emitter-direct term subtracted at the read, which changes the GI's image).
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?

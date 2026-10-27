@@ -1,5 +1,19 @@
 # Lighting -> GI: the interface notice (proposal, 2026-10-27)
 
+**Built (2026-10-27, Tomas: "add the two accessors yourself"; the GI thread agreed to both, with conditions):** the two read-only
+accessors below, written by lighting in the GI's files - no GI behaviour changed (the GI tests and the bitwise baselines pass):
+- `gi::gpu_trace::getBvh()` (`R/features/gi/xlionrender_surfel_gi_gpu.h`): `bvh_view { m_pNodes, m_pTri4, m_pInstances, m_pTlas,
+  m_TlasRoot, m_PrimOffset, m_bEmpty }`. The GI's conditions kept: never walked when `m_bEmpty` (the placeholder BVH loses the device;
+  also empty before the first pack), read after the GI's update in the frame (`updateGI` runs before the scene pass, which runs the tail
+  pass), coverage the opaque rigid meshes with GI.
+- `gi::world::ForEachEmitter(Fn)` / `EmittersGen()` (`R/features/gi/xlionrender_surfel_gi.h`): `emitter_view { m_Pos, m_Normal, m_Area,
+  m_Radiance, m_Instance }`, level-0 owned surfels of alive transporting instances, whether or not the GI's own emitter list exists. The
+  generation bumps on every emitter-list change (`m_bEmittersDirty`), on an emission change without a list rebuild
+  (`ResolveSurfEmission`) and on an emissive-scale change.
+- **Not built (deferred, Tomas's decision):** the GI leaving the emitters' direct term to lighting (proposal 2 below: per surfel its
+  emitter-direct term stored and subtracted at the read - it changes the GI's image). Until then lighting's emitter lights are **off by
+  default** (`instance::m_bEmitterLights`): with both on, the emitters' light on the surfaces around them counts twice.
+
 The lighting strategy (`documentation/lighting_strategy.md`, sec. 13 decision 5) owes the GI thread a notice of what lighting now
 publishes and what it would like to use. **Proposals only:** no GI file was changed; the GI thread decides what to adopt and when.
 `R/` = `example.lionprj/Cache/dependencies/xLIONRender/src/`.
