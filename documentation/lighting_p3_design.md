@@ -1,4 +1,4 @@
-# Lighting P3: the tail's reconstruction (design note, 2026-10-27 - waits for Tomas's decision)
+# Lighting P3: the tail's reconstruction (design note, 2026-10-27 - decided: "The decision" below; being built)
 
 `lighting_strategy.md` P3: "`EvaluateDirectAtReceivers`; screen trace (blocked-only); short-history denoiser; the global preparation
 budget" - gate: "key lights shadowed by pages, tail contact-shadowed; reconstruction error separate". Nothing here is built; two of
@@ -154,6 +154,41 @@ denoiser turns its noise into a usable image.
 2. When it pays: **A at half resolution, camera reprojection first** (~61 MB at 4.6 M pixels), demodulated, temporal (12 frames, clamp)
    then spatial (4 samples, depth weighted); velocity for moving objects second.
 3. The screen trace (contact shadows for the tail's unshadowed lights) after A: it reads the same depth.
+
+## The decision (2026-10-27)
+
+Tomas: build the denoiser (option A, half resolution), and "the right thing even if it requires more work at front" - the most
+competitive, simple and expandable shape, not the cheapest. Reviewed with Fable (the four shapes: material MRT outputs, stores from the
+material, last frame's result read by the material, a screen pass) and the coordinator. **Built: a half-resolution thin G-buffer, the
+tail shaded and denoised in screen space, the material remodulating it.** Both the tail's diffuse and its specular are denoised (as
+MegaLights does); the same screen data serves the GI, reflections and AO later.
+
+1. **The thin G-buffer** (half resolution): every lit draw that is not blended - opaque, masked, double sided, skinned - drawn again with
+   its own material pipeline into a half-size pass: the lighting block's G-buffer flag makes `PBRLighting` (`R/shaders/mb_standard_pbr.frag`,
+   which every lit material includes) return the surface's octahedral normal and roughness instead of lighting it, which the material
+   writes as its color. No material template, compiler or resource format changes: the PBR materials recompile once for the new code in
+   the shared file. Its own depth. A masked material discards in its own code, so its holes are right; a material that does not include
+   `mb_standard_pbr.frag` (unlit) is left out. Rejected: new material outputs (MRT) - xGPU would need independent blending, the material
+   templates and every material's outputs would change, and unlit and blended materials need a different output set, for the same data;
+   stores from the material - a fragment cannot know it is the visible one without early depth tests, which break `discard`.
+2. **The tail screen pass** (half resolution, a full-screen pass with the materials' pipeline layout, so `xlionrender_local_lights.glsl`
+   is shared, not copied): per pixel the world position from the G-buffer's depth, the normal and roughness from it; the cell's tail
+   resampled (RIS with visibility, the head left out) and shaded **demodulated**: diffuse with albedo 1, specular with F = 1 - the
+   material multiplies its own terms back, so nothing is divided (no fireflies on black or metal surfaces). Two targets: diffuse, specular.
+3. **The denoiser** (compute, half resolution), MegaLights' shape: temporal - last frame's result reprojected by the camera (and by the
+   movers' motion, the second step), rejected by depth and normal against last frame's G-buffer, clamped to the current neighbourhood,
+   up to 12 frames accumulated -, then spatial - 4 taps weighted by depth, normal and roughness, wider where the history is short (a
+   disocclusion). Specular's history is shorter where the surface is glossy (its lobe moves with the view).
+4. **The material** (the main pass): with the screen tail on, the head is shaded exactly as before; the tail is the denoised result,
+   upsampled from the 4 half-resolution texels around the pixel weighted by depth and normal (as the GI's screen read), times its own
+   diffuse and specular terms. A pixel no half-resolution texel matches (a silhouette, a blended surface in front) shades its tail inline
+   (the sampled path: unbiased, noisy) - blended surfaces always do.
+5. **When:** a light count threshold set from the night-market rig switches between CELLS (exact) and the screen tail; below it nothing
+   of this runs and the images are bitwise what they were.
+
+Memory (half resolution of 3093 x 1493, 1.15 M texels): G-buffer RGB10A2 + depth, this frame's and last frame's (2 x 9.2 MB), the tail
+2 x R11G11B10 (9.2 MB), the history 2 x RGBA16F ping-ponged (36.8 MB) - **~64 MB** (the target 61). Costs: measured in the rig and the
+ledger once built (a geometry pass at a quarter of the pixels, the tail at a quarter, the denoiser's passes).
 
 ## Decisions (Tomas)
 
