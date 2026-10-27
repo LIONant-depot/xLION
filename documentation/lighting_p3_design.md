@@ -334,6 +334,19 @@ The switch (`instance::m_bEmitterLights`, the Environment's GIEmitterLights) now
 GI shows and keeps it in what the GI bounces (lighting_gi_interface_notice.md, "Built (2026-10-28)"): the floor under a glowing panel
 0.1039 with the GI alone, 0.1094 with the emitter lights and the GI's bounces. Off by default until Tomas compares them.
 
+### The open gaps closed (2026-10-28)
+
+- **test_gi_render's Release crash** (a known intermittent segfault): `gi::world::UpdateEmittedLight` read a removed instance's mesh (freed)
+  before its alive test. Caught with a RelWithDebInfo build under cdb without the debug heap (the first run); after the fix 0 of 30
+  under cdb, 0 of 35 plain.
+- **Emitters over the limit** (`m_EmitterLightsMax`): folded, not dropped - each into the nearest kept one facing its way, the group a
+  larger disc (its area the sum, at the centre of its flux, the flux kept); none facing its way: left out, counted (folded into one
+  facing elsewhere, a panel's back lit the floor under its front: +17%). The panel at a limit of 20: the floor 0.1159 against 0.1094.
+- **The CPU's GI** honours the switch (lighting_gi_interface_notice.md).
+- **Movers and the denoiser:** over a moving box's own pixels its motion made the error worse (constant material 0.085 against 0.081
+  without, default 0.087 against 0.076): its texels kept up to 12 frames of a light that changes as it crosses the street (a lag).
+  A texel that moves keeps 4 frames now: 0.080 and 0.078 (a check in the test); the whole picture's mover error 0.044 -> 0.043.
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?

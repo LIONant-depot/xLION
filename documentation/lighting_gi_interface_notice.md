@@ -19,7 +19,8 @@ accessors below, written by lighting in the GI's files - no GI behaviour changed
   `setup::m_bEmitterDirectExternal` (GD[11] bit 64); switching rebuilds the links (their keys) and lowers every surfel (`LowerAll`).
   Energy test (`xlionrender_test_screen_tail`, a 1 x 1 m panel over a GI floor): the floor under it 0.1039 with the GI alone, 0.1094
   with the emitter lights and the GI's bounces (5%: not counted twice); the GI's part alone with the switch on 0.0017 (its bounces).
-  Ponytail: the CPU's ray solver (no compute) and the CPU links (`m_bEmitterLinks`) still count the emitters' direct light.
+  The CPU's ray solver (no compute) and the CPU links (`m_bEmitterLinks`) honour it too (2026-10-28; `xlionrender_test_surfel_gi` 6j3: under
+  a sign, the hits / links / sampling 0.0000 / 0.0001 / 0.0001 against 0.608 with it off), and the GPU commit leaves the links' term out.
 
 The lighting strategy (`documentation/lighting_strategy.md`, sec. 13 decision 5) owes the GI thread a notice of what lighting now
 publishes and what it would like to use. **Proposals only:** no GI file was changed; the GI thread decides what to adopt and when.
