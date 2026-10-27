@@ -328,6 +328,12 @@ The energy test (a 1 x 1 m panel 2 m over the floor): the view's flux 4.158 agai
 the surfaces around them; with the emitter lights on as well, it counts twice - hence off until Tomas decides the GI's side (each surfel's
 emitter-direct term subtracted at the read, which changes the GI's image).
 
+### The emitters' direct light handed to lighting (2026-10-28)
+
+The switch (`instance::m_bEmitterLights`, the Environment's GIEmitterLights) now also takes the emitters' direct light out of what the
+GI shows and keeps it in what the GI bounces (lighting_gi_interface_notice.md, "Built (2026-10-28)"): the floor under a glowing panel
+0.1039 with the GI alone, 0.1094 with the emitter lights and the GI's bounces. Off by default until Tomas compares them.
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?

@@ -10,9 +10,16 @@ accessors below, written by lighting in the GI's files - no GI behaviour changed
   m_Radiance, m_Instance }`, level-0 owned surfels of alive transporting instances, whether or not the GI's own emitter list exists. The
   generation bumps on every emitter-list change (`m_bEmittersDirty`), on an emission change without a list rebuild
   (`ResolveSurfEmission`) and on an emissive-scale change.
-- **Not built (deferred, Tomas's decision):** the GI leaving the emitters' direct term to lighting (proposal 2 below: per surfel its
-  emitter-direct term stored and subtracted at the read - it changes the GI's image). Until then lighting's emitter lights are **off by
-  default** (`instance::m_bEmitterLights`): with both on, the emitters' light on the surfaces around them counts twice.
+- **Built (2026-10-28, Tomas: "build it, keep emitters off"):** the GI leaves the emitters' direct term to lighting, behind the same
+  switch as lighting's emitter lights (`instance::m_bEmitterLights`, or the Environment's **GIEmitterLights**; off by default: the GI and
+  every baseline as before). Not by a stored term subtracted at the read: the GI treats the emitters as it treats the lights - a surfel's
+  light holds no emitter's direct light (no emitter sample, no emission its rays meet: the transport's D, the ray solver's pass, the
+  probes), and the hits are lit by them as by the lights (`EmitterIrradianceAt`, one sample with its shadow ray: the transport's F, the
+  pass' and the probes' hits) - so the bounces stay, the read and the materials are untouched (no layout change, no recompile).
+  `setup::m_bEmitterDirectExternal` (GD[11] bit 64); switching rebuilds the links (their keys) and lowers every surfel (`LowerAll`).
+  Energy test (`xlionrender_test_screen_tail`, a 1 x 1 m panel over a GI floor): the floor under it 0.1039 with the GI alone, 0.1094
+  with the emitter lights and the GI's bounces (5%: not counted twice); the GI's part alone with the switch on 0.0017 (its bounces).
+  Ponytail: the CPU's ray solver (no compute) and the CPU links (`m_bEmitterLinks`) still count the emitters' direct light.
 
 The lighting strategy (`documentation/lighting_strategy.md`, sec. 13 decision 5) owes the GI thread a notice of what lighting now
 publishes and what it would like to use. **Proposals only:** no GI file was changed; the GI thread decides what to adopt and when.
