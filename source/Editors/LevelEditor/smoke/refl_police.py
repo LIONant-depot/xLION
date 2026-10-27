@@ -8,7 +8,7 @@ import harness, bench_cull
 from harness import Editor
 
 LEVEL, SCENE, ENV_ID, L = "EF31687D49834DD9", "EF19AB610AD85421", "00000003", "Police Level"
-VIEWS = {"lily": "250,-4,4,0.8/1.9/5.3", "corridor": "90,-3,8,0.8/1.8/2.0"}
+VIEWS = {"lily": "250,-4,4,0.8/1.9/5.3", "spheres": "250,-14,3.6,0.6/2.0/2.6", "spheres_low": "200,-5,3.2,0.6/1.95/2.6"}
 
 ap = argparse.ArgumentParser()
 ap.add_argument("out"); ap.add_argument("--floor-y", type=float, default=1.5); ap.add_argument("--rough", type=float, default=0.3); ap.add_argument("--save", action="store_true")
