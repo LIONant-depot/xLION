@@ -206,7 +206,7 @@ lights, SCREEN from it. As built, against the plan above:
   its list **exactly**, not with the inline sample: no noise anywhere, and a scene whose materials have no variant yet looks as with CELLS.
 - xGPU grew two formats (`A2B10G10R10_UNORM`, `B10G11R11_UFLOAT`, appended): the G-buffer and the tail pass's two targets.
 - **Memory: 48 B a half-size texel - 52.9 MB at 3093 x 1493** (23.7 MB at 1920 x 1080): G-buffer 4 + depth 4, the tail 2 x 4, the
-  records 2 x 16 (under the 61 MB target).
+  records 2 x 16 (under the 61 MB target); with the movers' motion target (below) 56 B, 61.7 MB.
 
 Measured (`R/tests/xlionrender_test_screen_tail.cpp`, the rig's street at 1024 lights, 640 x 360, against CELLS of the same frame in a
 second view; Release, the same in Debug with Vulkan validation, no error):
@@ -229,8 +229,38 @@ The rig (`R/tools/bench_many_lights`, 60 warmed frames; the scene pass with the 
 CELLS costs less up to ~300 lights: the threshold 512. At 4096 lights SCREEN is ~10x faster than CELLS with a quarter of the inline
 tail's per-frame error. **Not built yet:** the materials' compiled G-buffer variant (the xmaterial compiler's `XLION_GBUFFER_OUTPUT`
 variant, data_file v7 - its recompile scope waits for Tomas: until then the project's materials shade their tail exactly in SCREEN; the
-built-in constant materials and the tests have their variants); motion vectors for movers (a moving object's tail ghosts until the clamp
-drops it); the specular's own denoising beyond the shared passes (its history is shorter on glossy surfaces).
+built-in constant materials and the tests have their variants); a skinned pose's own motion (its instance's is kept: "The bias and the
+movers"); the specular's own denoising beyond the shared passes (its history is shorter on glossy surfaces).
+
+### The bias and the movers (2026-10-27)
+
+**The 16-frame mean was 2.8% darker than CELLS. The cause: the history's clamp** (measured, each step switched off in turn,
+`R/tests/xlionrender_test_screen_tail.cpp`'s still camera):
+
+| | brightness / CELLS' | per-frame error | 1 / 2 / 4 / 8 frames after half the lights went off |
+|---|---|---|---|
+| as built: clamp to the 3 x 3 neighbourhood, +-1.25 deviations | 0.972 | 0.048 | 0.307 / 0.218 / 0.140 / 0.082 |
+| no denoiser (the tail pass, upsampled) | 1.004 | (noisy) | |
+| no clamp | 1.005 | 0.035 | 0.918 / 0.841 / 0.708 / 0.501 |
+| 3 x 3, +-2.5 deviations | 0.986 | 0.043 | 0.511 / 0.404 / 0.291 / 0.182 |
+| the window at least 30 - 50% of the mean | 0.970 | 0.048 | 0.31 / 0.22 / 0.14 / 0.08 |
+| a shorter history out of the window, the value kept | 0.961 - 0.996 | 0.043 - 0.093 | 0.15 - 0.79 / ... / 0.07 - 0.19 |
+| 5 x 5, +-1.25 / 7 x 7, +-1.25 | 0.995 / 0.998 | 0.038 / 0.037 | 0.351 / ... / 0.140 - 0.364 / ... / 0.163 |
+| **7 x 7, +-1.25, and far out (2 deviations): the history at most 2 frames** | **0.998** | **0.037** | **0.278 / 0.200 / 0.143 / 0.095** |
+
+The demodulation and the upsampling are +0.4% (the tail pass alone: 1.004); the clamp took 3.2%. A 3 x 3 window over this many small
+lights shaves their peaks (a texel brighter than its neighbours is clamped down; the valleys are broad): a wider or floored window did
+not help, a larger neighbourhood did. Shortening the history instead of clamping is biased too (the decision follows this frame's noisy
+sample). **Built: the 7 x 7 neighbourhood (read once per workgroup into shared memory), clamped at +-1.25 deviations, and a history
+far out of it (2 deviations: an abrupt change) shortened to 2 frames** - the mean 0.2% under CELLS (the gate: 0.5%), and a light
+switch followed as fast as before.
+
+**Movers' motion:** an instance's last transform rides in its instance record (`details::instance_data`, 96 -> 144 B: instance_slots
+keeps it; written again, equal to the current one, the frame after it stops); the vertex shaders give last frame's clip position, the
+G-buffer variants write it into a fourth half-size target (last frame's screen position and view depth, RGBA16F) and the denoiser
+reprojects those texels by it (the camera's reprojection elsewhere; the records' depths are now view depths, clip w). A skinned mesh moves
+by its instance only (its pose's motion: not kept); a mesh without an instance id or a CreateMesh mesh: the camera's. A box crossing the
+street at 12 cm a frame: 0.046 without its motion, 0.040 with it (inline 0.295). Memory: **61.7 MB at 3093 x 1493**.
 
 ## Decisions (Tomas)
 
