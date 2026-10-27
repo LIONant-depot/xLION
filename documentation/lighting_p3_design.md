@@ -263,6 +263,15 @@ reprojects those texels by it (the camera's reprojection elsewhere; the records'
 by its instance only (its pose's motion: not kept); a mesh without an instance id or a CreateMesh mesh: the camera's. A box crossing the
 street at 12 cm a frame: 0.046 without its motion, 0.040 with it (inline 0.295). Memory: **61.7 MB at 3093 x 1493**.
 
+### The screen trace (2026-10-27)
+
+P3's "tail contact-shadowed": in the tail pass, the light picked for a texel that has no shadow pages is traced toward through the
+half-size G-buffer's depth (`m_TailTraceLength` 1 m, 12 jittered steps, a thickness of 5% of the view depth; off screen or behind the
+first surface: lit) - the picked light's contribution times its visibility, unbiased. A wall with 32 unshadowed lights on one side,
+against the same lights shadowed by pages: the error 17.4 -> 13.8 (what remains is the head's lights, shaded exactly by the materials
+without a shadow: the lights pages are for). Cost: the tail pass +0.03 ms at 1080p, +0.08 ms at 4.6 MP (the rig). The denoiser's gates run
+without it (CELLS, their reference, does not shadow unshadowed lights).
+
 ## Decisions (Tomas)
 
 1. Do we add the tail targets to every lit material's output (A) - the material compiler's templates change, every material recompiles?
