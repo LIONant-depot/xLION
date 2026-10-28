@@ -357,6 +357,31 @@ paths x -> y, its normalization intact; every extra heuristic labelled below and
   - the GI reflection layer reads the 3-lobe basis at R, not convolved with the lobe. Both are in
   `gi_surfel_reconstruction_proposal.md` (for review), with the surfels' move off the faces.
 - **Next:** D (reconstruction) - the traced rough receivers' noise (the sphere grid's sparkle at roughness 0.2-0.4) is its input.
+- **After the write-up (2026-10-28):** the sphere grid was wound inward (each sphere showed the inside of its far half: reflections
+  from behind it) - fixed in its generator, with a self-check; found with the trace's check modes (XLION_REFL_BENCH 4-6: the camera's
+  ray through the BVH against the G-buffer's depth, the G-buffer's normal, N.V). `scene::m_bReflectionJitter`: before D, each texel
+  kept its one ray (a new one every frame only flickered).
+
+**12.4 Milestone D's first results (2026-10-28).**
+- **Built:** `shaders/xlionrender_refl_denoise_comp.glsl` after the trace, at half size: temporal - the history reprojected by the
+  reflection's virtual motion (the hit behind the mirror) on sharp receivers, by the surface's on rough ones, blended by roughness; a
+  mover's by its own motion; taps kept by normal and roughness; clamped to the 5 x 5 neighbourhood (mean +- (1 + roughness) sigma); the
+  new sample's luminance at most 4 x the neighbourhood's (fireflies: a labelled bias); 6 frames on mirrors to 24 on rough - then spatial,
+  8 taps on the lobe's footprint by normal, depth and roughness; its result is the records the materials read and next frame's history.
+  `scene::m_bReflectionReconstruct` (on); the rays change every frame only while it runs. The full-size sharp records are not
+  reconstructed (their one ray stays). Police traces to 0.5 again.
+- **Gates in the lab** (the rough floor at 0.3, traced to 0.5, against one ray a texel; xlionrender_test_reflections):
+
+  | | as traced | reconstructed |
+  |---|---|---|
+  | the floor's change a frame (still camera) | 0.0209 | **0.0036** |
+  | one frame's RMAE against the reference | 0.548 | **0.353** (the estimator's 16-frame mean: 0.404) |
+  | lamp off: frames to within 3% of where it settles | 3 | **2** |
+  | chrome sphere moved away: its reflection left on the floor, frames 1..8 | 0.29 .. 0.29 (the GI's own response) | 0.20 .. 0.09 |
+
+- **Police** (the sphere grid's close view, 4 captures 0.4 s apart, pixels changing by more than 8 / 24 levels): traced to 0.5 without
+  reconstruction 92k / -, reconstructed 13.4k / 1.7k (reflections off: 1.3k / 1.1k). The glossy metals (0.2, 0.4) show the scene
+  instead of the probe path's near black. Owed: its cost in the table of 12.3; flicker / lag / ghosting on Police's sequences.
 
 ## 13. The final review (v3): what was adopted, and where we still differ
 
