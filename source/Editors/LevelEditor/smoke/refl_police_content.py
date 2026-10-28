@@ -19,7 +19,7 @@ POLICE_GEOM = "1B2E7050C4FC9D73"
 LEVEL, SCENE, L = "EF31687D49834DD9", "EF19AB610AD85421", "Police Level"
 FOLDER_TYPE = "C4D90C5F0CC43021"
 
-ap = argparse.ArgumentParser(); ap.add_argument("step"); ap.add_argument("--rough-factor", default="0.25"); ap.add_argument("--color", default=""); ap.add_argument("--at", default="0.6,1.726,3.4")
+ap = argparse.ArgumentParser(); ap.add_argument("step"); ap.add_argument("--rough-factor", default="0.25"); ap.add_argument("--color", default=""); ap.add_argument("--at", default="0.6,1.726,3.4"); ap.add_argument("--max-rough", default="0.15")
 a = ap.parse_args()
 
 
@@ -57,12 +57,12 @@ elif a.step == "step2":
     s = d.read_text(encoding="utf-8")
     print(s[:3000])
 
-elif a.step == "env":          # Police's Environment: the reflections on (traced up to 0.5, the floor's planar view), saved
+elif a.step == "env":          # Police's Environment: the reflections on (traced up to --max-rough: the sharp ones until D; the floor's planar view), saved
     ed = editor()
     try:
         ed._roundtrip(f"OpenLevel -Level {LEVEL}", 300)
         time.sleep(10)
-        for p, v in (("ReflectionMaxRoughness", "0.5"), ("ReflectionFloor", "true"), ("ReflectionFloorAuto", "true")):
+        for p, v in (("ReflectionMaxRoughness", a.max_rough), ("ReflectionFloor", "true"), ("ReflectionFloorAuto", "true")):
             print(ed.cmd(rf"{L}\SetProperty -Scene {SCENE} -Id 00000003 -Component Environment -Path Environment/{p} -After {v}"))
         print(ed.cmd(rf"{L}\Save", timeout=120, allow_disk=True))
     finally:
