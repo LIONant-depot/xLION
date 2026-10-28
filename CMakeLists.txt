@@ -27,6 +27,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(xcmake_tools)
 include(${CMAKE_BINARY_DIR}/_deps/xcmake_tools/Common.cmake)
+set(CMAKE_SUPPRESS_REGENERATION false)   # (Common.cmake suppresses ZERO_CHECK: a new source or shader file then never reached a VS build - Tomas's broke, 2026-10-29)
 
 # Linux port (clang): applies to every target added below, dependencies included, and never to MSVC - the clang flags,
 # the force-included MSVC compat header and the <windows.h> shim. The same file is used by the plugins' asset compilers
