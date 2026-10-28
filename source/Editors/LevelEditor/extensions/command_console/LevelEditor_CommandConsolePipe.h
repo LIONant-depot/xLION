@@ -411,6 +411,8 @@ namespace level_editor
 
 
     {
+        // The pipe's name: \\.\pipe\xEditor_Console, or XEDITOR_PIPE's (xeditorcli and the smoke harness read the same variable)
+        const std::string PipeName = [] { char Env[256]; const DWORD n = GetEnvironmentVariableA("XEDITOR_PIPE", Env, sizeof(Env)); return std::string(n > 0 && n < sizeof(Env) ? Env : "\\\\.\\pipe\\xEditor_Console"); }();
 
 
 
@@ -426,7 +428,7 @@ namespace level_editor
 
 
 
-                "\\\\.\\pipe\\xEditor_Console",
+                PipeName.c_str(),       // (XEDITOR_PIPE: a pipe of its own - an AI's or a test's editor beside a person's)
 
 
 

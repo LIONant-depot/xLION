@@ -27,7 +27,7 @@ from typing import Optional
 
 # Windows: a named pipe. Linux: an AF_UNIX stream socket (one request per connection, same framing), at $XEDITOR_PIPE or the default
 # path the editor uses. Set XEDITOR_PIPE (to a path of your own) to run more than one editor on a machine, e.g. parallel CI jobs.
-PIPE = r"\\.\pipe\xEditor_Console" if os.name == "nt" else (os.environ.get("XEDITOR_PIPE") or "/tmp/xEditor_Console.sock")
+PIPE = os.environ.get("XEDITOR_PIPE") or (r"\\.\pipe\xEditor_Console" if os.name == "nt" else "/tmp/xEditor_Console.sock")     # (Windows too: e.g. \\.\pipe\xEditor_Console_ai)
 SMOKE_DIR = Path(__file__).resolve().parent
 GOLDEN_DIR = SMOKE_DIR / "golden"
 REPO = SMOKE_DIR.parents[3]
