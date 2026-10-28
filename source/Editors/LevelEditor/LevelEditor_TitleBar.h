@@ -88,6 +88,8 @@ namespace level_editor::title_bar
         fps_history       m_Fps;
         std::wstring      m_ProjectPath;                    // what m_ProjectName was made from
         std::string       m_ProjectName;
+        bool              m_bAIInput = false;               // the title says AI-only input (xgpu::virtual_input active)
+        bool              m_bEscWas  = false;               // the person's Esc was down last frame
 #if defined(_WIN32)
         HWND              m_hWnd     = nullptr;
         WNDPROC           m_PrevProc = nullptr;
@@ -553,12 +555,39 @@ namespace level_editor::title_bar
         auto& S = State();
         S.m_Fps.Frame();
 
+        // AI-only input (Tomas, 2026-10-29): while an AI or a test drives the editor (XEDITOR_VIRTUAL_INPUT, VirtualInput -On) the
+        // person's mouse and keys are ignored - a stray click cannot disturb the run - all but Esc, which hands them back. The command
+        // pipe works in either mode
+#if defined(_WIN32)
+        {
+            // (the person's key, our window in front or under the mouse: in AI-only input the window never takes the focus - a click on
+            // it does not bring it to the front - so the front alone missed every Esc)
+            const auto Ours = [](HWND h) { DWORD Pid = 0; if (h) GetWindowThreadProcessId(h, &Pid); return h && Pid == GetCurrentProcessId(); };
+            POINT Cursor{};
+            const bool bOver = GetCursorPos(&Cursor) && Ours(WindowFromPoint(Cursor));
+            const bool bEsc  = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0 && (Ours(GetForegroundWindow()) || bOver);
+            if (bEsc && !S.m_bEscWas && xgpu::virtual_input::Active())
+            {
+                xgpu::virtual_input::SetActive(false);
+                // ... and the window takes the focus again (it was made not to: WS_EX_NOACTIVATE - the person's keys would not reach it)
+                if (const HWND h = bOver ? GetAncestor(WindowFromPoint(Cursor), GA_ROOT) : GetForegroundWindow(); Ours(h))
+                {
+                    SetWindowLongPtrW(h, GWL_EXSTYLE, GetWindowLongPtrW(h, GWL_EXSTYLE) & ~LONG_PTR(WS_EX_NOACTIVATE));
+                    SetForegroundWindow(h);
+                }
+            }
+            S.m_bEscWas = bEsc;
+        }
+#endif
+        const bool bAIInput = xgpu::virtual_input::Active();
+
         // The taskbar and Alt+Tab say the same thing as the bar
-        if (S.m_ProjectName.empty() || S.m_ProjectPath != ProjectPath)
+        if (S.m_ProjectName.empty() || S.m_ProjectPath != ProjectPath || S.m_bAIInput != bAIInput)
         {
             S.m_ProjectPath = ProjectPath;
             S.m_ProjectName = ProjectName(ProjectPath);
-            Window.setTitle("xLION: " + S.m_ProjectName);
+            S.m_bAIInput    = bAIInput;
+            Window.setTitle("xLION: " + S.m_ProjectName + (bAIInput ? " - AI Only Input - Esc to exit" : ""));
         }
 
         ImGuiIO&      IO       = ImGui::GetIO();
@@ -696,6 +725,11 @@ namespace level_editor::title_bar
             DL.AddText(pText, TextSize, ImVec2(TextX, TextY), TextDim, "Project:");
             const float Prefix = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, "Project: ").x;
             DL.AddText(pText, TextSize, ImVec2(TextX + Prefix, TextY), TextBright, S.m_ProjectName.c_str());
+            if (S.m_bAIInput)
+            {
+                const float NameW = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, S.m_ProjectName.c_str()).x;
+                DL.AddText(pText, TextSize, ImVec2(TextX + Prefix + NameW + 16.0f, TextY), IM_COL32(255, 120, 80, 255), "AI Only Input - Esc to exit");
+            }
             DL.PopClipRect();
         }
 
