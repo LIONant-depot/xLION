@@ -300,3 +300,23 @@ the lobes (RGB9E5) is measured in tests 2 and 5. The v1 claim "4 B per surfel" i
   curvature, or the filter in chart space; the directional-field comparison (test 6q of xlionrender_test_surfel_gi) becomes their gate.
 - The interim SameLayer fix (mean normal + chord sag) is committed with test 6p (a 25 cm sphere: 37 of 103 surfels without a filter
   neighbor before, 0 after).
+- Work order 3 (xLIONRender cf4ce36, 7cebc4e): Wendland C2 in the five reads, transport rebuilt; Cornell mean 5.6 -> 5.3 %, max 16.2 ->
+  14.5 %, leaks unchanged. Energy tests on a synthetic ring operator: steady state d / (1 - rho) to 1.4e-6, the source off a total falling
+  by rho to 3e-7 an iteration, rho = 1 kept to 5e-7; the compiled Cornell links' largest row sum 0.75. No revision id yet: the links are
+  compiled from the meshes at load, never stored.
+- Work order 4, the filter on curved surfaces (87eaadf): a neighbor's weight f x exp(-(1 - c) / 0.03) (1 on a plane), so the filter's
+  support follows the curvature. The 25 cm sphere: 6q's directional error 0.473 -> 0.181; noisy lobes against the clean ones (6r)
+  0.303 -> 0.158 (unfiltered 0.255: the old filter was worse than none there).
+- Work order 4, addressing - a negative result. Bistro's half-size GI read (Release, 3778 x 1600, Tomas's camera), split by ablation
+  (pixel_nolookup / pixel_lookuponly): the pass without any lookup 0.92 ms, + the cell lookup 0.95 ms, + the list walk 0.8 ms (2.7-3.2 ms
+  in all). Correction: the earlier "60 % of the read is the lookup" (from a 1-entry run, 1.58 of 2.68 ms) counted the pass's fixed cost;
+  the lookup is about a third. Measured, with the same grid rebuilt at load both ways:
+  - 4a, parts keyed by chart (per triangle a chart - welded edges, faces within 45 degrees; per cell a chart -> part map, binary search):
+    the lookup 1.94 -> 1.87 ms, the read 3.20 -> 3.10 ms. 30 % of Bistro's map entries are ambiguous (a chart in several parts of a cell:
+    scored anyway); the cost is the hash probe and the dependent loads, not the scoring.
+  - 4b, direct per-triangle addressing (triangle -> up to 4 (cell slot, part) entries, no hash, no map; 90 % of Bistro's triangles
+    covered, ~26 MB): the lookup 1.94 -> 1.69 ms (0.25 ms saved, under the 0.3 ms gate). Police unchanged (0.11 ms either way). On the
+    curved test surface the triangle's own patch reads a smooth field 0.90 % off against the scoring's 0.82 %.
+  Neither shipped: patches in xLIONRender documentation/experiments (gi_step4a_chart_lookup.patch, gi_step4b_direct_addressing.patch),
+  tests 6s included. The read's remaining costs are the per-entry work (0.8 ms) and the pass itself; the larger GPU costs on Bistro are
+  the GI update (6.8 ms: the trace batch ~3.0, the display filter's 4 passes ~3.5 over 505k surfels) - next in the order, then step 5.
