@@ -14,6 +14,7 @@ freetype           https://gitlab.freedesktop.org/freetype/freetype.git      426
 meshoptimizer      https://github.com/zeux/meshoptimizer.git                 717ca3489b457f781e5cd3e3a8bbc0229619415c
 msdf-atlas-gen     https://github.com/Chlumsky/msdf-atlas-gen.git           6148900d59423059bafde2f51a0cb303184404bd
 stb                https://github.com/nothings/stb.git                       2c980bb59875b0d32144a71867fbdebb2f77cd20
+tinydng            https://github.com/syoyo/tinydng.git                      1f181699511e08e51baabd9fdab2311ea1253d4b
 tinyddsloader      https://github.com/benikabocha/tinyddsloader.git          a2ce2fdcef9c6c3687d1def2c8bb07ba27f4d1ba
 tinyexr            https://github.com/syoyo/tinyexr.git                      644148d0fd6b1b204a68a902dc963a70c749b417
 zstd               https://github.com/facebook/zstd.git                      f8745da6ff1ad1e7bab384bd1f9d742439278e99
