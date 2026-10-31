@@ -18,6 +18,7 @@
 #include "plugins/xscript_module.plugin/source/Editor/xscript_module_editor.h"
 #include "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"       // (xtexture_residency: TextureResidency)
 #include "xprofile.h"                                                       // (Profiler)
+#include "editor/xprofile_tab.h"                                            // (the drawer's Profiler tab)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"

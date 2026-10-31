@@ -45,6 +45,12 @@ namespace level_editor
             AssetBrowser.RenderEmbeddedTab(xresource_editor::g_LibMgr, xresource::g_Mgr, "Project Settings");
             BindProjectSettingsHints();
             break;
+        case 8:
+        {
+            static xprofile::editor::tab s_ProfilerTab;     // the profiler (xprofile): the switch, the Tracy viewer, the recorder's view
+            s_ProfilerTab.Draw();
+            break;
+        }
         default:
             break;
         }
