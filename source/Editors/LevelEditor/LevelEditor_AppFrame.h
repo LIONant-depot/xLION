@@ -313,6 +313,7 @@ namespace level_editor
         g_WindowCapture.AfterFlip();
 
         xresource::g_Mgr.OnEndFrameDelegate();
+        xtexture_residency::Update(xresource::g_Mgr);        // the textures' residency transitions that are due (TextureResidency)
         if (FT.m_bOn) { FT.Lap(9); FT.End(); }
 
         xeditor::diagnostics::Log("frame %llu end", static_cast<unsigned long long>(FrameNumber));

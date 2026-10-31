@@ -223,6 +223,7 @@ namespace level_editor
         level_editor::commands::get_browser_state_cmd             CmdGetBrowserState;
         level_editor::commands::set_browser_search_cmd            CmdSetBrowserSearch;
         level_editor::commands::capture_window_cmd                CmdCaptureWindow;
+        level_editor::commands::texture_residency_cmd             CmdTextureResidency;
         level_editor::commands::say_query_cmd                     CmdSay;
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
         level_editor::commands::exit_query_cmd                    CmdExit;
@@ -331,6 +332,7 @@ namespace level_editor
         , CmdGetBrowserState(Workspace, pEditor)
         , CmdSetBrowserSearch(Workspace, pEditor)
         , CmdCaptureWindow(Workspace, pEditor)
+        , CmdTextureResidency(Workspace, pEditor)
         , CmdSay(Workspace, pEditor)
         , CmdGetLog(Workspace, pEditor)
         , CmdExit(Workspace, pEditor)
@@ -445,6 +447,7 @@ namespace level_editor
             CmdGetBrowserState.m_pDataBase = pEditor;
             CmdSetBrowserSearch.m_pDataBase = pEditor;
             CmdCaptureWindow.m_pDataBase = pEditor;
+            CmdTextureResidency.m_pDataBase = pEditor;
             CmdSay.m_pDataBase = pEditor;
             CmdGetLog.m_pDataBase = pEditor;
             CmdExit.m_pDataBase = pEditor;

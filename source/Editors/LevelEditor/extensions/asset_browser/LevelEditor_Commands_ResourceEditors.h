@@ -16,6 +16,7 @@
 #include "plugins/xskeleton.plugin/source/Editor/xskeleton_editor.h"
 #include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
 #include "plugins/xscript_module.plugin/source/Editor/xscript_module_editor.h"
+#include "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"       // (xtexture_residency: TextureResidency)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"
@@ -194,6 +195,50 @@ namespace level_editor::commands
             return "CaptureWindow: queued, the file appears when the next frame is presented";
         }
         xcmdline::parser::handle m_hFile;
+    };
+
+    // TextureResidency: scripted residency requests to the editor's textures (xtexture_residency; P3b of the texture pipeline - before any
+    // automatic demand): which mips their images hold, top mip in each texture's own numbering (0: full size; clamped to its tail). The
+    // textures move over the next frames (a new image each, in the background); the reply is where things stand now.
+    struct texture_residency_cmd : xlevel::commands::level_query_command
+    {
+        texture_residency_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "TextureResidency", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Which mips the loaded textures keep: -TopMip n (0 the full size, 1 half, ... down to each texture's tail), for every texture or the one of -Asset; -BudgetMB m caps the big mips' memory (0: none). Without arguments: the state (bytes, textures moving). Usage: TextureResidency [-TopMip n] [-Asset guid] [-BudgetMB m]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hTop    = m_Parser.addOption("TopMip", "The first mip kept (0: full size)", false, 1);
+            m_hAsset  = m_Parser.addOption("Asset", "One texture's resource guid (32 hex digits); none: all", false, 1);
+            m_hBudget = m_Parser.addOption("BudgetMB", "The big mips' memory budget in MB (0: none)", false, 1);
+        }
+        std::string Query() noexcept override
+        {
+            if (m_Parser.hasOption(m_hBudget))
+            {
+                auto B = m_Parser.getOptionArgAs<std::string>(m_hBudget, 0);
+                if (std::holds_alternative<xerr>(B)) return "TextureResidency: bad -BudgetMB";
+                xtexture_residency::setBudget(std::uint64_t(std::max(0, std::atoi(std::get<std::string>(B).c_str()))) << 20);
+            }
+            if (m_Parser.hasOption(m_hTop))
+            {
+                auto T = m_Parser.getOptionArgAs<std::string>(m_hTop, 0);
+                if (std::holds_alternative<xerr>(T)) return "TextureResidency: bad -TopMip";
+                const int Top = std::atoi(std::get<std::string>(T).c_str());
+                if (m_Parser.hasOption(m_hAsset))
+                {
+                    auto A = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
+                    if (std::holds_alternative<xerr>(A)) return "TextureResidency: bad -Asset";
+                    xtexture_residency::Request(xresource::g_Mgr, xresource_editor::commands::ParseAssetGuid(std::get<std::string>(A)), Top);
+                }
+                else xtexture_residency::RequestAll(xresource::g_Mgr, Top);
+            }
+            const auto S = xtexture_residency::getStats(xresource::g_Mgr);
+            const auto V = xresource::g_Mgr.getUserData<resource_mgr_user_data>().m_Device.getMemoryStats();      // (xGPU's device memory: its 64 MB blocks, the ranges in them, what is free inside)
+            return std::format("TextureResidency: textures {}, moving {}, pending {}, queued jobs {}, big mips {:.1f} MB, in flight {:.1f} MB, budget {} | VRAM blocks {} ({} ranges, {:.1f} MB free in them), {} of their own"
+                              , S.m_nTextures, S.m_nMoving, S.m_nPending, S.m_nWaitingJobs, S.m_Bytes / 1048576.0, S.m_Reserved / 1048576.0
+                              , S.m_Budget ? std::format("{} MB", S.m_Budget >> 20) : std::string("none")
+                              , V.m_nBlocks, V.m_nRanges, V.m_FreeBytes / 1048576.0, V.m_nDedicated);
+        }
+        xcmdline::parser::handle m_hTop, m_hAsset, m_hBudget;
     };
 
     // CloseResourceEditor: the editor menu's Close. Without -Save it closes the editor and drops what was not saved (what a script wants); with -Save it does what a person is offered:
