@@ -193,6 +193,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xstrtool.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xbmp_tools.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xserializer.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xscheduler.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xprofile.git" "main")         # the profiler (Tracy's client in xprofile.dll): XLION_PROFILE
 FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONCore.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONRender.git" "main")
@@ -607,6 +608,17 @@ if(XECS_BUILD_SHARED_LIBRARY)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONRender>" "$<TARGET_FILE_DIR:xLION_Headless>"
   )
 endif()
+
+# The profiler (xprofile, tracy_plan.md): one client in xprofile.dll, imported by the executables and the engine's DLLs (a Level's
+# copies of LIONCore/LIONRender too: they find the one next to the executable). XLION_PROFILE=OFF: an interface target, no DLL.
+foreach(XPROFILE_USER ${TARGET_PROJECT} xLION_Headless)
+  target_link_libraries(${XPROFILE_USER} PRIVATE xprofile)
+  if(XLION_PROFILE)
+    add_custom_command(TARGET ${XPROFILE_USER} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xprofile>" "$<TARGET_FILE_DIR:${XPROFILE_USER}>"
+    )
+  endif()
+endforeach()
 
 # Plugin editor sources (xlevel_session.h, xscene_editor.h, every xscene/xlevel/xskeleton/...
 # command and panel file, etc.) live entirely under plugins/*.plugin/source/ and are reached only

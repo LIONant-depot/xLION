@@ -179,6 +179,7 @@ namespace level_editor
 
     inline void app::Frame()
     {
+        XPROFILE_SCOPE("Editor frame");
         ++FrameNumber;
         auto& FT = g_FrameTimes;
         if (FT.m_bOn) FT.Start();
@@ -311,6 +312,7 @@ namespace level_editor
         g_WindowCapture.BeforeFlip(MainWindow);
         MainWindow.PageFlip();
         g_WindowCapture.AfterFlip();
+        XPROFILE_FRAME();
 
         xresource::g_Mgr.OnEndFrameDelegate();
         xtexture_residency::Update(xresource::g_Mgr);        // the textures' residency transitions that are due (TextureResidency)

@@ -18,3 +18,4 @@ tinydng            https://github.com/syoyo/tinydng.git                      1f1
 tinyddsloader      https://github.com/benikabocha/tinyddsloader.git          a2ce2fdcef9c6c3687d1def2c8bb07ba27f4d1ba
 tinyexr            https://github.com/syoyo/tinyexr.git                      644148d0fd6b1b204a68a902dc963a70c749b417
 zstd               https://github.com/facebook/zstd.git                      f8745da6ff1ad1e7bab384bd1f9d742439278e99
+tracy              https://github.com/wolfpld/tracy.git                      30997d5ca6bb632cc10807a1da8a6d3de0aeeb3c

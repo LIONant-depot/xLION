@@ -17,6 +17,7 @@
 #include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
 #include "plugins/xscript_module.plugin/source/Editor/xscript_module_editor.h"
 #include "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"       // (xtexture_residency: TextureResidency)
+#include "xprofile.h"                                                       // (Profiler)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"
@@ -195,6 +196,29 @@ namespace level_editor::commands
             return "CaptureWindow: queued, the file appears when the next frame is presented";
         }
         xcmdline::parser::handle m_hFile;
+    };
+
+    // Profiler: the profiler (xprofile, Tracy's client) on and off, and its state; a viewer (Tracy's, v0.14.1) connects to the editor once it is on
+    struct profiler_cmd : xlevel::commands::level_query_command
+    {
+        profiler_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "Profiler", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "The profiler (Tracy): -Enable 1 starts recording (a Tracy viewer can connect then), -Enable 0 stops it; without arguments its state. Usage: Profiler [-Enable 0|1]"; }
+        void RegisterArguments() noexcept override { m_hEnable = m_Parser.addOption("Enable", "1: record, 0: stop", false, 1); }
+        std::string Query() noexcept override
+        {
+        #if !(defined(XLION_PROFILE) && XLION_PROFILE)
+            return "Profiler: not compiled in (XLION_PROFILE off)";
+        #else
+            if (m_Parser.hasOption(m_hEnable))
+            {
+                auto E = m_Parser.getOptionArgAs<std::string>(m_hEnable, 0);
+                if (std::holds_alternative<xerr>(E)) return "Profiler: bad -Enable";
+                xprofile::Enable(std::get<std::string>(E) != "0");
+            }
+            return std::format("Profiler: {}, viewer {}", xprofile::isEnabled() ? "recording" : "off", xprofile::isConnected() ? "connected" : "not connected");
+        #endif
+        }
+        xcmdline::parser::handle m_hEnable;
     };
 
     // TextureResidency: scripted residency requests to the editor's textures (xtexture_residency; P3b of the texture pipeline - before any

@@ -62,6 +62,8 @@ namespace level_editor
         xeditor::diagnostics::InstallCrtReportHook();
         xeditor::diagnostics::InstallTerminateHandler();
         xeditor::diagnostics::InstallUnhandledExceptionFilter();
+        XPROFILE_THREAD("Main");
+        if (std::getenv("XPROFILE")) xprofile::Enable(true);       // (the profiler from the first frame: XPROFILE=1; otherwise the Profiler command / tab)
         xeditor::diagnostics::Log("startup: LevelEditor_Example begin");
 
         // A project that was asked for is checked before anything is created (no window for a path that is wrong).
