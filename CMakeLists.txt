@@ -813,6 +813,7 @@ if(XLION_ECS_LINK_GATE)
                              XECS_BUILD_SHARED XLIONCORE_BUILD_SHARED XLIONRENDER_BUILD_SHARED)
   target_link_libraries(xLION_ecs_gate PRIVATE OpenMP::OpenMP_CXX)
   target_link_libraries(xLION_ecs_gate PRIVATE xLIONRender_lib)       # the renderer the exe compiles itself (the previews): not taken from LIONRender.dll
+  target_link_libraries(xLION_ecs_gate PRIVATE xprofile)              # the same editor sources as xLION_Headless: they include xprofile.h (the profiler)
   if(WIN32)
     target_link_libraries(xLION_ecs_gate PRIVATE Advapi32.lib)
   endif()
