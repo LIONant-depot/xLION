@@ -203,23 +203,83 @@ namespace level_editor::commands
     struct profiler_cmd : xlevel::commands::level_query_command
     {
         profiler_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "Profiler", pDataBase) { RegisterArguments(); }
-        const char* getCommandHelp() const noexcept override { return "The profiler (Tracy): -Enable 1 starts recording (a Tracy viewer can connect then), -Enable 0 stops it; without arguments its state. Usage: Profiler [-Enable 0|1]"; }
-        void RegisterArguments() noexcept override { m_hEnable = m_Parser.addOption("Enable", "1: record, 0: stop", false, 1); }
+        const char* getCommandHelp() const noexcept override
+        {
+            return "The profiler (xprofile / Tracy). -Enable 1|0 records or stops (a Tracy viewer can connect while on). -Stats: the recorder's last frames - "
+                   "frame mean/p95/max, the zones with the most time (ms per frame, calls per frame, mean, max), the plots (-Frames n window, default 120; "
+                   "-Top k zones, default 25; -Filter text). -Capture file -Seconds s: Tracy's capture tool records this editor into a .tracy file in the "
+                   "background (the reply returns at once). -Mark text: a line on the timeline. -Clear: empties the recorder. Without arguments: its state. "
+                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]]";
+        }
+        void RegisterArguments() noexcept override
+        {
+            m_hEnable  = m_Parser.addOption("Enable", "1: record, 0: stop", false, 1);
+            m_hStats   = m_Parser.addOption("Stats", "The recorder's numbers as text", false, 0);
+            m_hFrames  = m_Parser.addOption("Frames", "Stats: the window in frames (default 120)", false, 1);
+            m_hTop     = m_Parser.addOption("Top", "Stats: how many zones (default 25)", false, 1);
+            m_hFilter  = m_Parser.addOption("Filter", "Stats: only the zones and plots whose name has this text", false, 1);
+            m_hCapture = m_Parser.addOption("Capture", "A .tracy file Tracy's capture tool records into (in the background)", false, 1);
+            m_hSeconds = m_Parser.addOption("Seconds", "Capture: how long (default 10)", false, 1);
+            m_hMark    = m_Parser.addOption("Mark", "A line on the timeline", false, 1);
+            m_hClear   = m_Parser.addOption("Clear", "Empties the recorder", false, 0);
+        }
+        std::string Arg(xcmdline::parser::handle h, std::string Default = {}) noexcept
+        {
+            if (!m_Parser.hasOption(h)) return Default;
+            auto A = m_Parser.getOptionArgAs<std::string>(h, 0);
+            return std::holds_alternative<xerr>(A) ? Default : std::get<std::string>(A);
+        }
         std::string Query() noexcept override
         {
         #if !(defined(XLION_PROFILE) && XLION_PROFILE)
             return "Profiler: not compiled in (XLION_PROFILE off)";
         #else
-            if (m_Parser.hasOption(m_hEnable))
+            std::string Out;
+            if (m_Parser.hasOption(m_hEnable)) xprofile::Enable(Arg(m_hEnable, "1") != "0");
+            if (m_Parser.hasOption(m_hClear))  xprofile::ClearRecorder();
+            if (m_Parser.hasOption(m_hMark))   { const auto M = Arg(m_hMark); XPROFILE_MESSAGE(M.data(), M.size()); }
+            if (m_Parser.hasOption(m_hCapture))
             {
-                auto E = m_Parser.getOptionArgAs<std::string>(m_hEnable, 0);
-                if (std::holds_alternative<xerr>(E)) return "Profiler: bad -Enable";
-                xprofile::Enable(std::get<std::string>(E) != "0");
+                const auto File = Arg(m_hCapture); const int Seconds = std::atoi(Arg(m_hSeconds, "10").c_str());
+                Out += xprofile::LaunchCapture(File.c_str(), Seconds) ? std::format("capturing {} s into {} (Tracy's capture tool, in the background)\n", Seconds, File)
+                                                                      : "the capture did not start: Tracy's capture tool is not built (xprofile/build/tools/BuildTracyTools)\n";
             }
-            return std::format("Profiler: {}, viewer {}", xprofile::isEnabled() ? "recording" : "off", xprofile::isConnected() ? "connected" : "not connected");
+            Out += std::format("Profiler: {}, viewer {}", xprofile::isEnabled() ? "recording" : "off", xprofile::isConnected() ? "connected" : "not connected");
+            if (!m_Parser.hasOption(m_hStats)) return Out;
+
+            // the recorder's window: frames, the zones with the most time, the plots
+            xprofile::snapshot S;
+            xprofile::Snapshot(std::max(1, std::atoi(Arg(m_hFrames, "120").c_str())), S);
+            const int         Top    = std::max(1, std::atoi(Arg(m_hTop, "25").c_str()));
+            const std::string Filter = Arg(m_hFilter);
+            const auto Has = [&](const char* p) { return Filter.empty() || xprofile::editor::tab::Contains(p ? p : "", Filter.c_str()); };
+            const double nFrames = std::max<std::size_t>(S.m_FrameMs.size(), 1);
+            if (!S.m_FrameMs.empty())
+            {
+                auto F = S.m_FrameMs; std::sort(F.begin(), F.end());
+                double Sum = 0; for (float v : F) Sum += v;
+                Out += std::format("\nframes {}: mean {:.3f} ms, median {:.3f}, p95 {:.3f}, max {:.3f}; threads with zones {}", F.size(), Sum / F.size(), F[F.size() / 2], F[std::min(F.size() - 1, F.size() * 95 / 100)], F.back(), S.m_nThreads);
+            }
+            else Out += "\nno frames marked in the window (the last second's zones)";
+            Out += std::format("\n{:<44} {:>10} {:>9} {:>10} {:>10}", "zone", "ms/frame", "calls/fr", "mean ms", "max ms");
+            int n = 0;
+            for (const auto& Z : S.m_Zones)
+            {
+                const char* pName = Z.m_pWhere && Z.m_pWhere->name ? Z.m_pWhere->name : "?";
+                if (!Has(pName)) continue;
+                if (n++ == Top) break;
+                Out += std::format("\n{:<44} {:>10.3f} {:>9.1f} {:>10.3f} {:>10.3f}", std::string(pName).substr(0, 44), Z.m_TotalMs / nFrames, Z.m_Count / nFrames, Z.m_TotalMs / std::max<std::uint32_t>(Z.m_Count, 1), Z.m_MaxMs);
+            }
+            for (const auto& P : S.m_Plots)
+            {
+                if (!Has(P.m_pName)) continue;
+                Out += std::format("\nplot {}: now {:.2f}, range {:.2f} .. {:.2f}", P.m_pName, P.m_Last, P.m_Min, P.m_Max);
+                if (P.m_Limit > 0) Out += std::format(", max {:.0f} ({:.1f}%)", P.m_Limit, 100.0 * P.m_Last / P.m_Limit);
+            }
+            return Out;
         #endif
         }
-        xcmdline::parser::handle m_hEnable;
+        xcmdline::parser::handle m_hEnable, m_hStats, m_hFrames, m_hTop, m_hFilter, m_hCapture, m_hSeconds, m_hMark, m_hClear;
     };
 
     // TextureResidency: scripted residency requests to the editor's textures (xtexture_residency; P3b of the texture pipeline - before any
