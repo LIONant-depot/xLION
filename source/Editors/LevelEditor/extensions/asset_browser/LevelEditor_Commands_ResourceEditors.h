@@ -210,9 +210,10 @@ namespace level_editor::commands
                    "-Top k zones, default 25; -Filter text). -Capture file -Seconds s: Tracy's capture tool records this editor into a .tracy file in the "
                    "background (the reply returns at once). -Mark text: a line on the timeline. -Clear: empties the recorder. -Memory: the memory pools (kept "
                    "whether recording or not: VRAM's blocks and what is in them) - used, reserved, peak, free inside the regions, fragmentation; -Map n: "
-                   "each region as n characters (# full, + partly used, . free); -Filter text: only the pools whose name has it. -Show Metrics|Memory: opens "
+                   "each region as n characters (# full, + partly used, . free); -Owners: the memory by owner (the resource whose load made it) and by "
+                   "type, the most first (-Top k); -Filter text: only the pools whose name has it. -Show Metrics|Memory: opens "
                    "the drawer on the Profiler tab at that page. Without arguments: its state. "
-                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]] [-Memory [-Map n]] [-Show Metrics|Memory]";
+                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]] [-Memory [-Map n] [-Owners [-Top k]]] [-Show Metrics|Memory]";
         }
         void RegisterArguments() noexcept override
         {
@@ -227,6 +228,7 @@ namespace level_editor::commands
             m_hClear   = m_Parser.addOption("Clear", "Empties the recorder", false, 0);
             m_hMemory  = m_Parser.addOption("Memory", "The memory pools as text", false, 0);
             m_hMap     = m_Parser.addOption("Map", "Memory: each region as this many characters", false, 1);
+            m_hOwners  = m_Parser.addOption("Owners", "Memory: the memory by owner and by type", false, 0);
             m_hShow    = m_Parser.addOption("Show", "Opens the drawer on the Profiler tab at this page: Metrics or Memory", false, 1);
         }
         std::string Arg(xcmdline::parser::handle h, std::string Default = {}) noexcept
@@ -251,7 +253,7 @@ namespace level_editor::commands
                                                                       : "the capture did not start: Tracy's capture tool is not built (xprofile/build/tools/BuildTracyTools)\n";
             }
             Out += std::format("Profiler: {}, viewer {}", xprofile::isEnabled() ? "recording" : "off", xprofile::isConnected() ? "connected" : "not connected");
-            if (m_Parser.hasOption(m_hMemory)) Out += MemoryText(Arg(m_hFilter), std::atoi(Arg(m_hMap, "0").c_str()));
+            if (m_Parser.hasOption(m_hMemory)) Out += MemoryText(Arg(m_hFilter), std::atoi(Arg(m_hMap, "0").c_str()), m_Parser.hasOption(m_hOwners) ? std::max(1, std::atoi(Arg(m_hTop, "25").c_str())) : 0);
             if (m_Parser.hasOption(m_hShow))
             {
                 auto* pHost = xeditor::host::current();
@@ -297,12 +299,12 @@ namespace level_editor::commands
             return Out;
         #endif
         }
-        xcmdline::parser::handle m_hEnable, m_hStats, m_hFrames, m_hTop, m_hFilter, m_hCapture, m_hSeconds, m_hMark, m_hClear, m_hMemory, m_hMap, m_hShow;
+        xcmdline::parser::handle m_hEnable, m_hStats, m_hFrames, m_hTop, m_hFilter, m_hCapture, m_hSeconds, m_hMark, m_hClear, m_hMemory, m_hMap, m_hShow, m_hOwners;
 
     #if defined(XLION_PROFILE) && XLION_PROFILE
         // The memory pools: per pool its totals, per region its use, holes and fragmentation (the free space outside the largest hole) and,
         // with Width, a line of characters - each one Width-th of the region: # full, + partly used, . free
-        static std::string MemoryText(const std::string& Filter, int Width) noexcept
+        static std::string MemoryText(const std::string& Filter, int Width, int TopOwners) noexcept
         {
             std::vector<xprofile::mem_pool> Pools;
             xprofile::MemSnapshot(Pools);
@@ -338,6 +340,22 @@ namespace level_editor::commands
                     for (double v : Cell) Out += v >= Per * 0.999 ? '#' : v > 0 ? '+' : '.';
                     Out += '|';
                 }
+                if (TopOwners <= 0) continue;
+                // by owner ("<type> <guid>": the resource whose load or replacement made it) and by its type
+                std::map<std::string, std::pair<std::uint64_t, int>> ByOwner, ByType;
+                for (const auto& R : P.m_Regions)
+                    for (const auto& A : R.m_Allocs)
+                    {
+                        const std::string Owner = A.m_pOwner ? A.m_pOwner : "(no owner)";
+                        auto& O = ByOwner[Owner]; O.first += A.m_Size; ++O.second;
+                        auto& T = ByType[Owner[0] == '(' ? Owner : Owner.substr(0, Owner.find(' '))]; T.first += A.m_Size; ++T.second;
+                    }
+                const auto Sorted = [](const auto& M) { std::vector<std::pair<std::string, std::pair<std::uint64_t, int>>> V(M.begin(), M.end()); std::sort(V.begin(), V.end(), [](auto& a, auto& b) { return a.second.first > b.second.first; }); return V; };
+                Out += "\nby type:";
+                for (const auto& [Name, U] : Sorted(ByType)) Out += std::format("\n  {:<32} {:8.1f} MB in {} allocations", Name, U.first * MB, U.second);
+                Out += std::format("\nby owner (the {} with the most):", TopOwners);
+                int n = 0;
+                for (const auto& [Name, U] : Sorted(ByOwner)) { if (n++ == TopOwners) break; Out += std::format("\n  {:<40} {:8.1f} MB in {} allocations", Name, U.first * MB, U.second); }
             }
             return Out.empty() ? "\nmemory: no pool reported" : Out;
         }
