@@ -11,6 +11,16 @@
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_asset_mgr.h"
 
 #include <algorithm>
+#if __has_include("xprofile.h")
+    #include "xprofile.h"          // (the profiler: where xprofile is part of the build)
+#else
+    #ifndef XPROFILE_SCOPE
+        #define XPROFILE_SCOPE(NAME)
+    #endif
+    #ifndef XPROFILE_SCOPE_DYNAMIC
+        #define XPROFILE_SCOPE_DYNAMIC(NAME)
+    #endif
+#endif
 #include <format>
 #include <functional>
 #include <memory>
@@ -189,15 +199,19 @@ namespace xeditor
         // Once a frame: drops the closed editors and renders the rest.
         void RenderAll() noexcept
         {
-            if (auto* pHost = host::current()) SyncToHost(*pHost);
-            DropClosed();
+            if (auto* pHost = host::current()) { XPROFILE_SCOPE("Resource editors: sync to host"); SyncToHost(*pHost); }
+            { XPROFILE_SCOPE("Resource editors: drop the closed"); DropClosed(); }
             // An editor may open another one while it renders (the Level editor opening the editor of a module): m_List grows, and a reference into it (or an iterator) is gone. The editors themselves
             // are on the heap and nobody drops one during the frame, so a pointer to the editor stays good, and an editor that was added is rendered in this same frame.
             for (std::size_t i = 0; i < m_List.size(); ++i)
             {
                 resource_editor* pEditor = m_List[i].get();
                 const bool bWasOpen = pEditor->m_bOpen;
-                pEditor->Render();
+                {
+                    const std::string Name = pEditor->DisplayName();         // (the profiler: each editor's frame by its name)
+                    XPROFILE_SCOPE_DYNAMIC(Name.c_str());
+                    pEditor->Render();
+                }
                 if (bWasOpen && !pEditor->m_bOpen && pEditor->HasPendingChanges()) { pEditor->m_bOpen = true; pEditor->RequestClose(); }          // the window's close button: not before the question
             }
             RenderCloseQuestions();
