@@ -208,8 +208,11 @@ namespace level_editor::commands
             return "The profiler (xprofile / Tracy). -Enable 1|0 records or stops (a Tracy viewer can connect while on). -Stats: the recorder's last frames - "
                    "frame mean/p95/max, the zones with the most time (ms per frame, calls per frame, mean, max), the plots (-Frames n window, default 120; "
                    "-Top k zones, default 25; -Filter text). -Capture file -Seconds s: Tracy's capture tool records this editor into a .tracy file in the "
-                   "background (the reply returns at once). -Mark text: a line on the timeline. -Clear: empties the recorder. Without arguments: its state. "
-                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]]";
+                   "background (the reply returns at once). -Mark text: a line on the timeline. -Clear: empties the recorder. -Memory: the memory pools (kept "
+                   "whether recording or not: VRAM's blocks and what is in them) - used, reserved, peak, free inside the regions, fragmentation; -Map n: "
+                   "each region as n characters (# full, + partly used, . free); -Filter text: only the pools whose name has it. -Show Metrics|Memory: opens "
+                   "the drawer on the Profiler tab at that page. Without arguments: its state. "
+                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]] [-Memory [-Map n]] [-Show Metrics|Memory]";
         }
         void RegisterArguments() noexcept override
         {
@@ -222,6 +225,9 @@ namespace level_editor::commands
             m_hSeconds = m_Parser.addOption("Seconds", "Capture: how long (default 10)", false, 1);
             m_hMark    = m_Parser.addOption("Mark", "A line on the timeline", false, 1);
             m_hClear   = m_Parser.addOption("Clear", "Empties the recorder", false, 0);
+            m_hMemory  = m_Parser.addOption("Memory", "The memory pools as text", false, 0);
+            m_hMap     = m_Parser.addOption("Map", "Memory: each region as this many characters", false, 1);
+            m_hShow    = m_Parser.addOption("Show", "Opens the drawer on the Profiler tab at this page: Metrics or Memory", false, 1);
         }
         std::string Arg(xcmdline::parser::handle h, std::string Default = {}) noexcept
         {
@@ -245,6 +251,18 @@ namespace level_editor::commands
                                                                       : "the capture did not start: Tracy's capture tool is not built (xprofile/build/tools/BuildTracyTools)\n";
             }
             Out += std::format("Profiler: {}, viewer {}", xprofile::isEnabled() ? "recording" : "off", xprofile::isConnected() ? "connected" : "not connected");
+            if (m_Parser.hasOption(m_hMemory)) Out += MemoryText(Arg(m_hFilter), std::atoi(Arg(m_hMap, "0").c_str()));
+            if (m_Parser.hasOption(m_hShow))
+            {
+                auto* pHost = xeditor::host::current();
+                auto* pTab  = pHost ? pHost->find<xprofile::editor::tab>() : nullptr;
+                if (!pTab) return Out + "\nShow: no Profiler tab in this editor";
+                pTab->m_Select = Arg(m_hShow, "Metrics");
+                xeditor::drawer& Drawer = pHost->drawer_for(xeditor::FocusedDrawerViewport()->ID);
+                Drawer.m_bOpen = true;
+                Drawer.m_ActiveTab = Drawer.m_RequestTab = 8;       // (xeditor's drawer: tab 8 is Profiler)
+                Out += std::format("\nShow: the drawer opened on Profiler / {}", pTab->m_Select);
+            }
             if (!m_Parser.hasOption(m_hStats)) return Out;
 
             // the recorder's window: frames, the zones with the most time, the plots
@@ -279,7 +297,51 @@ namespace level_editor::commands
             return Out;
         #endif
         }
-        xcmdline::parser::handle m_hEnable, m_hStats, m_hFrames, m_hTop, m_hFilter, m_hCapture, m_hSeconds, m_hMark, m_hClear;
+        xcmdline::parser::handle m_hEnable, m_hStats, m_hFrames, m_hTop, m_hFilter, m_hCapture, m_hSeconds, m_hMark, m_hClear, m_hMemory, m_hMap, m_hShow;
+
+    #if defined(XLION_PROFILE) && XLION_PROFILE
+        // The memory pools: per pool its totals, per region its use, holes and fragmentation (the free space outside the largest hole) and,
+        // with Width, a line of characters - each one Width-th of the region: # full, + partly used, . free
+        static std::string MemoryText(const std::string& Filter, int Width) noexcept
+        {
+            std::vector<xprofile::mem_pool> Pools;
+            xprofile::MemSnapshot(Pools);
+            constexpr double MB = 1.0 / (1024.0 * 1024.0);
+            std::string Out;
+            for (const auto& P : Pools)
+            {
+                if (!Filter.empty() && !xprofile::editor::tab::Contains(P.m_pName, Filter.c_str())) continue;
+                std::uint64_t Free = 0;
+                for (const auto& R : P.m_Regions) Free += R.m_Size - std::min(R.m_Used, R.m_Size);
+                Out += std::format("\nmemory {}: {:.1f} MB used in {} allocations, {:.1f} MB reserved in {} regions, peak {:.1f} MB, free inside the regions {:.1f} MB",
+                                   P.m_pName, P.m_Used * MB, P.m_nAllocs, P.m_Reserved * MB, P.m_Regions.size(), P.m_Peak * MB, Free * MB);
+                for (const auto& R : P.m_Regions)
+                {
+                    const std::uint64_t RFree = R.m_Size - std::min(R.m_Used, R.m_Size);
+                    int nHoles = 0; std::uint64_t End = 0;
+                    for (const auto& A : R.m_Allocs) { nHoles += A.m_Offset > End; End = std::max(End, A.m_Offset + A.m_Size); }
+                    nHoles += R.m_Size > End;
+                    Out += std::format("\n  region {:>16x} {:7.1f} MB {:5.1f}% used, {:4} allocations, {:3} holes, largest {:6.2f} MB, fragmentation {:3.0f}%",
+                                       R.m_Id, R.m_Size * MB, R.m_Size ? 100.0 * R.m_Used / R.m_Size : 0.0, R.m_Allocs.size(), nHoles, R.m_LargestFree * MB,
+                                       RFree ? 100.0 * (1.0 - double(R.m_LargestFree) / double(RFree)) : 0.0);
+                    if (Width <= 0 || R.m_Size == 0) continue;
+                    std::vector<double> Cell(Width, 0.0);           // the bytes allocated in each character's range
+                    const double Per = double(R.m_Size) / Width;
+                    for (const auto& A : R.m_Allocs)
+                        for (double a = double(A.m_Offset), b = double(A.m_Offset + A.m_Size); a < b;)
+                        {
+                            const int    c    = std::min(Width - 1, int(a / Per));
+                            const double Next = std::min(b, (c + 1) * Per);
+                            Cell[c] += Next - a; a = Next;
+                        }
+                    Out += "\n    |";
+                    for (double v : Cell) Out += v >= Per * 0.999 ? '#' : v > 0 ? '+' : '.';
+                    Out += '|';
+                }
+            }
+            return Out.empty() ? "\nmemory: no pool reported" : Out;
+        }
+    #endif
     };
 
     // TextureResidency: scripted residency requests to the editor's textures (xtexture_residency; P3b of the texture pipeline - before any

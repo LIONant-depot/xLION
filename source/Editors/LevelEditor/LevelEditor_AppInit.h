@@ -321,6 +321,7 @@ namespace level_editor
         EditorHost.provide(ChatLog);
         EditorHost.provide(ExitState);
         EditorHost.provide(ResourceEditors);
+        EditorHost.provide(ProfilerTab);
         EditorHost.provide(ResourceUpdates);
         EditorHost.provide(AssetBrowser);
         if (!bHeadless)
@@ -437,6 +438,7 @@ namespace level_editor
         xlevel::g_OnSessionCreated = {};
         xlevel::g_OpenLevelSession = {};
         EditorHost.withdraw<xeditor::open_resource_editors>();
+        EditorHost.withdraw<xprofile::editor::tab>();
         EditorHost.withdraw<xresource_editor::asset_browser>();
         if (!bHeadless && !PipelineCachePath.empty())
             if (auto Err = Device.SavePipelineCache(PipelineCachePath); Err) xeditor::diagnostics::Log("shutdown: the pipeline cache was not saved");

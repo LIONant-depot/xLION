@@ -210,6 +210,7 @@ namespace level_editor
         files_actions                     FilesActions;            // the Assets tab's file keys
         xeditor::shortcut_labels          ShortcutLabels;          // menus ask the host which key an action has (xeditor/shortcuts.h)
         xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
+        xprofile::editor::tab             ProfilerTab;             // the drawer's Profiler tab (a host service: Profiler -Show opens it on a sub-tab)
         xeditor::compile_log_bridge       CompileLogs;             // every asset compile as an operation of the Logs (what the resource editors' Feedback shows)
         xeditor::resource_updates         ResourceUpdates;         // a resource compiled again: the references to it move to the new data (xresource::mgr::MarkUpdated)
 

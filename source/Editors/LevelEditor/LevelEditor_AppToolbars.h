@@ -47,8 +47,7 @@ namespace level_editor
             break;
         case 8:
         {
-            static xprofile::editor::tab s_ProfilerTab;     // the profiler (xprofile): the switch, the Tracy viewer, the recorder's view
-            s_ProfilerTab.Draw();
+            ProfilerTab.Draw();         // the profiler (xprofile): the switch, the Tracy viewer, the recorder's view, the memory map
             break;
         }
         default:
