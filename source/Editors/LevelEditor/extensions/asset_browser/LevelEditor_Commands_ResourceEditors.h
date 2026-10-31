@@ -310,6 +310,12 @@ namespace level_editor::commands
             xprofile::MemSnapshot(Pools);
             constexpr double MB = 1.0 / (1024.0 * 1024.0);
             std::string Out;
+            // the spaces as the driver sees them (the whole memory: its size, this process's budget and usage)
+            std::vector<xprofile::mem_space> Spaces;
+            xprofile::MemSpaces(Spaces);
+            for (const auto& S : Spaces)
+                Out += std::format("\nspace {}: {:.2f} GB in all, this process uses {:.2f} GB, its budget {:.2f} GB ({:.2f} GB free for it){}", S.m_pName, S.m_Size * MB / 1024,
+                                   S.m_Usage * MB / 1024, S.m_Budget * MB / 1024, S.m_Budget > S.m_Usage ? (S.m_Budget - S.m_Usage) * MB / 1024 : 0.0, S.m_Usage ? "" : " (no usage from the driver)");
             for (const auto& P : Pools)
             {
                 if (!Filter.empty() && !xprofile::editor::tab::Contains(P.m_pName, Filter.c_str())) continue;
@@ -342,15 +348,18 @@ namespace level_editor::commands
                 }
                 if (TopOwners <= 0) continue;
                 // by owner ("<type> <guid>": the resource whose load or replacement made it) and by its type
-                std::map<std::string, std::pair<std::uint64_t, int>> ByOwner, ByType;
+                std::map<std::string, std::pair<std::uint64_t, int>> ByOwner, ByType, ByWhat;
                 for (const auto& R : P.m_Regions)
                     for (const auto& A : R.m_Allocs)
                     {
                         const std::string Owner = A.m_pOwner ? A.m_pOwner : "(no owner)";
                         auto& O = ByOwner[Owner]; O.first += A.m_Size; ++O.second;
                         auto& T = ByType[Owner[0] == '(' ? Owner : Owner.substr(0, Owner.find(' '))]; T.first += A.m_Size; ++T.second;
+                        auto& W = ByWhat[A.m_pTag ? A.m_pTag : "?"]; W.first += A.m_Size; ++W.second;      // what it is (xGPU's setup name: "Shadows: atlas")
                     }
                 const auto Sorted = [](const auto& M) { std::vector<std::pair<std::string, std::pair<std::uint64_t, int>>> V(M.begin(), M.end()); std::sort(V.begin(), V.end(), [](auto& a, auto& b) { return a.second.first > b.second.first; }); return V; };
+                Out += "\nby what it is:";
+                for (const auto& [Name, U] : Sorted(ByWhat)) Out += std::format("\n  {:<40} {:8.1f} MB in {} allocations", Name, U.first * MB, U.second);
                 Out += "\nby type:";
                 for (const auto& [Name, U] : Sorted(ByType)) Out += std::format("\n  {:<32} {:8.1f} MB in {} allocations", Name, U.first * MB, U.second);
                 Out += std::format("\nby owner (the {} with the most):", TopOwners);
