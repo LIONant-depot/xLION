@@ -233,8 +233,8 @@ namespace level_editor::commands
             }
             const auto S = xtexture_residency::getStats(xresource::g_Mgr);
             const auto V = xresource::g_Mgr.getUserData<resource_mgr_user_data>().m_Device.getMemoryStats();      // (xGPU's device memory: its 64 MB blocks, the ranges in them, what is free inside)
-            return std::format("TextureResidency: textures {}, moving {}, pending {}, queued jobs {}, big mips {:.1f} MB, in flight {:.1f} MB, budget {} | VRAM blocks {} ({} ranges, {:.1f} MB free in them), {} of their own"
-                              , S.m_nTextures, S.m_nMoving, S.m_nPending, S.m_nWaitingJobs, S.m_Bytes / 1048576.0, S.m_Reserved / 1048576.0
+            return std::format("TextureResidency: textures {}, moving {}, pending {}, queued jobs {}, loaded in place {}, big mips {:.1f} MB, in flight {:.1f} MB, budget {} | VRAM blocks {} ({} ranges, {:.1f} MB free in them), {} of their own"
+                              , S.m_nTextures, S.m_nMoving, S.m_nPending, S.m_nWaitingJobs, S.m_nInPlace, S.m_Bytes / 1048576.0, S.m_Reserved / 1048576.0
                               , S.m_Budget ? std::format("{} MB", S.m_Budget >> 20) : std::string("none")
                               , V.m_nBlocks, V.m_nRanges, V.m_FreeBytes / 1048576.0, V.m_nDedicated);
         }
