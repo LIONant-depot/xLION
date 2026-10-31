@@ -154,7 +154,8 @@ namespace level_editor
         }
     }
 
-    // Measurement (XLION_FRAME_TIMES): the frame's parts, their mean over 120 frames printed
+    // Measurement (XLION_FRAME_TIMES): the frame's parts, their mean over 120 frames printed; the same parts are the profiler's zones
+    // (xprofile: Start begins the first, each Lap ends one and begins the next, whether XLION_FRAME_TIMES is on or not)
     struct frame_times
     {
         static constexpr int n_v = 10;
@@ -163,8 +164,17 @@ namespace level_editor
         int         m_Frames = 0;
         std::chrono::steady_clock::time_point m_T;
         bool        m_bOn = std::getenv("XLION_FRAME_TIMES") != nullptr;
-        void Start() noexcept { m_T = std::chrono::steady_clock::now(); }
-        void Lap(int i) noexcept { const auto N = std::chrono::steady_clock::now(); m_Sum[i] += std::chrono::duration<double, std::milli>(N - m_T).count(); m_T = N; }
+        xprofile::sequence m_Zones;
+        const xprofile::location* const m_pWhere[n_v] = { XPROFILE_LOCATION("Frame: levels"), XPROFILE_LOCATION("Frame: console"), XPROFILE_LOCATION("Frame: begin"), XPROFILE_LOCATION("Frame: services")
+            , XPROFILE_LOCATION("Frame: browser"), XPROFILE_LOCATION("Frame: resource editors"), XPROFILE_LOCATION("Frame: level/idle"), XPROFILE_LOCATION("Frame: overlays")
+            , XPROFILE_LOCATION("Frame: imgui render"), XPROFILE_LOCATION("Frame: flip") };
+        void Start() noexcept { if (m_bOn) m_T = std::chrono::steady_clock::now(); m_Zones.Next(m_pWhere[0]); }
+        void Lap(int i) noexcept
+        {
+            if (i + 1 < n_v) m_Zones.Next(m_pWhere[i + 1]); else m_Zones.End();
+            if (!m_bOn) return;
+            const auto N = std::chrono::steady_clock::now(); m_Sum[i] += std::chrono::duration<double, std::milli>(N - m_T).count(); m_T = N;
+        }
         void End() noexcept
         {
             if (++m_Frames < 120) return;
@@ -182,7 +192,7 @@ namespace level_editor
         XPROFILE_SCOPE("Editor frame");
         ++FrameNumber;
         auto& FT = g_FrameTimes;
-        if (FT.m_bOn) FT.Start();
+        FT.Start();
         xeditor::diagnostics::Log("frame %llu begin", static_cast<unsigned long long>(FrameNumber));
 
         // The resources compiled again since the last frame: their references move to the new data as they are asked for this frame
@@ -200,7 +210,7 @@ namespace level_editor
         // Checked unconditionally, every frame, BEFORE BeginRendering starts this frame - see
         // xlevel::session::PumpBeforeFrame's own comment for why this can never move into Render().
         PumpLevels();
-        if (FT.m_bOn) FT.Lap(0);
+        FT.Lap(0);
 
         // The command pipe waits for the first Game.dll build too: a script sees the editor as ready only once its Levels can open.
         const auto ConsoleLogCountBefore = EditorHost.m_ConsoleLog.size();
@@ -209,14 +219,15 @@ namespace level_editor
         if (EditorHost.m_ConsoleLog.size() != ConsoleLogCountBefore)
             EditorHost.m_IdleWork.NotifyActivity();
 
-        if (FT.m_bOn) FT.Lap(1);
+        FT.Lap(1);
         if (xgpu::tools::imgui::BeginRendering(true))
         {
             xeditor::diagnostics::Log("frame %llu BeginRendering skipped", static_cast<unsigned long long>(FrameNumber));
+            FT.m_Zones.End();                               // (its zone ends inside the frame's)
             return;
         }
         xeditor::diagnostics::Log("frame %llu BeginRendering complete", static_cast<unsigned long long>(FrameNumber));
-        if (FT.m_bOn) FT.Lap(2);
+        FT.Lap(2);
 
 #if defined(_WIN32) || defined(XLION_LINUX_GUI)
         // The title bar first: it takes the top of the main viewport, the dock space starts below it
@@ -231,7 +242,7 @@ namespace level_editor
         }
         EditorHost.pump_services();
         EditorHost.m_GIAllowance.NewFrame();
-        if (FT.m_bOn) FT.Lap(3);
+        FT.Lap(3);
 
         // Keys pressed this frame go to the actions that were live in the last one; this frame's panels register theirs as they draw.
         Actions.NewFrame();
@@ -268,9 +279,9 @@ namespace level_editor
 
         // Every open resource editor (Level's own singleton session included) renders itself - see
         // xlevel_session.h's own Render() for what used to be hand-rendered here directly.
-        if (FT.m_bOn) FT.Lap(4);
+        FT.Lap(4);
         ResourceEditors.RenderAll();
-        if (FT.m_bOn) FT.Lap(5);
+        FT.Lap(5);
 
         // The error popup belongs to the application, not to one editor: it is drawn here, once a frame, whichever editor is in front (drawn from
         // the Level editor it never showed while another editor had the screen), and it opens in the middle of the editor that had the focus.
@@ -283,7 +294,7 @@ namespace level_editor
             if (!bAnyLevel && IdleLevel) IdleLevel->Render();
         }
         // Host Drawer last so it stacks above Level and resource editor peer windows (same OS window).
-        if (FT.m_bOn) FT.Lap(6);
+        FT.Lap(6);
         EditorHost.draw_host_drawers();
         ximgui::actions::DrawPalette(Actions);         // over everything
         ximgui::actions::DrawKeyboardOverlay(Actions);
@@ -291,9 +302,9 @@ namespace level_editor
         ximgui::actions::DrawStatusLine(Actions);
         Actions.EndFrame();
 
-        if (FT.m_bOn) FT.Lap(7);
+        FT.Lap(7);
         xgpu::tools::imgui::Render();
-        if (FT.m_bOn) FT.Lap(8);
+        FT.Lap(8);
 
 #if defined(XLION_LINUX_GUI)
         // Linux: ImGui's mouse cursor on the X windows - the main one and every detached viewport (Win32 takes the
@@ -316,7 +327,8 @@ namespace level_editor
 
         xresource::g_Mgr.OnEndFrameDelegate();
         xtexture_residency::Update(xresource::g_Mgr);        // the textures' residency transitions that are due (TextureResidency)
-        if (FT.m_bOn) { FT.Lap(9); FT.End(); }
+        FT.Lap(9);
+        if (FT.m_bOn) FT.End();
 
         xeditor::diagnostics::Log("frame %llu end", static_cast<unsigned long long>(FrameNumber));
     }
