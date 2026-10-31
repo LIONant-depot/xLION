@@ -234,6 +234,13 @@ namespace level_editor
                 }
                 xeditor::diagnostics::Log("startup: opening project complete");
 
+                // The pipelines the last runs made: not compiled again on first use (a Level's open made 34 of them, 229 ms, every run)
+                if (!bHeadless)
+                {
+                    PipelineCachePath = (ProjectDir / L"Cache" / L"PipelineCache.bin").wstring();
+                    Device.LoadPipelineCache(PipelineCachePath);
+                }
+
                 // The Logs are kept from here on: <project>/Cache/Logs/<this launch>/, and the earlier launches are read back in the background (how each ended is classified
                 // from its stream and from the crash records xeditor::diagnostics keeps next to the working folder).
                 {
@@ -431,6 +438,8 @@ namespace level_editor
         xlevel::g_OpenLevelSession = {};
         EditorHost.withdraw<xeditor::open_resource_editors>();
         EditorHost.withdraw<xresource_editor::asset_browser>();
+        if (!bHeadless && !PipelineCachePath.empty())
+            if (auto Err = Device.SavePipelineCache(PipelineCachePath); Err) xeditor::diagnostics::Log("shutdown: the pipeline cache was not saved");
         if (!bHeadless)
         {
             EditorHost.withdraw<xgpu::device>();

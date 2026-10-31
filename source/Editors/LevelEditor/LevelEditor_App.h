@@ -179,6 +179,7 @@ namespace level_editor
     {
         xgpu::instance Instance;
         xgpu::device   Device;
+        std::wstring   PipelineCachePath;      // <project>/Cache/PipelineCache.bin: the pipelines made, loaded at start, saved at shutdown
         xgpu::window   MainWindow;
         std::unique_ptr<xgpu::texture> BrandIcon;
 
