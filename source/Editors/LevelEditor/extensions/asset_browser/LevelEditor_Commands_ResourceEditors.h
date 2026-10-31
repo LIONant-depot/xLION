@@ -211,9 +211,9 @@ namespace level_editor::commands
                    "background (the reply returns at once). -Mark text: a line on the timeline. -Clear: empties the recorder. -Memory: the memory pools (kept "
                    "whether recording or not: VRAM's blocks and what is in them) - used, reserved, peak, free inside the regions, fragmentation; -Map n: "
                    "each region as n characters (# full, + partly used, . free); -Owners: the memory by owner (the resource whose load made it) and by "
-                   "type, the most first (-Top k); -Filter text: only the pools whose name has it. -Show Metrics|Memory: opens "
+                   "type, the most first (-Top k); -Filter text: only the pools whose name has it. -Show Metrics|Memory|VRAM|System RAM: opens "
                    "the drawer on the Profiler tab at that page. Without arguments: its state. "
-                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]] [-Memory [-Map n] [-Owners [-Top k]]] [-Show Metrics|Memory]";
+                   "Usage: Profiler [-Enable 0|1] [-Clear] [-Mark text] [-Stats [-Frames n] [-Top k] [-Filter text]] [-Capture file [-Seconds s]] [-Memory [-Map n] [-Owners [-Top k]]] [-Show Metrics|Memory|VRAM|System RAM]";
         }
         void RegisterArguments() noexcept override
         {
