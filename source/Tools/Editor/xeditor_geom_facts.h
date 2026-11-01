@@ -122,7 +122,7 @@ namespace xeditor::geom_facts
         , obj_member<"nClusters",   &lod::m_nClusters, member_help<"Number of clusters in this LOD level">>
         , obj_member<"nVertices",   &lod::m_nVertices, member_help<"Number of vertices in this LOD level">>
         , obj_member<"nFaces",      &lod::m_nFaces, member_help<"Number of faces (triangles) in this LOD level">>
-        , obj_member<"ScreenArea",  &lod::m_ScreenArea, member_help<"Screen area coverage for this LOD (used for LOD switching)">>
+        , obj_member<"ScreenArea",  &lod::m_ScreenArea, member_help<"Static geometry: the LOD's simplification error (object space, what the renderer's LOD pick projects); skinned: the screen area coverage for this LOD">>
         , obj_member<"Submesh",     &lod::m_Submesh, member_help<"List of submeshes at this LOD level">>
         )
     };
@@ -202,7 +202,8 @@ namespace xeditor::geom_facts
             {
                 auto& LOD = Mesh.m_LODs[static_cast<int>(&L - LODSpan.data())];
 
-                LOD.m_ScreenArea = L.m_ScreenArea;
+                if constexpr (requires { L.m_Error; }) LOD.m_ScreenArea = L.m_Error;     // (xgeom_static: the LOD's error, object space)
+                else                                  LOD.m_ScreenArea = L.m_ScreenArea;
                 LOD.m_nClusters  = 0;
                 LOD.m_nFaces     = 0;
                 LOD.m_nVertices  = 0;
