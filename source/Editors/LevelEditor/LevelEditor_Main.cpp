@@ -15,6 +15,44 @@
     #include "source/Platform/xlion_linux_gui.h"      // Linux graphical editor: X11 clipboard, cursors, desktop dialogs
 #endif
 
+// This executable's new/delete counted - bytes and blocks, nothing else (the profiler's memory page and Profiler -Memory: app::Frame
+// publishes them; each DLL keeps its own heap and is not counted here). Two atomic adds per allocation; the block's real size from the CRT.
+// ponytail: memory new'd here and deleted in a DLL (or the reverse: one CRT heap) moves the count off - per-module counts if it drifts
+#include <atomic>
+#include <new>
+#include <cstdlib>
+#if defined(_WIN32)
+    #include <malloc.h>
+    #define XLION_BLOCK_SIZE(P) _msize(P)
+#else
+    #include <malloc.h>
+    #define XLION_BLOCK_SIZE(P) malloc_usable_size(P)
+#endif
+namespace level_editor { inline std::atomic<std::int64_t> g_HeapBytes{ 0 }, g_HeapBlocks{ 0 }; }
+static void* CountedAlloc(std::size_t n) noexcept
+{
+    void* p = std::malloc(n ? n : 1);
+    if (!p) std::abort();                   // (out of memory: the editor stops - no exceptions)
+    level_editor::g_HeapBytes.fetch_add(static_cast<std::int64_t>(XLION_BLOCK_SIZE(p)), std::memory_order_relaxed);
+    level_editor::g_HeapBlocks.fetch_add(1, std::memory_order_relaxed);
+    return p;
+}
+static void CountedFree(void* p) noexcept
+{
+    if (!p) return;
+    level_editor::g_HeapBytes.fetch_sub(static_cast<std::int64_t>(XLION_BLOCK_SIZE(p)), std::memory_order_relaxed);
+    level_editor::g_HeapBlocks.fetch_sub(1, std::memory_order_relaxed);
+    std::free(p);
+}
+void* operator new  (std::size_t n)                         { return CountedAlloc(n); }
+void* operator new[](std::size_t n)                         { return CountedAlloc(n); }
+void* operator new  (std::size_t n, const std::nothrow_t&) noexcept { return CountedAlloc(n); }
+void* operator new[](std::size_t n, const std::nothrow_t&) noexcept { return CountedAlloc(n); }
+void  operator delete  (void* p) noexcept                   { CountedFree(p); }
+void  operator delete[](void* p) noexcept                   { CountedFree(p); }
+void  operator delete  (void* p, std::size_t) noexcept      { CountedFree(p); }
+void  operator delete[](void* p, std::size_t) noexcept      { CountedFree(p); }
+
 #include "source/Editors/LevelEditor/LevelEditor_MaterialGraphCompat.h"
 #include "source/Editors/LevelEditor/LevelEditor_App.h"
 #include "source/Editors/LevelEditor/LevelEditor_AppInit.h"

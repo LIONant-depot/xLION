@@ -324,6 +324,9 @@ namespace level_editor
         MainWindow.PageFlip();
         g_WindowCapture.AfterFlip();
         XPROFILE_FRAME();
+    #if defined(XLION_PROFILE) && XLION_PROFILE
+        xprofile::MemCounter("Editor executable: new/delete", g_HeapBytes.load(std::memory_order_relaxed), g_HeapBlocks.load(std::memory_order_relaxed));
+    #endif
 
         xresource::g_Mgr.OnEndFrameDelegate();
         xtexture_residency::Update(xresource::g_Mgr);        // the textures' residency transitions that are due (TextureResidency)

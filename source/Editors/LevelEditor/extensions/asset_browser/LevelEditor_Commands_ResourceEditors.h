@@ -316,6 +316,9 @@ namespace level_editor::commands
             for (const auto& S : Spaces)
                 Out += std::format("\nspace {}: {:.2f} GB in all, this process uses {:.2f} GB, its budget {:.2f} GB ({:.2f} GB free for it){}", S.m_pName, S.m_Size * MB / 1024,
                                    S.m_Usage * MB / 1024, S.m_Budget * MB / 1024, S.m_Budget > S.m_Usage ? (S.m_Budget - S.m_Usage) * MB / 1024 : 0.0, S.m_Usage ? "" : " (no usage from the driver)");
+            std::vector<xprofile::mem_counter> Counters;
+            xprofile::MemCounters(Counters);
+            for (const auto& C : Counters) Out += std::format("\ncounter {}: {:.1f} MB in {} blocks", C.m_pName, C.m_Bytes * MB, C.m_Count);
             for (const auto& P : Pools)
             {
                 if (!Filter.empty() && !xprofile::editor::tab::Contains(P.m_pName, Filter.c_str())) continue;
