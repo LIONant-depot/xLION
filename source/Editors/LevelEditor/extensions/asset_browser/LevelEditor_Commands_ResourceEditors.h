@@ -17,6 +17,7 @@
 #include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
 #include "plugins/xscript_module.plugin/source/Editor/xscript_module_editor.h"
 #include "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"       // (xtexture_residency: TextureResidency)
+#include "plugins/xgeom_static.plugin/source/xgeom_static_xgpu_rsc_loader.h"   // (xgeom_static_residency: GeomResidency)
 #include "xprofile.h"                                                       // (Profiler)
 #include "editor/xprofile_tab.h"                                            // (the drawer's Profiler tab)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
@@ -416,6 +417,38 @@ namespace level_editor::commands
                               , V.m_nBlocks, V.m_nRanges, V.m_FreeBytes / 1048576.0, V.m_nDedicated);
         }
         xcmdline::parser::handle m_hTop, m_hAsset, m_hBudget;
+    };
+
+    // GeomResidency: scripted residency requests to the editor's static geometries (xgeom_static_residency, as TextureResidency): the finest
+    // LOD their GPU buffers hold. Immediate: the data stays in RAM (the GI reads it)
+    struct geom_residency_cmd : xlevel::commands::level_query_command
+    {
+        geom_residency_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "GeomResidency", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Which LODs the loaded static geometries keep on the GPU: -FinestLOD n (0: all of them), for every geometry or the one of -Asset. Without arguments: the state. Usage: GeomResidency [-FinestLOD n] [-Asset guid]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hLOD   = m_Parser.addOption("FinestLOD", "The finest LOD kept (0: all)", false, 1);
+            m_hAsset = m_Parser.addOption("Asset", "One geometry's resource guid (32 hex digits); none: all", false, 1);
+        }
+        std::string Query() noexcept override
+        {
+            if (m_Parser.hasOption(m_hLOD))
+            {
+                auto L = m_Parser.getOptionArgAs<std::string>(m_hLOD, 0);
+                if (std::holds_alternative<xerr>(L)) return "GeomResidency: bad -FinestLOD";
+                const int Finest = std::atoi(std::get<std::string>(L).c_str());
+                if (m_Parser.hasOption(m_hAsset))
+                {
+                    auto A = m_Parser.getOptionArgAs<std::string>(m_hAsset, 0);
+                    if (std::holds_alternative<xerr>(A)) return "GeomResidency: bad -Asset";
+                    xgeom_static_residency::Request(xresource::g_Mgr, xresource_editor::commands::ParseAssetGuid(std::get<std::string>(A)), Finest);
+                }
+                else xgeom_static_residency::RequestAll(xresource::g_Mgr, Finest);
+            }
+            const auto S = xgeom_static_residency::getStats(xresource::g_Mgr);
+            return std::format("GeomResidency: geometries {}, reduced {}, on the GPU {:.1f} MB of {:.1f} MB", S.m_nGeoms, S.m_nReduced, S.m_Bytes / 1048576.0, S.m_FullBytes / 1048576.0);
+        }
+        xcmdline::parser::handle m_hLOD, m_hAsset;
     };
 
     // CloseResourceEditor: the editor menu's Close. Without -Save it closes the editor and drops what was not saved (what a script wants); with -Save it does what a person is offered:

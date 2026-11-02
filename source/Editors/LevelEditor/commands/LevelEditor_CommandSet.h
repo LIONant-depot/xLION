@@ -224,6 +224,7 @@ namespace level_editor
         level_editor::commands::set_browser_search_cmd            CmdSetBrowserSearch;
         level_editor::commands::capture_window_cmd                CmdCaptureWindow;
         level_editor::commands::texture_residency_cmd             CmdTextureResidency;
+        level_editor::commands::geom_residency_cmd                CmdGeomResidency;
         level_editor::commands::profiler_cmd                      CmdProfiler;
         level_editor::commands::say_query_cmd                     CmdSay;
         level_editor::commands::get_log_query_cmd                 CmdGetLog;
@@ -334,6 +335,7 @@ namespace level_editor
         , CmdSetBrowserSearch(Workspace, pEditor)
         , CmdCaptureWindow(Workspace, pEditor)
         , CmdTextureResidency(Workspace, pEditor)
+        , CmdGeomResidency(Workspace, pEditor)
         , CmdProfiler(Workspace, pEditor)
         , CmdSay(Workspace, pEditor)
         , CmdGetLog(Workspace, pEditor)
@@ -450,6 +452,7 @@ namespace level_editor
             CmdSetBrowserSearch.m_pDataBase = pEditor;
             CmdCaptureWindow.m_pDataBase = pEditor;
             CmdTextureResidency.m_pDataBase = pEditor;
+            CmdGeomResidency.m_pDataBase = pEditor;
             CmdProfiler.m_pDataBase = pEditor;
             CmdSay.m_pDataBase = pEditor;
             CmdGetLog.m_pDataBase = pEditor;
