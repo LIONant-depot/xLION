@@ -99,9 +99,10 @@ static void SetRendererDefaults() noexcept
         setenv(pName, pValue, 0);
 #endif
     };
-    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 1.25 16384");
+    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    // (Tomas, 2026-11-03: the base image first, one feature at a time. Each on by its own switch: XLION_TILE=1, XLION_CONTACT="0.35 8 0.15 30 1", XLION_GI_NO_REFL=0 does not count: unset it)
+    Default("XLION_GI_NO_REFL", "1");
     Default("XLION_TILE", "1");
-    Default("XLION_CONTACT", "0.35 8 0.15 30 1");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
