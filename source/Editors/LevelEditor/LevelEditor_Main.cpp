@@ -85,11 +85,31 @@ void  operator delete[](void* p, std::size_t) noexcept      { CountedFree(p); }
 #include "source/Editors/LevelEditor/LevelEditor_FilesActions.h"
 
 //-----------------------------------------------------------------------------------
+// What the editor's renderer runs by default (Tomas, 2026-11-03: approved, a menu later): the voxel GI, the material tile pass, the contact shadows. A value already set wins; XLION_CLASSIC=1: none of
+// them (the surfels, the raster). They are environment switches the renderer reads once: before anything starts
+static void SetRendererDefaults() noexcept
+{
+    if (std::getenv("XLION_CLASSIC")) return;
+    const auto Default = [](const char* pName, const char* pValue)
+    {
+        if (std::getenv(pName)) return;
+#if _WIN32
+        _putenv_s(pName, pValue);
+#else
+        setenv(pName, pValue, 0);
+#endif
+    };
+    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    Default("XLION_TILE", "1");
+    Default("XLION_CONTACT", "0.35 8 0.15 30 1");
+}
+
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
 // Called by source/main_graphical.cpp / source/main_headless.cpp.
 //-----------------------------------------------------------------------------------
 int RunLevelEditorGraphical()
 {
+    SetRendererDefaults();
     level_editor::app App;
     if (const int Err = App.Init(/*bHeadlessMode*/ false)) return Err;
     App.Run();
@@ -99,6 +119,7 @@ int RunLevelEditorGraphical()
 
 int RunLevelEditorHeadless()
 {
+    SetRendererDefaults();
     level_editor::app App;
     if (const int Err = App.Init(/*bHeadlessMode*/ true)) return Err;
     App.RunHeadless();
