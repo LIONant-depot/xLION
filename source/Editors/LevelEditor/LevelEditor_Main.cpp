@@ -99,7 +99,7 @@ static void SetRendererDefaults() noexcept
         setenv(pName, pValue, 0);
 #endif
     };
-    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 1.25 16384");
     Default("XLION_TILE", "1");
     Default("XLION_CONTACT", "0.35 8 0.15 30 1");
 }
