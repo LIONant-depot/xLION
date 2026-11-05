@@ -321,8 +321,10 @@ namespace level_editor
 #endif
 
         g_WindowCapture.BeforeFlip(MainWindow);
+        g_WindowNoise.BeforeFlip(MainWindow);
         MainWindow.PageFlip();
         g_WindowCapture.AfterFlip();
+        g_WindowNoise.AfterFlip();
         XPROFILE_FRAME();
     #if defined(XLION_PROFILE) && XLION_PROFILE
         xprofile::MemCounter("Editor executable: new/delete", g_HeapBytes.load(std::memory_order_relaxed), g_HeapBlocks.load(std::memory_order_relaxed));

@@ -19,6 +19,9 @@
 #include "plugins/xtexture.plugin/source/xtexture_xgpu_rsc_loader.h"       // (xtexture_residency: TextureResidency)
 #include "plugins/xgeom_static.plugin/source/xgeom_static_xgpu_rsc_loader.h"   // (xgeom_static_residency: GeomResidency)
 #include "xprofile.h"                                                       // (Profiler)
+#include <algorithm>
+#include <cstdio>
+#include <format>
 #include "editor/xprofile_tab.h"                                            // (the drawer's Profiler tab)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
@@ -69,6 +72,89 @@ namespace level_editor
     };
 
     inline window_capture g_WindowCapture;
+
+    // "Is there noise, how much, where?" (NoiseCheck): consecutive pictures of the window as it is shown, tone mapping, TAA and all, with the camera still. A pixel's noise is the RMS of its
+    // frame to frame change / sqrt 2 (a noise's standard deviation, out of 255 of display luminance): a slow drift over seconds barely counts. Writes <File> (where and how much, over a dim copy of
+    // the picture) and <File>.txt (the numbers and the worst tiles). ponytail: a noise a frame repeats (fixed rays, a static pattern) isn't seen: that takes comparing against a reference
+    struct window_noise
+    {
+        bool                        m_bActive = false, m_bRequested = false;
+        int                         m_Left = 0, m_N = 0, m_Width = 0, m_Height = 0, m_X = 0, m_Y = 0, m_W = 0, m_H = 0;
+        std::wstring                m_Path;
+        std::vector<std::uint32_t>  m_Pixels;
+        std::vector<float>          m_Prev, m_Sum;
+
+        void Start(std::wstring Path, int Frames, int X, int Y, int W, int H) noexcept
+        {
+            m_Path = std::move(Path); m_Left = std::max(Frames, 2); m_N = 0; m_X = X; m_Y = Y; m_W = W; m_H = H; m_Prev.clear(); m_Sum.clear(); m_bRequested = false; m_bActive = true;
+        }
+        void BeforeFlip(xgpu::window& Window) noexcept
+        {
+            if (m_bActive && !m_bRequested) m_bRequested = Window.Screenshot(m_Pixels, m_Width, m_Height);
+        }
+        void AfterFlip() noexcept
+        {
+            if (!m_bRequested) return;
+            m_bRequested = false;
+            const std::size_t n = static_cast<std::size_t>(m_Width) * m_Height;
+            if (m_Width <= 0 || m_Height <= 0 || m_Pixels.size() < n) return;
+            if (m_Prev.size() != n) { m_Prev.assign(n, 0.0f); m_Sum.assign(n, 0.0f); m_N = 0; }
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                const std::uint32_t c = m_Pixels[i];
+                const float L = 0.0722f * float(c & 255u) + 0.7152f * float((c >> 8) & 255u) + 0.2126f * float((c >> 16) & 255u);
+                if (m_N > 0) { const float d = L - m_Prev[i]; m_Sum[i] += d * d; }
+                m_Prev[i] = L;
+            }
+            ++m_N;
+            if (--m_Left <= 0) { Finish(); m_bActive = false; }
+        }
+        void Finish() noexcept
+        {
+            const int X0 = std::clamp(m_X, 0, m_Width), Y0 = std::clamp(m_Y, 0, m_Height), X1 = m_W > 0 ? std::clamp(m_X + m_W, X0, m_Width) : m_Width, Y1 = m_H > 0 ? std::clamp(m_Y + m_H, Y0, m_Height) : m_Height;
+            const float Div = 1.0f / (2.0f * float(std::max(m_N - 1, 1)));
+            std::vector<float> Inside; Inside.reserve(std::size_t(X1 - X0) * (Y1 - Y0));
+            std::vector<std::uint32_t> Out(1 + static_cast<std::size_t>(m_Width) * m_Height);
+            Out[0] = sizeof(xbitmap::mip);
+            constexpr int Tile = 64;
+            struct tile { float m_Mean; int m_X, m_Y; };
+            std::vector<float> TileSum(std::size_t((X1 - X0) / Tile + 1) * ((Y1 - Y0) / Tile + 1), 0.0f);
+            const int TilesW = (X1 - X0) / Tile + 1;
+            for (int y = 0; y < m_Height; ++y) for (int x = 0; x < m_Width; ++x)
+            {
+                const std::size_t i = std::size_t(y) * m_Width + x;
+                const float S = std::sqrt(m_Sum[i] * Div), Bg = m_Prev[i] * 0.3f, T = std::clamp(S / 16.0f, 0.0f, 1.0f);     // (16 of 255 and over: full red)
+                const bool bIn = x >= X0 && x < X1 && y >= Y0 && y < Y1;
+                if (bIn) { Inside.push_back(S); TileSum[std::size_t((y - Y0) / Tile) * TilesW + (x - X0) / Tile] += S; }
+                const float R = Bg + T * 255.0f, G = Bg + std::min(T * 2.0f, 1.0f) * (1.0f - T) * 255.0f, Bl = Bg;      // (dark, then green, then red)
+                Out[1 + i] = 0xFF000000u | (std::uint32_t(std::min(R, 255.0f)) << 16) | (std::uint32_t(std::min(G, 255.0f)) << 8) | std::uint32_t(std::min(Bl, 255.0f));
+            }
+            xbitmap Bitmap;
+            Bitmap.setup(m_Width, m_Height, xbitmap::format::B8G8R8A8, static_cast<std::uint64_t>(m_Width) * m_Height * sizeof(std::uint32_t), std::as_writable_bytes(std::span(Out)), false, 1, 1);
+            std::filesystem::path Final(m_Path), Temp = Final;
+            Temp.replace_extension(L".part" + Final.extension().wstring());
+            std::error_code Ec;
+            if (!xbmp::tools::writers::SaveSTDImage(Temp.wstring(), Bitmap)) { std::filesystem::rename(Temp, Final, Ec); if (Ec) { std::filesystem::remove(Final, Ec); std::filesystem::rename(Temp, Final, Ec); } }
+
+            double Mean = 0.0; std::size_t Over2 = 0, Over4 = 0, Over8 = 0;
+            for (const float v : Inside) { Mean += v; Over2 += v > 2.0f; Over4 += v > 4.0f; Over8 += v > 8.0f; }
+            const double Count = double(std::max<std::size_t>(Inside.size(), 1)); Mean /= Count;
+            float P95 = 0.0f;
+            if (!Inside.empty()) { const auto At = Inside.begin() + std::ptrdiff_t(Inside.size() * 95 / 100); std::nth_element(Inside.begin(), At, Inside.end()); P95 = *At; }
+            std::vector<tile> Worst;
+            for (std::size_t t = 0; t < TileSum.size(); ++t) Worst.push_back({ TileSum[t] / float(Tile * Tile), X0 + int(t % TilesW) * Tile, Y0 + int(t / TilesW) * Tile });
+            const std::size_t nTop = std::min<std::size_t>(Worst.size(), 8);
+            std::partial_sort(Worst.begin(), Worst.begin() + std::ptrdiff_t(nTop), Worst.end(), [](const tile& a, const tile& b) { return a.m_Mean > b.m_Mean; });
+            const char* pVerdict = 100.0 * Over8 / Count > 0.1 ? "NOISY" : 100.0 * Over4 / Count > 1.0 ? "some noise" : "clean";
+            std::string Text = std::format("NOISE {}: {} frames, mean {:.2f}, p95 {:.2f} of 255; pixels over 2: {:.2f} %, over 4: {:.2f} %, over 8: {:.3f} %\nworst tiles ({} px), mean, x, y:\n", pVerdict, m_N, Mean, P95, 100.0 * Over2 / Count, 100.0 * Over4 / Count, 100.0 * Over8 / Count, Tile);
+            for (std::size_t t = 0; t < nTop; ++t) Text += std::format("{:.2f} {} {}\n", Worst[t].m_Mean, Worst[t].m_X, Worst[t].m_Y);
+            if (std::FILE* f = _wfopen((m_Path + L".txt").c_str(), L"wb")) { std::fwrite(Text.data(), 1, Text.size(), f); std::fclose(f); }
+            std::printf("%s", Text.c_str()); std::fflush(stdout);
+            m_Sum.clear(); m_Prev.clear();
+        }
+    };
+
+    inline window_noise g_WindowNoise;
 }
 
 namespace level_editor::commands
@@ -198,6 +284,35 @@ namespace level_editor::commands
             return "CaptureWindow: queued, the file appears when the next frame is presented";
         }
         xcmdline::parser::handle m_hFile;
+    };
+
+    struct noise_check_cmd : xlevel::commands::level_query_command
+    {
+        noise_check_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "NoiseCheck", pDataBase) { RegisterArguments(); }
+        const char* getCommandHelp() const noexcept override { return "Is there noise, how much, where? Keep the camera still. Over -Frames n frames (default 32) writes -File x.png (where and how much: green about 8 of 255, red 16 and over, over a dim copy of the picture) and x.png.txt (a verdict, mean, p95, how many pixels over 2, 4, 8, the worst tiles). -Rect x,y,w,h: only that part counts (the 3D view: panels' text changes). A noise that repeats every frame isn't seen. Usage: NoiseCheck -File x.png [-Frames n] [-Rect x,y,w,h]"; }
+        void RegisterArguments() noexcept override
+        {
+            m_hFile   = m_Parser.addOption("File", "The picture of the noise; its numbers in the same name + .txt", true, 1);
+            m_hFrames = m_Parser.addOption("Frames", "How many frames (default 32)", false, 1);
+            m_hRect   = m_Parser.addOption("Rect", "x,y,w,h: the part that counts", false, 1);
+        }
+        std::string Query() noexcept override
+        {
+            auto FileArg = m_Parser.getOptionArgAs<std::string>(m_hFile, 0);
+            if (std::holds_alternative<xerr>(FileArg)) return "NoiseCheck: bad arguments";
+            if (g_WindowNoise.m_bActive) return "NoiseCheck: one is already running";
+            const std::filesystem::path Path = xstrtool::To(std::get<std::string>(FileArg));
+            if (Path.extension().empty()) return "NoiseCheck: the file needs an extension (png)";
+            int Frames = 32, X = 0, Y = 0, W = 0, H = 0;
+            if (auto A = m_Parser.getOptionArgAs<std::string>(m_hFrames, 0); !std::holds_alternative<xerr>(A)) Frames = std::atoi(std::get<std::string>(A).c_str());
+            if (auto A = m_Parser.getOptionArgAs<std::string>(m_hRect, 0); !std::holds_alternative<xerr>(A)) std::sscanf(std::get<std::string>(A).c_str(), "%d,%d,%d,%d", &X, &Y, &W, &H);
+            std::error_code Ec;
+            if (Path.has_parent_path()) std::filesystem::create_directories(Path.parent_path(), Ec);
+            std::filesystem::remove(Path, Ec); std::filesystem::remove(Path.wstring() + L".txt", Ec);
+            g_WindowNoise.Start(Path.wstring(), Frames, X, Y, W, H);
+            return "NoiseCheck: running, the numbers appear in the file's .txt";
+        }
+        xcmdline::parser::handle m_hFile, m_hFrames, m_hRect;
     };
 
     // Profiler: the profiler (xprofile, Tracy's client) on and off, and its state; a viewer (Tracy's, v0.14.1) connects to the editor once it is on
