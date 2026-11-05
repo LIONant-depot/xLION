@@ -15,6 +15,7 @@ import os
 import ctypes
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import threading
@@ -306,7 +307,33 @@ class Editor:
 
     def describe_exit(self) -> str:
         code = self.exit_code()
-        return "running" if code is None else f"{code & 0xFFFFFFFF:#010x}"
+        if code is None:
+            return "running"
+        if os.name != "nt" and code < 0:                    # POSIX: killed by a signal (Popen's -N), not an exit code
+            try:
+                return f"signal {signal.Signals(-code).name}"
+            except ValueError:
+                return f"signal {-code}"
+        return f"{code & 0xFFFFFFFF:#010x}"
+
+    def dying(self) -> bool:
+        """Linux: the editor already took its fatal signal and the kernel is writing its core (WSL's core_pattern pipes it to /wsl-capture-crash, which takes
+        longer than a command's timeout): alive to poll(), answering nothing - a crash, not a hang."""
+        if os.name == "nt" or not self.alive():
+            return False
+        try:
+            status = Path(f"/proc/{self.proc.pid}/status").read_text()
+        except OSError:
+            return False
+        return bool(re.search(r"^CoreDumping:\s*1", status, re.M) or re.search(r"^State:\s*[ZX]", status, re.M))
+
+    def wait_dead(self, timeout: float = 180.0) -> None:
+        """Waits out a dying editor (dying()) so its exit says the signal; killed if the core takes longer than that."""
+        try:
+            self.proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait(timeout=10)
 
     def crash_summary(self, frames: int = 8) -> str:
         """What the editor itself wrote about how it died (its LevelEditor.trace.log: the assert or exception and the frames of the editor's own code), so a failure says it without a trip to the log."""
@@ -405,6 +432,8 @@ class Editor:
         try:
             reply = self._roundtrip(line, timeout)
         except (TimeoutError, OSError) as e:
+            if self.dying():
+                self.wait_dead()
             if not self.alive():
                 raise EditorCrashed(f"editor died running {line!r} (exit {self.describe_exit()}){self.crash_summary()}") from e
             if isinstance(e, TimeoutError):
