@@ -1,6 +1,7 @@
 #ifndef XEDITOR_VIRTUAL_RESOURCES_H
 #define XEDITOR_VIRTUAL_RESOURCES_H
 #pragma once
+#include <algorithm>
 
 // The editor half of the virtual resources an owner's compiler makes (documentation/Editors/virtual_resources_plan.md): the command and the button that
 // take away the ones the compiler no longer makes. They stay on disk with their edits when an import is turned off or the model loses a material (the
@@ -43,6 +44,11 @@ namespace xeditor::virtual_resources
             {
                 std::wstring InfoPath;
                 xresource_editor::g_LibMgr.getNodeInfo(m_Doc.m_LibraryGuid, Guid, [&](xresource_editor::library_db::info_node& Node) { InfoPath = Node.m_Path; });
+            #if !defined(_WIN32)
+                // the library writes its info paths with '\\' (Library\\Descriptors\\Type\\..\\G.desc\\info.txt): only Windows' std::filesystem takes it as a separator. Read as it
+                // was, the parent of the info file was the library's own folder - no file of the resource was backed up and an undo brought back an empty folder
+                std::replace(InfoPath.begin(), InfoPath.end(), L'\\', L'/');
+            #endif
                 const auto Folder = std::filesystem::path(InfoPath).parent_path();
 
                 std::vector<std::filesystem::path> Files;
