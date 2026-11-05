@@ -1196,7 +1196,7 @@ def test_a_successful_compile_with_warnings_succeeds_with_its_warnings(editor):
 @pytest.mark.needs_window
 def test_compiling_a_texture_in_its_editor_records_the_compile_and_feedback_opens_the_logs_on_it(editor):
     """The real thing, end to end: the library manager's compile notification becomes an asset.compile operation (no editor hook), and the editor's
-    Feedback (F6) takes the person to the Logs with that operation as the filter."""
+    Feedback (F6) opens the Host Drawer on the Compilation tab for that asset."""
     import time
     found = editor.find_asset("Texture")
     if found is None:
@@ -1223,19 +1223,16 @@ def test_compiling_a_texture_in_its_editor_records_the_compile_and_feedback_open
         assert mine[0]["Outcome"] == "Succeeded" and mine[0]["EvidenceReady"] == "true", mine[0]
         _, events = tail(run(editor, f'LogEvents -Operation {mine[0]["Id"]} -Query "channel:asset.compile.texture" -Limit 100'))
         assert any("Start Compilation" in e["Title"] for e in events), "the compiler's own output is the operation's events"
-        # Feedback (F6) opens the drawer on the Logs, filtered to this asset's last compile: the whole build situation, in the one place it lives
-        before_window = run(editor, "LogWindow")
+        # Feedback (F6) opens the Host Drawer on the Compilation tab with this asset focused (toolbar: OpenCompilationFor since 67b077b/68334a8).
+        browser = editor.cmd("GetBrowserState")
+        assert browser.startswith("GetBrowserState: ok"), browser
         editor.cmd("PressKeys -Keys F6")
         time.sleep(0.5)
-        window = run(editor, "LogWindow")
-        assert "Page=Events" in window and f"Query=op:{mine[0]['Id']}" in window, window
-        back = lambda text: text.split("Back=")[1].splitlines()[0]
-        assert back(window) != "none" and back(window) != back(before_window), "Feedback left a way back to what the person was doing"
-        assert "back" in editor.cmd("LogBack"), "Back returns the window to where it was"
-        after = run(editor, "LogWindow")
-        assert f"Query=op:{mine[0]['Id']}" not in after, after
+        browser = editor.cmd("GetBrowserState")
+        assert browser.startswith("GetBrowserState: ok"), browser
+        assert "Drawer=open" in browser and "DrawerTab=6" in browser, f"Feedback opens the Compilation tab: {browser}"
         time.sleep(0.5)
-        assert editor.alive() and run(editor, "LogStatus").startswith("LogStatus: ok"), "the window draws the filtered view without upsetting the editor"
+        assert editor.alive() and run(editor, "LogStatus").startswith("LogStatus: ok"), "Feedback leaves the editor healthy"
     finally:
         editor.cmd(f"CloseResourceEditor -Asset {guid}")
 
