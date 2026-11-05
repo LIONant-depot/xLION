@@ -18,6 +18,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 if os.name == "nt":
@@ -281,9 +282,15 @@ class Editor:
                 self.proc.wait(timeout=8)
             except Exception:
                 pass
-        if self.alive():
+        if self.dying():                    # it crashed on the way out: the core is being written (WSL's crash capture takes longer than a kill's wait); wait it out
+            self.wait_dead()
+        killed = self.alive()
+        if killed:
             self.proc.kill()
-            self.proc.wait(timeout=10)
+            self.wait_dead(timeout=60)      # a kill that lands while the core is written is only seen when the dump ends
+        if graceful and not killed and self.proc.returncode is not None and self.proc.returncode < 0:
+            sig = signal.Signals(-self.proc.returncode).name
+            print(f"[harness] the editor died of {sig} while exiting (launch {self.launches}): see LevelEditor.problems.log / {self.log_dir}", file=sys.stderr)
 
     def ensure_running(self) -> None:
         if not self.alive():
