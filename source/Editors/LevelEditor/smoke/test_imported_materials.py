@@ -178,13 +178,13 @@ def test_each_material_of_the_model_becomes_a_pbr_instance_with_its_textures(pro
     stone_normal = by_folder[texture_of(instances["stone"][1], 0)]
     assert "TANGENT_NORMAL" in stone_normal[1] and "stone_ddn.png" in stone_normal[1], "an OBJ bump map named like a normal map is the normal map"
     leaf_albedo = by_folder[texture_of(instances["leaf"][1], 1)]
-    assert "MIX_SOURCE" in leaf_albedo[1] and "leaf_mask.png" in leaf_albedo[1] and "COLOR_AND_ALPHA" in leaf_albedo[1], "the opacity map goes in the albedo's alpha"
+    assert "MIX_SOURCE" in leaf_albedo[1] and "leaf_mask.png" in leaf_albedo[1] and "COLOR_AND_CUTOUT" in leaf_albedo[1], "the opacity map goes in the albedo's alpha (a cut out color)"
 
     lamp_albedo = by_folder[texture_of(instances["lamp"][1], 1)]
     assert "CUSTOM_CONSTANT" in lamp_albedo[1] and re.search(r'"Texture/SRGB"\s+;bool\s+0', lamp_albedo[1]), "a plain color is a linear constant texture"
     lamp_orme = by_folder[texture_of(instances["lamp"][1], 2)]
-    assert re.search(r'"Texture/Usage"\s+;enum\s+"INTENSITY"', lamp_orme[1]), "the ORME is data (an intensity texture), not a color with alpha"
-    assert re.search(r'Mixes\[G:3\]/Copy To"\s+;enum\s+"A"\s*\n\s*"Texture/Input/Mixes\[G:3\]/FileName"\s+;wstring\s+""\s*\n\s*"Texture/Input/Mixes\[G:3\]/Constant"\s+;f32\s+#3F800000', lamp_orme[1]), "an emissive color makes the material emit (ORME.a = 1)"
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"ORME"', lamp_orme[1]), "the ORME is data (its own ORME usage), not a color with alpha"
+    assert re.search(r'Emissive \(A\)/Copy From"\s+;enum\s+"CUSTOM_CONSTANT"\s*\n\s*"Texture/Input/Emissive \(A\)/FileName"\s+;wstring\s+""\s*\n\s*"Texture/Input/Emissive \(A\)/Constant"\s+;f32\s+#3F800000', lamp_orme[1]), "an emissive color makes the material emit (ORME.a = 1)"
 
     # Shared: the flat-normal texture of the two materials without a normal map is one resource
     assert texture_of(instances["leaf"][1], 0) == texture_of(instances["lamp"][1], 0)
@@ -243,8 +243,8 @@ def test_a_glossiness_map_is_the_roughness_upside_down(project):
     mtl.write_text(mtl.read_text().replace("map_bump textures\\stone_ddn.png", "map_bump textures\\stone_ddn.png\nmap_Ns textures\\stone_gloss.png"))
     compile_geom(project)
     orme = virtual(project, "Texture")["stone_gloss (ORME)"][1]
-    assert re.search(r'"Texture/Usage"\s+;enum\s+"INTENSITY"', orme), "the ORME is data (an intensity texture), not a color with alpha"
-    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+1', orme) and "stone_gloss.png" in orme, orme
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"ORME"', orme), "the ORME is data (its own ORME usage), not a color with alpha"
+    assert re.search(r'Roughness \(G\)/Invert"\s+;bool\s+1', orme) and "stone_gloss.png" in orme, orme
 
 
 def test_a_roughness_map_in_the_shininess_slot_is_used_as_it_is(project):
@@ -255,7 +255,7 @@ def test_a_roughness_map_in_the_shininess_slot_is_used_as_it_is(project):
     mtl.write_text(mtl.read_text().replace("map_bump textures\\stone_ddn.png", "map_bump textures\\stone_ddn.png\nmap_Ns textures\\stone_rough.png"))
     compile_geom(project)
     orme = virtual(project, "Texture")["stone_rough (ORME)"][1]
-    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "stone_rough.png" in orme, orme
+    assert re.search(r'Roughness \(G\)/Invert"\s+;bool\s+0', orme) and "stone_rough.png" in orme, orme
 
 
 def test_a_material_with_no_map_in_the_model_finds_its_maps_by_its_own_name(project):
@@ -268,7 +268,7 @@ def test_a_material_with_no_map_in_the_model_finds_its_maps_by_its_own_name(proj
     out = compile_geom(project)
     assert "lamp_Albedo.png (named after the material or the model) is taken" in out, out[-3000:]
     orme = virtual(project, "Texture")["lamp_Rough (ORME)"][1]
-    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "lamp_Rough.png" in orme, orme
+    assert re.search(r'Roughness \(G\)/Invert"\s+;bool\s+0', orme) and "lamp_Rough.png" in orme, orme
     assert "lamp_Emissive.png" in orme, "the emissive map is the mask of the emission (ORME.a)"
 
 
@@ -280,7 +280,7 @@ def test_a_material_with_no_map_finds_the_maps_named_after_the_model(project):
     out = compile_geom(project)
     assert "model_Cor.jpeg (named after the material or the model) is taken" in out, out[-3000:]
     orme = virtual(project, "Texture")["modelRough (ORME)"][1]
-    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+0', orme) and "modelRough.jpeg" in orme, orme
+    assert re.search(r'Roughness \(G\)/Invert"\s+;bool\s+0', orme) and "modelRough.jpeg" in orme, orme
 
 
 def test_the_instances_of_a_particle_system_have_a_material_of_their_own_with_the_unclaimed_maps(project):
@@ -296,7 +296,7 @@ def test_the_instances_of_a_particle_system_have_a_material_of_their_own_with_th
     assert "lamp|Dupli" in virtual(project, "MaterialInstance"), "a slot of its own"
     assert "lamp" in virtual(project, "MaterialInstance"), "and the model's own"
     cut_out = virtual(project, "Texture")["feather_alpha (color, cut out)"][1]
-    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_ALPHA"', cut_out) and "feather_alpha.png" in cut_out, cut_out
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_CUTOUT"', cut_out) and "feather_alpha.png" in cut_out, cut_out
     assert "feather_normal (normal)" in virtual(project, "Texture")
 
 
@@ -308,7 +308,7 @@ def test_an_unclaimed_alpha_map_with_an_alpha_channel_is_the_color_map_with_its_
     out = compile_geom(project)
     assert "feather_alpha.png has its own alpha channel: it is the color map, with its cut-out" in out, out[-3000:]
     cut_out = virtual(project, "Texture")["feather_alpha (color and alpha)"][1]
-    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_ALPHA"', cut_out) and "feather_alpha.png" in cut_out, cut_out
+    assert re.search(r'"Texture/Usage"\s+;enum\s+"COLOR_AND_CUTOUT"', cut_out) and "feather_alpha.png" in cut_out, cut_out
 
 
 def test_a_map_the_model_does_not_name_is_found_next_to_its_color_map_by_name(project):
@@ -317,7 +317,7 @@ def test_a_map_the_model_does_not_name_is_found_next_to_its_color_map_by_name(pr
     out = compile_geom(project)
     assert "stone_glossiness.png" in out and "is not named by the model" in out, out[-3000:]
     orme = virtual(project, "Texture")["stone_glossiness (ORME)"][1]
-    assert re.search(r'Mixes\[G:1\]/Invert"\s+;bool\s+1', orme), orme
+    assert re.search(r'Roughness \(G\)/Invert"\s+;bool\s+1', orme), orme
 
 
 def test_a_slot_with_only_constants_takes_the_map_once_there_is_one(project):
@@ -577,7 +577,7 @@ def test_a_material_with_factors_takes_the_models_constants_over_one_white_map(p
     assert texture_of(lamp, 1) == white and texture_of(lamp, 2) == white, "the lamp has no map: white albedo and ORME"
     f = overrides(lamp)
     assert f["BaseColorFactor"] == pytest.approx([1, 12 / 17, 4 / 17, 1], abs=1e-4), "an emitter's color is its emissive color (brightest channel 1)"
-    assert f["RoughnessFactor"][0] == pytest.approx((2 / 12) ** 0.5, abs=1e-4), "the roughness from the shininess (Ns 10)"
+    assert f["RoughnessFactor"][0] == pytest.approx(0.8, abs=1e-4), "no specular color (no Ks): rough, whatever its shininess (Ns 10)"
     assert f["MetallicFactor"][0] == 0
     assert "EmissiveColor" not in f, "it emits: the default (1) is kept, the overrides are sparse"
 
