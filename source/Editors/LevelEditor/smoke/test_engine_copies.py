@@ -3,6 +3,7 @@ its own, so that several Levels can run side by side without sharing anything.""
 import os
 import re
 import time
+from pathlib import Path
 
 # the copy of LIONCore.dll is LC000004.dll; on Linux the copy of libLIONCore.so is libLC000004.so
 LIB, EXT = ("", "dll") if os.name == "nt" else ("lib", "so")
@@ -22,6 +23,9 @@ def copies_on_disk(editor, wait=2.0):
     """The copies in the folder; waits a little for the ones that are being deleted (the file of a module that was just freed can stay locked for a moment)."""
     folder = editor.exe.parent / COPIES
     if os.name != "nt":
+        shm = Path(f"/dev/shm/xlion-EngineCopies-{os.getuid()}")   # on Linux in memory when /dev/shm allows exec (xlevel_engine_copies.h, manager())
+        if os.access("/dev/shm", os.W_OK | os.X_OK) and not (os.statvfs("/dev/shm").f_flag & os.ST_NOEXEC):
+            folder = shm
         folder = folder / str(editor.proc.pid)              # on Linux each process keeps its copies in a folder of its own (xlevel_engine_copies.h, CleanLeftovers)
     deadline = time.monotonic() + wait
     while True:
