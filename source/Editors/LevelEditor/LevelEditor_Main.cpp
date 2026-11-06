@@ -100,8 +100,15 @@ static void SetRendererDefaults() noexcept
         setenv(pName, pValue, 0);
 #endif
     };
-    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
-    // (Tomas, 2026-11-03: the base image first, one feature at a time. Contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
+    // Voxel GI (X1c) and the material tile pass. Do not default XLION_GI_PROBES_ONLY:
+    // that review switch (X1b, f02a920) makes gpu_trace::Submit return before the surfel
+    // slices, so world::Update's GPU pick stays pending (GIUpdated stays 0 after the first
+    // pick frame) and GIRays never advances. Official GI bake
+    // (test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget) requires those
+    // counters on every platform, including Windows (the same _putenv_s path). Set
+    // XLION_GI_PROBES_ONLY yourself to isolate voxels from surfel work.
+    Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    // (Tomas, 2026-11-03: contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
     Default("XLION_TILE", "1");
     // (2026-11-06: the reflections' coarse directional store, 16 x 16 directions at the 4 m level, read by the receivers from .15 to .4 (rays below): 13.05 to 10.27 ms on Bistro, better against the path tracer at .15 to .4. XLION_VOX_DIRS=-1: off)
     Default("XLION_VOX_DIRS", "3,16"); Default("XLION_VOX_DIRS_TRACE", "0.1,0.4");      // (2026-11-06: rays below .1, was .15: the half size's trace 2.1 to 0.2 ms, the frame -1.4 ms at tomas; lit against the path tracer 24.8 to 25.8 % off, noise the same)

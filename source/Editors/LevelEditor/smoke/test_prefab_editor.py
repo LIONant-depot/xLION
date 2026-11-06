@@ -489,7 +489,7 @@ def test_a_prefab_that_names_no_game_opens_under_the_game_of_the_level_in_memory
     assert "Using=" not in ed.cmd(f"GetPrefabGame -Prefab {prefab}"), "the Game in use is forgotten when its editor closes"
 
 
-def test_a_prefab_made_in_a_level_plays_with_the_game_of_that_level(game_level):
+def test_a_prefab_made_in_a_level_plays_with_the_game_of_that_level(game_level, game_level_files_restored):
     """The Soccer level names a Game: a prefab made from it names the same one (D2), SetPrefabGame changes it (undoable), and a Game that lacks what the prefab needs is refused."""
     lv = game_level
     ed = lv.ed
@@ -506,7 +506,7 @@ def test_a_prefab_made_in_a_level_plays_with_the_game_of_that_level(game_level):
     assert "not a Game asset guid" in ed.cmd(f"SetPrefabGame -Prefab {prefab} -Game {'0' * 16}{PREFAB_TYPE}", allow_disk=True)
 
 
-def test_every_save_of_a_prefab_keeps_its_game(game_level, opened):
+def test_every_save_of_a_prefab_keeps_its_game(game_level, game_level_files_restored, opened):
     lv = game_level
     prefab, name = _make(lv)
     game = re.search(r"^Game=(\S+)", lv.ed.cmd(f"GetPrefabGame -Prefab {prefab}"), re.M)[1]
@@ -551,7 +551,7 @@ def test_a_game_module_reload_keeps_the_prefab_document_and_its_context(editor, 
     assert p.x(p.root()) == 4.0, "what the editor saved after the reload"
 
 
-def test_a_prefab_that_did_not_load_whole_is_never_written(game_level, opened):
+def test_a_prefab_that_did_not_load_whole_is_never_written(game_level, game_level_files_restored, opened):
     """The data loss of 2026-10-08: a prefab opened under a Game that lacks its module loads only part of itself (the root, with a Soccer component, fails; its child loads, its parent reference nulled, so
     it reads as the one root). Every write path used to write that lossy part (Root = the child, the child without its parent, ComponentDeps.txt without the module). Now none writes anything: Save, Close
     -Save 1 and Save All refuse (Play is refused before it saves: the Game lacks the module), say what is missing and how to fix it, the editor stays unsaved, and every file of the prefab is byte for byte what it was."""
@@ -580,7 +580,7 @@ def test_a_prefab_that_did_not_load_whole_is_never_written(game_level, opened):
     assert _prefab_files(prefab) == files
 
 
-def test_an_unchanged_prefab_is_not_written_back(game_level, opened):
+def test_an_unchanged_prefab_is_not_written_back(game_level, game_level_files_restored, opened):
     """The example's Player Red opened (it names no Game: the Level's is borrowed) and not changed: Save, Play and Stop write nothing - before, every Play and Save rewrote the whole prefab (its
     ComponentDeps.txt lost the PrefabTag / RootPrefabComponent rows the template save writes, its Descriptor.txt was reformatted): a clean document is the file."""
     prefab = "6325BCD600D8F273"
