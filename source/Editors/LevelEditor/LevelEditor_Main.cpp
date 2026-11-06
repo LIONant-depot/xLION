@@ -106,6 +106,7 @@ static void SetRendererDefaults() noexcept
     Default("XLION_VOX_DIRS", "3,16"); Default("XLION_VOX_DIRS_TRACE", "0.15,0.4");
     // (2026-11-06: contact readers feed and read records of their own - the leak at pots, hedges, wall bases: GI light 33.0 to 30.1 % off against the path tracer, +.26 ms in the gather. XLION_VOX_AO_BUCKET=0: off)
     Default("XLION_VOX_AO_BUCKET", "0.85");
+    Default("XLION_CONTACT", "0.35 8 0.15 30 1");      // (contact shadows, the sun's: on again - Tomas, 2026-11-06)
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
