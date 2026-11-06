@@ -6,6 +6,8 @@
 // kept in xeditor::open_resource_editors. Including a plugin's editor header registers its factory. Open editors are also listed in
 // xeditor::host, so `list` and Name\Command reach them like the Level; the two commands below are the guid-addressed way in.
 
+#include <fstream>
+#include "dependencies/xLIONRender/src/xlionrender_env.h"      // (the environment switches: one answer to MSVC's C4996, header only)
 #include "plugins/xtexture.plugin/source/Editor/xtexture_editor.h"
 #include "plugins/xgeom_static.plugin/source/Editor/xgeom_static_editor.h"
 #include "plugins/xmaterial_instance.plugin/source/Editor/xmaterial_instance_editor.h"
@@ -179,7 +181,7 @@ namespace level_editor
             const double FrameMs = m_N > 1 ? std::chrono::duration<double, std::milli>(m_T1 - m_T0).count() / double(m_N - 1) : 0.0;
             Text += std::format("by lag (every {}th pixel; a frame {:.1f} ms apart): lag, ms, rms, over 2 %, over 4 %, over 8 %\n", lag_step_v, FrameMs);
             for (int l = 0; l < 7; ++l) if (m_LagCnt[l] > 0.0) Text += std::format("lag {} {:.0f} ms: {:.2f} {:.2f} {:.2f} {:.3f}\n", lags_v[l], FrameMs * lags_v[l], std::sqrt(m_LagSum[l] / m_LagCnt[l]), 100.0 * m_LagOver[l][0] / m_LagCnt[l], 100.0 * m_LagOver[l][1] / m_LagCnt[l], 100.0 * m_LagOver[l][2] / m_LagCnt[l]);
-            if (std::FILE* f = _wfopen((m_Path + L".txt").c_str(), L"wb")) { std::fwrite(Text.data(), 1, Text.size(), f); std::fclose(f); }
+            { std::ofstream f(std::filesystem::path(m_Path + L".txt"), std::ios::binary); f.write(Text.data(), std::streamsize(Text.size())); }
             std::printf("%s", Text.c_str()); std::fflush(stdout);
             m_Sum.clear(); m_Prev.clear();
         }
@@ -336,7 +338,7 @@ namespace level_editor::commands
             if (Path.extension().empty()) return "NoiseCheck: the file needs an extension (png)";
             int Frames = 32, X = 0, Y = 0, W = 0, H = 0;
             if (auto A = m_Parser.getOptionArgAs<std::string>(m_hFrames, 0); !std::holds_alternative<xerr>(A)) Frames = std::atoi(std::get<std::string>(A).c_str());
-            if (auto A = m_Parser.getOptionArgAs<std::string>(m_hRect, 0); !std::holds_alternative<xerr>(A)) std::sscanf(std::get<std::string>(A).c_str(), "%d,%d,%d,%d", &X, &Y, &W, &H);
+            if (auto A = m_Parser.getOptionArgAs<std::string>(m_hRect, 0); !std::holds_alternative<xerr>(A)) xlionrender::Scan(std::get<std::string>(A).c_str(), "%d,%d,%d,%d", &X, &Y, &W, &H);
             std::error_code Ec;
             if (Path.has_parent_path()) std::filesystem::create_directories(Path.parent_path(), Ec);
             std::filesystem::remove(Path, Ec); std::filesystem::remove(Path.wstring() + L".txt", Ec);
@@ -420,7 +422,7 @@ namespace level_editor::commands
             const int         Top    = std::max(1, std::atoi(Arg(m_hTop, "25").c_str()));
             const std::string Filter = Arg(m_hFilter);
             const auto Has = [&](const char* p) { return Filter.empty() || xprofile::editor::tab::Contains(p ? p : "", Filter.c_str()); };
-            const double nFrames = std::max<std::size_t>(S.m_FrameMs.size(), 1);
+            const double nFrames = double(std::max<std::size_t>(S.m_FrameMs.size(), 1));
             if (!S.m_FrameMs.empty())
             {
                 auto F = S.m_FrameMs; std::sort(F.begin(), F.end());

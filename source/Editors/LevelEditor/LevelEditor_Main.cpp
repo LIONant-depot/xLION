@@ -10,6 +10,7 @@
 // been verified working - moving it after LevelEditor's own includes reintroduced the same
 // failure, so whatever the real cause is, it's sensitive to more than just "is xGPU.h already
 // visible" - not fully understood, just empirically pinned down.
+#include "dependencies/xLIONRender/src/xlionrender_env.h"      // (the environment switches: one answer to MSVC's C4996, header only)
 #include "dependencies/xGPU/source/Tools/xgpu_imgui_breach.cpp"
 #if defined(XLION_LINUX_GUI)
     #include "source/Platform/xlion_linux_gui.h"      // Linux graphical editor: X11 clipboard, cursors, desktop dialogs
@@ -89,10 +90,10 @@ void  operator delete[](void* p, std::size_t) noexcept      { CountedFree(p); }
 // them (the surfels, the raster). They are environment switches the renderer reads once: before anything starts
 static void SetRendererDefaults() noexcept
 {
-    if (std::getenv("XLION_CLASSIC")) return;
+    if (xlionrender::Env("XLION_CLASSIC")) return;
     const auto Default = [](const char* pName, const char* pValue)
     {
-        if (std::getenv(pName)) return;
+        if (xlionrender::Env(pName)) return;
 #if _WIN32
         _putenv_s(pName, pValue);
 #else

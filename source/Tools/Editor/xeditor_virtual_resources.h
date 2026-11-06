@@ -7,6 +7,7 @@
 // editor does not compile them); this is the way to get rid of them.
 //
 //      RemoveUnusedImportedResources       removes the unused virtual resources of this resource (undoable: the files and the library entries come back)
+#include "dependencies/xLIONRender/src/xlionrender_env.h"      // (one answer to MSVC's C4996, header only)
 #include "source/Tools/Editor/xeditor_descriptor_editor.h"
 #include "dependencies/xresource_pipeline_v2/source/editor/xresource_editor_commands_assets.h"
 
@@ -69,7 +70,7 @@ namespace xeditor::virtual_resources
             {
                 std::uint64_t Instance = 0, Type = 0;
                 const auto Ids = xeditor::ReadString(File);
-                std::sscanf(Ids.c_str(), "%llx %llx", reinterpret_cast<unsigned long long*>(&Instance), reinterpret_cast<unsigned long long*>(&Type));
+                xlionrender::Scan(Ids.c_str(), "%llx %llx", reinterpret_cast<unsigned long long*>(&Instance), reinterpret_cast<unsigned long long*>(&Type));
                 const auto Folder = std::filesystem::path(xstrtool::To(xeditor::ReadString(File)));
                 const int  nFiles = std::atoi(xeditor::ReadString(File).c_str());
 

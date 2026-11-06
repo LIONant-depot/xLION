@@ -1,4 +1,5 @@
 #pragma once
+#include "dependencies/xLIONRender/src/xlionrender_env.h"      // (the environment switches: one answer to MSVC's C4996, header only)
 #include <shellapi.h>
 
 namespace level_editor
@@ -63,7 +64,7 @@ namespace level_editor
         xeditor::diagnostics::InstallTerminateHandler();
         xeditor::diagnostics::InstallUnhandledExceptionFilter();
         XPROFILE_THREAD("Main");
-        if (std::getenv("XPROFILE")) xprofile::Enable(true);       // (the profiler from the first frame: XPROFILE=1; otherwise the Profiler command / tab)
+        if (xlionrender::Env("XPROFILE")) xprofile::Enable(true);       // (the profiler from the first frame: XPROFILE=1; otherwise the Profiler command / tab)
         xeditor::diagnostics::Log("startup: LevelEditor_Example begin");
 
         // A project that was asked for is checked before anything is created (no window for a path that is wrong).
@@ -85,7 +86,7 @@ namespace level_editor
                     std::free(p);
                     return b;
 #else
-                    return std::getenv("XEDITOR_NO_ASSERT_DIALOG") != nullptr;
+                    return xlionrender::Env("XEDITOR_NO_ASSERT_DIALOG") != nullptr;
 #endif
                 }();
                 if (!bHeadless && !bNoDialog) MessageBoxW(nullptr, xstrtool::To(Why).c_str(), L"xLION - cannot open the project", MB_OK | MB_ICONERROR);
@@ -103,9 +104,9 @@ namespace level_editor
             // the real ones (Tomas 2026-10-26; XLION_VALIDATION=1 turns them on). They cost every draw and bind on the CPU (the Bistro's scene pass:
             // 10 ms with them, 0.6 without)
 #ifdef NDEBUG
-            const bool bValidation = std::getenv("XLION_VALIDATION") != nullptr;
+            const bool bValidation = xlionrender::Env("XLION_VALIDATION") != nullptr;
 #else
-            const bool bValidation = std::getenv("XLION_NO_VALIDATION") == nullptr;
+            const bool bValidation = xlionrender::Env("XLION_NO_VALIDATION") == nullptr;
 #endif
             if (auto Err = xgpu::CreateInstance(Instance, { .m_bDebugMode = bValidation, .m_pLogErrorFunc = xeditor::LogGpuError, .m_pLogWarning = xeditor::LogGpuWarning }); Err)
             {
@@ -136,7 +137,7 @@ namespace level_editor
                 std::free(p);
                 return b;
 #else
-                return std::getenv("XEDITOR_VIRTUAL_INPUT") != nullptr;
+                return xlionrender::Env("XEDITOR_VIRTUAL_INPUT") != nullptr;
 #endif
             }();
             if (bVirtualInput) xgpu::virtual_input::SetActive(true);
