@@ -104,6 +104,8 @@ static void SetRendererDefaults() noexcept
     Default("XLION_TILE", "1");
     // (2026-11-06: the reflections' coarse directional store, 16 x 16 directions at the 4 m level, read by the receivers from .15 to .4 (rays below): 13.05 to 10.27 ms on Bistro, better against the path tracer at .15 to .4. XLION_VOX_DIRS=-1: off)
     Default("XLION_VOX_DIRS", "3,16"); Default("XLION_VOX_DIRS_TRACE", "0.15,0.4");
+    // (2026-11-06: contact readers feed and read records of their own - the leak at pots, hedges, wall bases: GI light 33.0 to 30.1 % off against the path tracer, +.26 ms in the gather. XLION_VOX_AO_BUCKET=0: off)
+    Default("XLION_VOX_AO_BUCKET", "0.85");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
