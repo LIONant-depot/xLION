@@ -83,10 +83,19 @@ namespace level_editor
         std::wstring                m_Path;
         std::vector<std::uint32_t>  m_Pixels;
         std::vector<float>          m_Prev, m_Sum;
+        // (the noise by how far apart in time (Tomas, 2026-11-06): a pulse a frame and a pulse a second are different noises. Every 4th pixel each way, the last
+        // lag_max_v + 1 frames' luminance in a ring; for each lag the RMS change / sqrt 2 and the share over 2, 4, 8, and the frames' mean spacing in ms)
+        static constexpr int        lag_step_v = 4, lag_max_v = 60;
+        static constexpr int        lags_v[7] = { 1, 2, 4, 8, 15, 30, 60 };
+        std::vector<std::uint8_t>   m_Ring;
+        int                         m_SubW = 0, m_SubH = 0;
+        double                      m_LagSum[7] = {}, m_LagCnt[7] = {}, m_LagOver[7][3] = {};
+        std::chrono::steady_clock::time_point m_T0{}, m_T1{};
 
         void Start(std::wstring Path, int Frames, int X, int Y, int W, int H) noexcept
         {
             m_Path = std::move(Path); m_Left = std::max(Frames, 2); m_N = 0; m_X = X; m_Y = Y; m_W = W; m_H = H; m_Prev.clear(); m_Sum.clear(); m_bRequested = false; m_bActive = true;
+            m_Ring.clear(); for (int l = 0; l < 7; ++l) { m_LagSum[l] = m_LagCnt[l] = 0.0; m_LagOver[l][0] = m_LagOver[l][1] = m_LagOver[l][2] = 0.0; }
         }
         void BeforeFlip(xgpu::window& Window) noexcept
         {
@@ -99,6 +108,25 @@ namespace level_editor
             const std::size_t n = static_cast<std::size_t>(m_Width) * m_Height;
             if (m_Width <= 0 || m_Height <= 0 || m_Pixels.size() < n) return;
             if (m_Prev.size() != n) { m_Prev.assign(n, 0.0f); m_Sum.assign(n, 0.0f); m_N = 0; }
+            const int X0 = std::clamp(m_X, 0, m_Width), Y0 = std::clamp(m_Y, 0, m_Height), X1 = m_W > 0 ? std::clamp(m_X + m_W, X0, m_Width) : m_Width, Y1 = m_H > 0 ? std::clamp(m_Y + m_H, Y0, m_Height) : m_Height;
+            const int SubW = (X1 - X0) / lag_step_v, SubH = (Y1 - Y0) / lag_step_v; const std::size_t nSub = std::size_t(std::max(SubW, 0)) * std::max(SubH, 0);
+            if (m_Ring.size() != nSub * (lag_max_v + 1)) { m_Ring.assign(nSub * (lag_max_v + 1), 0); m_SubW = SubW; m_SubH = SubH; }
+            if (m_N == 0) m_T0 = std::chrono::steady_clock::now();
+            m_T1 = std::chrono::steady_clock::now();
+            std::uint8_t* pCur = m_Ring.data() + nSub * std::size_t(m_N % (lag_max_v + 1));
+            for (int sy = 0; sy < SubH; ++sy) for (int sx = 0; sx < SubW; ++sx)
+            {
+                const std::uint32_t c = m_Pixels[std::size_t(Y0 + sy * lag_step_v) * m_Width + X0 + sx * lag_step_v];
+                const int L = int(0.0722f * float(c & 255u) + 0.7152f * float((c >> 8) & 255u) + 0.2126f * float((c >> 16) & 255u) + 0.5f);
+                const std::size_t k = std::size_t(sy) * SubW + sx; pCur[k] = std::uint8_t(std::clamp(L, 0, 255));
+                for (int l = 0; l < 7; ++l)
+                {
+                    if (m_N < lags_v[l]) continue;
+                    const std::uint8_t* pOld = m_Ring.data() + nSub * std::size_t((m_N - lags_v[l]) % (lag_max_v + 1));
+                    const float d = float(int(pCur[k]) - int(pOld[k])), s = std::abs(d) * 0.70710678f;
+                    m_LagSum[l] += d * d * 0.5; m_LagCnt[l] += 1.0; m_LagOver[l][0] += s > 2.0f; m_LagOver[l][1] += s > 4.0f; m_LagOver[l][2] += s > 8.0f;
+                }
+            }
             for (std::size_t i = 0; i < n; ++i)
             {
                 const std::uint32_t c = m_Pixels[i];
@@ -148,6 +176,9 @@ namespace level_editor
             const char* pVerdict = 100.0 * Over8 / Count > 0.1 ? "NOISY" : 100.0 * Over4 / Count > 1.0 ? "some noise" : "clean";
             std::string Text = std::format("NOISE {}: {} frames, mean {:.2f}, p95 {:.2f} of 255; pixels over 2: {:.2f} %, over 4: {:.2f} %, over 8: {:.3f} %\nworst tiles ({} px), mean, x, y:\n", pVerdict, m_N, Mean, P95, 100.0 * Over2 / Count, 100.0 * Over4 / Count, 100.0 * Over8 / Count, Tile);
             for (std::size_t t = 0; t < nTop; ++t) Text += std::format("{:.2f} {} {}\n", Worst[t].m_Mean, Worst[t].m_X, Worst[t].m_Y);
+            const double FrameMs = m_N > 1 ? std::chrono::duration<double, std::milli>(m_T1 - m_T0).count() / double(m_N - 1) : 0.0;
+            Text += std::format("by lag (every {}th pixel; a frame {:.1f} ms apart): lag, ms, rms, over 2 %, over 4 %, over 8 %\n", lag_step_v, FrameMs);
+            for (int l = 0; l < 7; ++l) if (m_LagCnt[l] > 0.0) Text += std::format("lag {} {:.0f} ms: {:.2f} {:.2f} {:.2f} {:.3f}\n", lags_v[l], FrameMs * lags_v[l], std::sqrt(m_LagSum[l] / m_LagCnt[l]), 100.0 * m_LagOver[l][0] / m_LagCnt[l], 100.0 * m_LagOver[l][1] / m_LagCnt[l], 100.0 * m_LagOver[l][2] / m_LagCnt[l]);
             if (std::FILE* f = _wfopen((m_Path + L".txt").c_str(), L"wb")) { std::fwrite(Text.data(), 1, Text.size(), f); std::fclose(f); }
             std::printf("%s", Text.c_str()); std::fflush(stdout);
             m_Sum.clear(); m_Prev.clear();
