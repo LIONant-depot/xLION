@@ -103,7 +103,7 @@ static void SetRendererDefaults() noexcept
     // (Tomas, 2026-11-03: the base image first, one feature at a time. Contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
     Default("XLION_TILE", "1");
     // (2026-11-06: the reflections' coarse directional store, 16 x 16 directions at the 4 m level, read by the receivers from .15 to .4 (rays below): 13.05 to 10.27 ms on Bistro, better against the path tracer at .15 to .4. XLION_VOX_DIRS=-1: off)
-    Default("XLION_VOX_DIRS", "3,16"); Default("XLION_VOX_DIRS_TRACE", "0.15,0.4");
+    Default("XLION_VOX_DIRS", "3,16"); Default("XLION_VOX_DIRS_TRACE", "0.1,0.4");      // (2026-11-06: rays below .1, was .15: the half size's trace 2.1 to 0.2 ms, the frame -1.4 ms at tomas; lit against the path tracer 24.8 to 25.8 % off, noise the same)
     // (2026-11-06: contact readers feed and read records of their own - the leak at pots, hedges, wall bases: GI light 33.0 to 30.1 % off against the path tracer, +.26 ms in the gather. XLION_VOX_AO_BUCKET=0: off)
     Default("XLION_VOX_AO_BUCKET", "0.85");
     Default("XLION_CONTACT", "0.35 8 0.15 30 1");      // (contact shadows, the sun's: on again - Tomas, 2026-11-06)
