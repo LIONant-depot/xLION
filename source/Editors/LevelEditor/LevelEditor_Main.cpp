@@ -99,8 +99,15 @@ static void SetRendererDefaults() noexcept
         setenv(pName, pValue, 0);
 #endif
     };
-    Default("XLION_GI_PROBES_ONLY", "1"); Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
-    // (Tomas, 2026-11-03: the base image first, one feature at a time. Contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
+    // Voxel GI (X1c) and the material tile pass. Do not default XLION_GI_PROBES_ONLY:
+    // that review switch (X1b, f02a920) makes gpu_trace::Submit return before the surfel
+    // slices, so world::Update's GPU pick stays pending (GIUpdated stays 0 after the first
+    // pick frame) and GIRays never advances. Official GI bake
+    // (test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget) requires those
+    // counters on every platform, including Windows (the same _putenv_s path). Set
+    // XLION_GI_PROBES_ONLY yourself to isolate voxels from surfel work.
+    Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    // (Tomas, 2026-11-03: contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
     Default("XLION_TILE", "1");
 }
 
