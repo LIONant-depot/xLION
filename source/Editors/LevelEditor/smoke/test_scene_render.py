@@ -48,7 +48,11 @@ def test_a_mesh_its_materials_and_the_lights_are_rendered(made):
     entity(level, "5CE00003", "Transform,LightPoint")
     entity(level, "5CE00004", "Transform,LightSpot")
 
-    got = scene(level, lambda g: g.get("Drawn") == before["Drawn"] + 1 and g.get("ConstantSlots") == before["ConstantSlots"])
+    # Resources load a few frames after a change (see the module docstring); wait until the mesh AND
+    # both local lights are in the last snapshot, not only Drawn/ConstantSlots (those can settle a
+    # frame before LightSpot/LightPoint appear in DescribeScene).
+    got = scene(level, lambda g: g.get("Drawn") == before["Drawn"] + 1 and g.get("ConstantSlots") == before["ConstantSlots"]
+                and g.get("Sun", 0) >= 1 and g.get("Lights") == before.get("Lights", 0) + 2)
     assert got["Meshes"] == before["Meshes"] + 1 and got["Drawn"] == before["Drawn"] + 1, got
     assert got["ConstantSlots"] == before["ConstantSlots"], f"every material slot of the Police Station resolves to its material instance: {got}"
     assert got["Sun"] >= 1 and got["Lights"] == before["Lights"] + 2, got
