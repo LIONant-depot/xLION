@@ -119,6 +119,9 @@ static void SetRendererDefaults() noexcept
     // (2026-11-07: the reflections' screen trace first, rays where it has no certain answer - Bistro Game against the path tracer 37.44 vs 37.07 % off
     // (reference noise 12.3 %), frame 22.87 vs 23.85 ms. A Level had no way to turn it on. XLION_CLASSIC=1: not set)
     Default("XLION_REFL_SCREEN", "1");
+    // (2026-11-07: the skinned movers' sun shadows from maps of their own, not mover pages, and the sun mask kept where nothing changed - Bistro Game
+    // GPU 22.69 -> 18.95 ms, against the path tracer 37.23 vs 37.62 % off (reference noise 12.3 %), 1.8 % of the pixels apart from today's)
+    Default("XLION_SH_MOVER_MAPS", "1"); Default("XLION_SUN_MASK", "6");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
