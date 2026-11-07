@@ -122,6 +122,9 @@ static void SetRendererDefaults() noexcept
     // (2026-11-07: the skinned movers' sun shadows from maps of their own, not mover pages, and the sun mask kept where nothing changed - Bistro Game
     // GPU 22.69 -> 18.95 ms, against the path tracer 37.23 vs 37.62 % off (reference noise 12.3 %), 1.8 % of the pixels apart from today's)
     Default("XLION_SH_MOVER_MAPS", "1"); Default("XLION_SUN_MASK", "6");
+    // (2026-11-07: no full-size sharp reflection pass - the receivers under roughness .1 at half size like the rest: Bistro Game moving 18.14 -> 16.35 ms
+    // (p95 20.06 -> 17.1), against the path tracer 40.68 vs 40.79 % off (exposure 2), 1.5 % of the pixels apart. XLION_REFL_SHARP=0.1: the pass back)
+    Default("XLION_REFL_SHARP", "0");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
