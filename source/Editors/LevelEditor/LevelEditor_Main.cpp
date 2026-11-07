@@ -124,9 +124,6 @@ static void SetRendererDefaults() noexcept
     // (2026-11-07 evening: XLION_SUN_MASK 6 -> 3 - the mask's reuse while still flickered at the sun's shadow edges, Tomas's view at the door
     // -11.7, 3.0, 11.3: 0.169 % of the pixels toggling a frame, mode 3 0.019 %, no mask 0.011 %, no sun shadows 0.017 %; moving +0.2 ms)
     Default("XLION_SH_MOVER_MAPS", "1"); Default("XLION_SUN_MASK", "3");
-    // (2026-11-07: no full-size sharp reflection pass - the receivers under roughness .1 at half size like the rest: Bistro Game moving 18.14 -> 16.35 ms
-    // (p95 20.06 -> 17.1), against the path tracer 40.68 vs 40.79 % off (exposure 2), 1.5 % of the pixels apart. XLION_REFL_SHARP=0.1: the pass back)
-    Default("XLION_REFL_SHARP", "0");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
