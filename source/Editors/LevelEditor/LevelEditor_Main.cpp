@@ -116,6 +116,9 @@ static void SetRendererDefaults() noexcept
     // (2026-11-06: contact readers feed and read records of their own - the leak at pots, hedges, wall bases: GI light 33.0 to 30.1 % off against the path tracer, +.26 ms in the gather. XLION_VOX_AO_BUCKET=0: off)
     Default("XLION_VOX_AO_BUCKET", "0.85");
     Default("XLION_CONTACT", "0.35 8 0.15 30 1");      // (contact shadows, the sun's: on again - Tomas, 2026-11-06)
+    // (2026-11-07: the reflections' screen trace first, rays where it has no certain answer - Bistro Game against the path tracer 37.44 vs 37.07 % off
+    // (reference noise 12.3 %), frame 22.87 vs 23.85 ms. A Level had no way to turn it on. XLION_CLASSIC=1: not set)
+    Default("XLION_REFL_SCREEN", "1");
 }
 
 // LevelEditor - Level + Scene editor. The editor itself is level_editor::app (LevelEditor_App.h).
