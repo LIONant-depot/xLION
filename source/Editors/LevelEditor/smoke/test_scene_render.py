@@ -87,6 +87,23 @@ def test_a_mesh_its_materials_and_the_lights_are_rendered(made):
     assert got["DrawsRendered"] >= 1, got
 
 
+def test_a_click_picks_the_mesh_drawn_under_it(made):
+    """The viewport click's first pick (PickPixel: the G-buffer prepass's id under the mouse, xRenderEditor version 14): the Police Station
+    in the middle of the view is what its centre pixel picks - exact per pixel, not the boxes of the ray pick (a mesh the eye stands in,
+    a skinned character: never picked by those, Bistro Game 2026-11-08)."""
+    level = made
+    before = scene(level, lambda g: "Meshes" in g, timeout=20)
+    e = entity(level, "5CE00051", "Transform,Mesh")
+    level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
+    entity(level, "5CE00052", "Transform,LightSun")
+    level.ok("SetCamera -Mode orbit -Yaw 30 -Pitch -25 -Distance 45 -Target 0,3,0")
+    got = scene(level, lambda g: g.get("Drawn") == before["Drawn"] + 1 and g.get("ViewW", 0) > 0, timeout=90)
+    assert got.get("ViewW", 0) > 0, got
+    time.sleep(1.0)                                                         # (a few frames with the camera there)
+    reply = level.cmd(f"PickPixel -X {got['ViewW'] // 2} -Y {got['ViewH'] // 2}")
+    assert "PickPixel: hit" in reply and f"Id={e}" in reply, reply
+
+
 def test_a_mesh_without_a_geometry_is_not_drawn_and_nothing_breaks(made):
     level = made
     before = scene(level, lambda g: "Meshes" in g, timeout=20)
