@@ -32,6 +32,34 @@ def made(level):
             break
 
 
+@pytest.fixture(scope="module")
+def surfel_editor(request):
+    """An editor with the surfel GI on (XLION_GI_NO_SURFELS=0). The Level Editor's default is off (Tomas, 2026-11-08: dropped - with the voxel
+    GI nothing visible read it, ~0.7 ms and ~300 MB); its two tests below guard the option until it is deleted. The session's editor is
+    stopped first (two editors at once: too much for a small CI VM) and comes back for the next test (conftest's _editor_alive)."""
+    from pathlib import Path
+    from harness import Editor
+    request.getfixturevalue("editor").stop()
+    ed = Editor(Path(request.config.getoption("--exe")), extra_env={"XLION_GI_NO_SURFELS": "0"})
+    ed.start()
+    yield ed
+    ed.stop()
+
+
+@pytest.fixture
+def surfel_made(surfel_editor):
+    """made, in the surfel GI's editor."""
+    from conftest import _open_level
+    guid, name = surfel_editor.levels()[0]
+    opened = _open_level(surfel_editor, guid, name)
+    level = next(opened)
+    yield level
+    for _ in range(200):
+        if level.cmd("Undo") != "Undo: done":
+            break
+    next(opened, None)
+
+
 def entity(level, eid: str, components: str) -> str:
     level.ok(f"CreateEntity -Scene {level.scene} -Id {eid} -Folder 0 -Components {components}")
     return eid
@@ -67,13 +95,14 @@ def test_a_mesh_without_a_geometry_is_not_drawn_and_nothing_breaks(made):
     assert got["Meshes"] == before["Meshes"] + 1 and got["Drawn"] == before["Drawn"] and got["Waiting"] == before["Waiting"] + 1, got
 
 
-def test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget(made):
+@pytest.mark.no_editor
+def test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget(surfel_made):
     """An Environment with GI on: the Police Station's surfels (baked by its GeomStatic compiler, saved in the geometry) are loaded, and the
     GPU path traces them (DescribeScene GIRays / GIUpdated). Environment GIRayBudget is the CPU-trace cap (or the GPU pick when
     GPUBudgetMs is 0); the default GPU path picks gpu_trace::BatchRays() = m_Budget * 4 (m_Budget starts at 32768), sliced by
     GPUBudgetMs, so GIRays can be larger than GIRayBudget. A runaway above the GPU clamp (1<<22 per slice-budget unit, times the
     4-frame batch) is still a failure."""
-    level = made
+    level = surfel_made
     e = entity(level, "5CE00021", "Transform,Mesh")
     level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
     entity(level, "5CE00022", "Transform,LightSun")
@@ -86,11 +115,12 @@ def test_gi_bakes_the_surfels_of_the_meshes_and_holds_its_ray_budget(made):
     assert 0 < got["GIRays"] <= (1 << 22) * 4, f"the GI's ray count ran away: {got}"
 
 
-def test_gi_survives_flying_far_and_back(made):
+@pytest.mark.no_editor
+def test_gi_survives_flying_far_and_back(surfel_made):
     """The camera goes far (the Police Station's GI drops to its parent surfels) and comes back: no surfel's light may go bad. A buried
     surfel's validity used to decay into denormals; the reads at the ray hits divided by them into inf, then NaN that spread through the
     bounces until the whole mesh drew black (seen flying around the Police Level)."""
-    level = made
+    level = surfel_made
     e = entity(level, "5CE00041", "Transform,Mesh")
     level.ok(f'SetProperty -Scene {level.scene} -Id {e} -Component Mesh -Path Mesh/Geom -After "{POLICE_STATION}"')
     entity(level, "5CE00042", "Transform,LightSun")
