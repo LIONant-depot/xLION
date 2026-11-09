@@ -370,7 +370,13 @@ namespace level_editor::render_graph_tab
             }
         }
         if (Hover >= 0 && !Steps[std::size_t(Hover)].m_Recorded.empty())
-            ImGui::SetTooltip("%s\nrecorded as: %s%s", Steps[std::size_t(Hover)].m_Name.c_str(), Steps[std::size_t(Hover)].m_Recorded.c_str(), Steps[std::size_t(Hover)].m_bManaged ? "" : "\n(a legacy group: declared as a whole, its inside not yet in the graph)");
+        {
+            // brown: not managed by the graph - a group of xGPU works declared as one (its inside not yet in the graph), or one render pass
+            // whose barriers xGPU still places (declared, not scheduled by the graph)
+            const auto& H = Steps[std::size_t(Hover)];
+            const bool bGroup = H.m_Recorded.starts_with("group:");
+            ImGui::SetTooltip("%s\nrecorded as: %s%s", H.m_Name.c_str(), H.m_Recorded.c_str(), H.m_bManaged ? "" : bGroup ? "\n(a group of passes declared as one: its inside is not in the graph yet)" : "\n(declared; its barriers are still placed by xGPU, not scheduled by the graph yet)");
+        }
         ImGui::EndChild();
     }
 
