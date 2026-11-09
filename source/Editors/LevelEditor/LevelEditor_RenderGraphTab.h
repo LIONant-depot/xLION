@@ -6,11 +6,13 @@
 // Post chain (render graph P5, read only): the chain's recipe - its nodes in order, its parameters with the value a frame used, where it
 // came from and its range (a clamped one says the Scene's value) - and what it expands to: every pass with its size, dispatch, the
 // setting it runs on and whether it ran last frame; a node clicked lights its passes. The data: xRenderEditor::DescribePost.
+#include "dependencies/xgraph/source/xgraph_view.h"      // (the Frame graph: the layout, routes and canvas frame the material stack and the RenderGraph editor use)
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <format>
 #include <functional>
+#include <unordered_map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -35,9 +37,12 @@ namespace level_editor::render_graph_tab
         bool                     m_bInits = false;           // show the initialisations too
     };
 
+    struct frame_graph_state { xgraph::view::view m_View; int m_Selected = -1; std::string m_Hidden; bool m_bFit = true; };      // (Fit: the whole frame in view - at the first show and on the Fit button)
+
     struct state
     {
         post_state               m_Post;
+        frame_graph_state        m_Frame;
         std::vector<char>        m_Buffer = std::vector<char>(64 * 1024);
         std::vector<std::string> m_Errors;
         std::vector<scope>       m_Scopes;
@@ -239,6 +244,130 @@ namespace level_editor::render_graph_tab
 
     inline void DrawScopes(state& S) noexcept;
 
+    // The whole frame as a graph (read only): every scope of the last frame a step in recording order - its inputs the resources it reads,
+    // its outputs the ones it writes - and a wire from the scope that wrote a resource's version to each scope that reads that version.
+    // A read with no writer this frame (the lit image's imports, last frame's history, GPU data kept across frames) is an unconnected
+    // input. Colour by lifetime: frame grey, history amber, retained green, external blue. Laid out and routed by xgraph.
+    inline std::string ShortName(std::string_view R) noexcept
+    {
+        for (std::string_view P : { "Render target: ", "Shadows: ", "Frame: " }) if (R.starts_with(P)) return std::string(R.substr(P.size()));
+        return std::string(R);
+    }
+    inline void DrawFrameGraph(state& St) noexcept
+    {
+        namespace gl = xgraph::layout; namespace gr = xgraph::routes;
+        auto& F = St.m_Frame;
+        if (St.m_Scopes.empty()) { ImGui::TextDisabled("No frame declared yet (the Level has not rendered)."); return; }
+        struct step { std::string m_Name, m_Recorded; bool m_bManaged = true; std::vector<std::string> m_In, m_Out; std::vector<std::string> m_InLife, m_OutLife; };
+        std::vector<step> Steps;
+        std::vector<gl::edge> Edges;
+        std::vector<std::string> SourceLife;           // per edge: the lifetime of what it carries
+        std::unordered_map<std::string, std::pair<int, int>> Writer;      // "resource#version" -> (step, output row)
+        for (const auto& Sc : St.m_Scopes)
+        {
+            step S{ Sc.m_Name, Sc.m_Recorded, Sc.m_bManaged, {}, {}, {}, {} };
+            const int s = static_cast<int>(Steps.size());
+            for (const auto& A : Sc.m_Accesses)
+            {
+                if (A.m_bWrite) continue;
+                const auto Name = ShortName(A.m_Res);
+                if (std::find(S.m_In.begin(), S.m_In.end(), Name) != S.m_In.end()) continue;
+                const int Row = static_cast<int>(S.m_In.size());
+                S.m_In.push_back(Name); S.m_InLife.push_back(A.m_Life);
+                if (const auto It = Writer.find(A.m_Res + "#" + A.m_Version); It != Writer.end())
+                {
+                    Edges.push_back({ It->second.first, It->second.second, s, Row, std::hash<std::string>{}(A.m_Res + "#" + A.m_Version), Edges.size() });
+                    SourceLife.push_back(A.m_Life);
+                }
+            }
+            for (const auto& A : Sc.m_Accesses)
+            {
+                if (!A.m_bWrite) continue;
+                const auto Name = ShortName(A.m_Res);
+                int Row = static_cast<int>(std::find(S.m_Out.begin(), S.m_Out.end(), Name) - S.m_Out.begin());
+                if (Row == static_cast<int>(S.m_Out.size())) { S.m_Out.push_back(Name); S.m_OutLife.push_back(A.m_Life); }
+                Writer[A.m_Res + "#" + A.m_Version] = { s, Row };
+            }
+            Steps.push_back(std::move(S));
+        }
+        gl::input In(1);
+        for (const auto& S : Steps)
+        {
+            const std::size_t nRows = std::max<std::size_t>(std::max(S.m_In.size(), S.m_Out.size()), 1);
+            float W = ImGui::CalcTextSize(S.m_Name.c_str()).x + 16;
+            for (std::size_t r = 0; r < nRows; ++r)
+                W = std::max(W, (r < S.m_In.size() ? ImGui::CalcTextSize(S.m_In[r].c_str()).x : 0.0f) + (r < S.m_Out.size() ? ImGui::CalcTextSize(S.m_Out[r].c_str()).x : 0.0f) + gl::geo::MID_GAP);
+            In[0].m_Steps.push_back({ static_cast<std::uint64_t>(In[0].m_Steps.size() + 1), gl::StepW(W), static_cast<int>(nRows) });
+        }
+        const auto R = gr::Build(In, Edges);
+        const auto LifeColor = [](std::string_view L) -> ImU32
+        {
+            if (L == "history")  return IM_COL32(230, 170, 80, 255);
+            if (L == "retained") return IM_COL32(120, 200, 130, 255);
+            if (L == "external") return IM_COL32(120, 170, 235, 255);
+            return IM_COL32(175, 175, 185, 255);
+        };
+        std::vector<ImU32> SourceColor(R.m_Sources.size(), IM_COL32(175, 175, 185, 255));
+        for (std::size_t e = 0; e < Edges.size(); ++e) SourceColor[std::size_t(R.m_RouteSource[e])] = LifeColor(SourceLife[e]);
+
+        if (ImGui::SmallButton("Fit")) F.m_bFit = true;
+        ImGui::SameLine(); ImGui::TextDisabled("%d scopes, %d wires - click a step to light what it reads and writes; right drag pans, the wheel zooms", static_cast<int>(Steps.size()), static_cast<int>(Edges.size()));
+        ImGui::BeginChild("##framegraph", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        static const xgraph::view::style Style = [] { xgraph::view::style S; S.m_ZoomMin = 0.1f; return S; }();     // (a whole frame: zoomed far out)
+        const ImVec2 Avail = ImGui::GetContentRegionAvail();
+        if (F.m_bFit && R.m_Layout.m_Width > 0 && R.m_Layout.m_Height > 0)
+        {
+            F.m_View.m_Zoom = std::clamp(std::min(Avail.x / R.m_Layout.m_Width, Avail.y / R.m_Layout.m_Height) * 0.95f, Style.m_ZoomMin, Style.m_ZoomMax);
+            F.m_View.m_Pan  = { (Avail.x - R.m_Layout.m_Width * F.m_View.m_Zoom) * 0.5f, (Avail.y - R.m_Layout.m_Height * F.m_View.m_Zoom) * 0.5f };
+            F.m_bFit = false;
+        }
+        (void)F.m_View.Input(Style, Avail);
+        auto* pDL = ImGui::GetWindowDrawList();
+        auto& V = F.m_View;
+        V.DrawBackground(pDL, Style);
+        const ImVec2 Mouse = ImGui::GetIO().MousePos;
+        int Hover = -1;
+        for (std::size_t i = 0; i < Steps.size(); ++i)
+        {
+            const auto& B = R.m_Layout.m_Steps[i];
+            const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
+            if (ImGui::IsWindowHovered() && Mouse.x >= a.x && Mouse.x < b.x && Mouse.y >= a.y && Mouse.y < b.y) Hover = static_cast<int>(i);
+        }
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) F.m_Selected = Hover;
+        if (F.m_Selected >= static_cast<int>(Steps.size())) F.m_Selected = -1;
+        std::vector<float> Lit(Edges.size(), 0.0f);
+        for (const int Focus : { F.m_Selected, Hover })
+            if (Focus >= 0) for (std::size_t e = 0; e < Edges.size(); ++e) if (Edges[e].m_From == Focus || Edges[e].m_To == Focus) Lit[e] = Focus == F.m_Selected ? 1.0f : std::max(Lit[e], 0.9f);
+        V.DrawRoutes(pDL, Style, R, SourceColor, Lit);
+        ImFont* pFont = ImGui::GetFont();
+        const float Font = ImGui::GetFontSize() * V.m_Zoom;
+        for (std::size_t i = 0; i < Steps.size(); ++i)
+        {
+            const auto& S = Steps[i]; const auto& B = R.m_Layout.m_Steps[i];
+            const ImVec2 a = V.ToScreen(B.m_X, B.m_Y), b = V.ToScreen(B.m_X + B.m_W, B.m_Y + B.m_H);
+            if (b.x < V.m_Origin.x || a.x > V.m_Max.x || b.y < V.m_Origin.y || a.y > V.m_Max.y) continue;     // (off screen)
+            pDL->AddRectFilled(a, b, IM_COL32(48, 52, 60, 255), V.Len(4.0f));
+            pDL->AddRectFilled(a, ImVec2(b.x, a.y + V.Len(gl::geo::HEADER_H)), S.m_bManaged ? IM_COL32(70, 90, 120, 255) : IM_COL32(90, 80, 60, 255), V.Len(4.0f), ImDrawFlags_RoundCornersTop);
+            if (static_cast<int>(i) == F.m_Selected) pDL->AddRect(a, b, IM_COL32(230, 180, 90, 255), V.Len(4.0f), 0, 2.0f);
+            pDL->AddText(pFont, Font, ImVec2(a.x + V.Len(8), a.y + V.Len(5)), IM_COL32(230, 230, 230, 255), S.m_Name.c_str());
+            for (std::size_t r = 0; r < S.m_In.size(); ++r)
+            {
+                const float y = a.y + V.Len(gl::RowY(static_cast<int>(r)));
+                pDL->AddCircleFilled(ImVec2(a.x, y), V.Len(4.0f), LifeColor(S.m_InLife[r]));
+                pDL->AddText(pFont, Font, ImVec2(a.x + V.Len(8), y - Font * 0.5f), IM_COL32(150, 150, 150, 255), S.m_In[r].c_str());
+            }
+            for (std::size_t r = 0; r < S.m_Out.size(); ++r)
+            {
+                const float y = a.y + V.Len(gl::RowY(static_cast<int>(r)));
+                pDL->AddCircleFilled(ImVec2(b.x, y), V.Len(4.0f), LifeColor(S.m_OutLife[r]));
+                pDL->AddText(pFont, Font, ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(S.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), IM_COL32(230, 230, 230, 255), S.m_Out[r].c_str());
+            }
+        }
+        if (Hover >= 0 && !Steps[std::size_t(Hover)].m_Recorded.empty())
+            ImGui::SetTooltip("%s\nrecorded as: %s%s", Steps[std::size_t(Hover)].m_Name.c_str(), Steps[std::size_t(Hover)].m_Recorded.c_str(), Steps[std::size_t(Hover)].m_bManaged ? "" : "\n(a legacy group: declared as a whole, its inside not yet in the graph)");
+        ImGui::EndChild();
+    }
+
     // pRender, pWorld: the Level whose last frame is shown (null: none open with a render module)
     inline void Draw(state& S, xlionrender::xRenderEditor* pRender, const void* pWorld, const edit_fn& EditFn) noexcept
     {
@@ -252,6 +381,7 @@ namespace level_editor::render_graph_tab
         }
         if (!ImGui::BeginTabBar("##rgviews")) return;
         if (ImGui::BeginTabItem("Post chain")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawPost(S, pRender, pWorld, EditFn); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Frame graph")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawFrameGraph(S); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Frame scopes")) { DrawScopes(S); ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
