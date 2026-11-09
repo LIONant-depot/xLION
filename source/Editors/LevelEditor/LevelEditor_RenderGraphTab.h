@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <format>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 #include <string>
 #include <string_view>
@@ -37,7 +38,7 @@ namespace level_editor::render_graph_tab
         bool                     m_bInits = false;           // show the initialisations too
     };
 
-    struct frame_graph_state { xgraph::view::view m_View; int m_Selected = -1; std::string m_Hidden; bool m_bFit = true; };      // (Fit: the whole frame in view - at the first show and on the Fit button)
+    struct frame_graph_state { xgraph::view::view m_View; int m_Selected = -1; std::string m_Hidden; bool m_bFit = true; std::string m_Key; std::shared_ptr<xgraph::routes::result> m_pRoutes; };      // (Key, Routes: the layout made again only when the frame's structure changes - every frame it cost the editor most of its frame rate)      // (Fit: the whole frame in view - at the first show and on the Fit button)
 
     struct state
     {
@@ -303,7 +304,14 @@ namespace level_editor::render_graph_tab
                 W = std::max(W, (r < S.m_In.size() ? ImGui::CalcTextSize(S.m_In[r].c_str()).x : 0.0f) + (r < S.m_Out.size() ? ImGui::CalcTextSize(S.m_Out[r].c_str()).x : 0.0f) + gl::geo::MID_GAP);
             In[0].m_Steps.push_back({ static_cast<std::uint64_t>(In[0].m_Steps.size() + 1), gl::StepW(W), static_cast<int>(nRows) });
         }
-        const auto R = gr::Build(In, Edges);
+        {   // (the steps and wires are cheap; the layout and routes are not: made again when the structure changes - names, rows, wires)
+            std::string Key;
+            for (const auto& S : Steps) { Key += S.m_Name; Key += '\x1'; for (const auto& n : S.m_In) { Key += n; Key += ','; } Key += '\x2'; for (const auto& n : S.m_Out) { Key += n; Key += ','; } Key += '\x3'; }
+            for (const auto& E : Edges) Key += std::format("{}.{}>{}.{};", E.m_From, E.m_FromRow, E.m_To, E.m_ToRow);
+            Key += std::format("#{}", ImGui::GetFontSize());
+            if (Key != F.m_Key || !F.m_pRoutes) { F.m_pRoutes = std::make_shared<gr::result>(gr::Build(In, Edges)); F.m_Key = std::move(Key); }
+        }
+        const auto& R = *F.m_pRoutes;
         const auto LifeColor = [](std::string_view L) -> ImU32
         {
             if (L == "history")  return IM_COL32(230, 170, 80, 255);
