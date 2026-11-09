@@ -91,7 +91,7 @@ endif()
 # core LevelEditor is actually built on - plus xPhysicsMaterial.plugin (its editor). Header-only
 # (nothing to compile ahead of time), so - same as xGPU's own root CMakeLists.txt - they're never in
 # Install.bat's PLUGINS loop, just cloned straight here and referenced through the plugins/ worm hole above.
-foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xgame.plugin xPhysicsMaterial.plugin)
+foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xgame.plugin xPhysicsMaterial.plugin xrender_graph.plugin)
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}/source")
         execute_process(
             COMMAND git clone --depth 1 https://github.com/LIONant-depot/${HeaderOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}"
@@ -107,7 +107,7 @@ endforeach()
 # the CMake project of the game). The resource pipeline runs the compilers of every type as exes, and Install.bat only builds the ones it knows, so these are built here when they
 # are missing (a developer rebuilds one with its plugin's build/CreateAndBuildProject.bat). A failed build is a warning: the resources then report "compiler not found" when they are
 # compiled, and nothing else is affected.
-foreach(CompilerPlugin xscript_module xgame)
+foreach(CompilerPlugin xscript_module xgame xrender_graph)
     set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
     if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
         if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")

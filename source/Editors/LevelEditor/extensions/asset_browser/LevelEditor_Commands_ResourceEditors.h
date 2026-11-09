@@ -26,6 +26,7 @@
 #include <format>
 #include "editor/xprofile_tab.h"                                            // (the drawer's Profiler tab)
 #include "plugins/xgame.plugin/source/Editor/xgame_editor.h"
+#include "plugins/xrender_graph.plugin/source/Editor/xrender_graph_editor.h"      // (RenderGraph: the post chain as a resource - render graph stage D)
 #include "plugins/xlevel.plugin/source/Editor/xlevel_command_context.h"
 #include "dependencies/xeditor/include/xeditor/host.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_CommandConsolePipe.h"
