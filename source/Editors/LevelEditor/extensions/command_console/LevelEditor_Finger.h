@@ -9,7 +9,7 @@
 //      Finger -X 640 -Y 360 -Message "this button picks the file"      a point of the main window (its pixels)
 //      Finger -Window "Material Stack" -Message "..."                   a panel by the start of its name: outlined, the finger at its top
 //      Finger -Show false | true          hide / show again          Finger -Seconds 8    hide after 8 s (0: stays)
-//      Finger                              where it is and what it says
+//      Finger                              where it is and what it says - "closed by the person" once they pressed the bubble's Got it
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <algorithm>
@@ -29,6 +29,7 @@ namespace level_editor::finger
         std::string m_Message;
         std::string m_Window;                 // a panel it points at (outlined while it exists)
         double      m_HideAt    = 0;          // ImGui time it hides at (0: stays)
+        bool        m_bSeen     = false;      // the person pressed "Got it" on this message (Tomas: "have the user close it")
     };
     inline state& State() noexcept { static state s_State; return s_State; }
 
@@ -77,18 +78,38 @@ namespace level_editor::finger
         D->AddLine(C, { C.x + 14.0f, C.y + 14.0f }, Ink, 5.0f);
         D->AddQuad(A, B, C, Dd, IM_COL32(20, 12, 6, 255), 1.5f);
 
-        // the message: a bubble at the lower right of the finger (kept on screen)
+        // the message: a bubble at the lower right of the finger (kept on screen), a window of its own so its "Got it" can be pressed:
+        // the person closes it - then the Finger query says it was seen
         if (!S.m_Message.empty())
         {
             const float Wrap = 320.0f;
             const ImVec2 Size = ImGui::CalcTextSize(S.m_Message.c_str(), nullptr, false, Wrap);
             const ImVec2 Vp = ImGui::GetMainViewport()->Size;
-            ImVec2 T0{ P.x + 34.0f, P.y + 30.0f };
-            T0.x = std::min(T0.x, Origin.x + Vp.x - Size.x - 24.0f);
-            T0.y = std::min(T0.y, Origin.y + Vp.y - Size.y - 24.0f);
-            D->AddRectFilled({ T0.x - 10, T0.y - 7 }, { T0.x + Size.x + 10, T0.y + Size.y + 7 }, Paper, 8.0f);
-            D->AddRect({ T0.x - 10, T0.y - 7 }, { T0.x + Size.x + 10, T0.y + Size.y + 7 }, Ink, 8.0f, 0, 2.0f);
-            D->AddText(nullptr, 0.0f, T0, Text, S.m_Message.c_str(), nullptr, Wrap);
+            ImVec2 T0{ P.x + 30.0f, P.y + 26.0f };
+            T0.x = std::min(T0.x, Origin.x + Vp.x - Size.x - 40.0f);
+            T0.y = std::min(T0.y, Origin.y + Vp.y - Size.y - 70.0f);
+            ImGui::SetNextWindowPos(T0);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, Paper);
+            ImGui::PushStyleColor(ImGuiCol_Border, Ink);
+            ImGui::PushStyleColor(ImGuiCol_Text, Text);
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(255, 140, 40, 90));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(255, 140, 40, 170));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 10.0f, 7.0f });
+            constexpr ImGuiWindowFlags Flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings
+                                             | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove;
+            if (ImGui::Begin("##AI finger", nullptr, Flags))
+            {
+                ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Wrap);
+                ImGui::TextUnformatted(S.m_Message.c_str());
+                ImGui::PopTextWrapPos();
+                if (ImGui::SmallButton("Got it")) { S.m_bSeen = true; S.m_bVisible = false; }
+            }
+            ImGui::End();
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(5);
         }
     }
 }
@@ -137,11 +158,11 @@ namespace level_editor::commands
                 if (!finger::FindWindow(Window)) return std::format("Finger: no open panel named '{}'", Window);
                 S.m_Window = Window; S.m_bVisible = true;
             }
-            if (bMessage) { S.m_Message = Message; S.m_bVisible = true; }
+            if (bMessage) { S.m_Message = Message; S.m_bVisible = true; S.m_bSeen = false; }
             if (bShow) S.m_bVisible = Show == "true" || Show == "1" || Show == "on";
             if (bSeconds) { const double Sec = std::atof(Seconds.c_str()); S.m_HideAt = Sec > 0 ? ImGui::GetTime() + Sec : 0.0; }
             else if (bX || bWindow || bMessage) S.m_HideAt = 0;
-            return std::format("Finger: {} at {:.0f},{:.0f}{}{}", S.m_bVisible ? "shown" : "hidden", S.m_Goal.x, S.m_Goal.y,
+            return std::format("Finger: {} at {:.0f},{:.0f}{}{}", S.m_bSeen ? "closed by the person (Got it)" : S.m_bVisible ? "shown" : "hidden", S.m_Goal.x, S.m_Goal.y,
                                S.m_Window.empty() ? "" : " (panel '" + S.m_Window + "')", S.m_Message.empty() ? "" : " saying \"" + S.m_Message + "\"");
         }
         xcmdline::parser::handle m_hX, m_hY, m_hWindow, m_hMessage, m_hShow, m_hSeconds;
