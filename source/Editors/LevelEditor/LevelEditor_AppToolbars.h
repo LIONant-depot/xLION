@@ -1,4 +1,5 @@
 #pragma once
+#include "source/Editors/LevelEditor/LevelEditor_RenderGraphTab.h"
 
 // level_editor::app: the Host Drawer tab bodies. The menu-bar/Editor/Scene toolbars used to live here too, but
 // they read State/CmdContext/pGameMgr/GamePlugin/SceneTool directly, so they moved to
@@ -48,6 +49,14 @@ namespace level_editor
         case 8:
         {
             ProfilerTab.Draw();         // the profiler (xprofile): the switch, the Tracy viewer, the recorder's view, the memory map
+            break;
+        }
+        case 9:
+        {
+            static render_graph_tab::state s_RenderGraph;       // (one drawer, one tab)
+            xlionrender::xRenderEditor* pRender = nullptr; const void* pWorld = nullptr;
+            ForEachLevelSession([&](xlevel::session& S) { if (!pRender && S.m_pRender && S.m_pGameMgr) { pRender = S.m_pRender.get(); pWorld = S.m_pGameMgr.get(); } });
+            render_graph_tab::Draw(s_RenderGraph, pRender, pWorld);     // the first open Level's last frame, read only
             break;
         }
         default:
