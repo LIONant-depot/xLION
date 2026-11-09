@@ -246,6 +246,7 @@ namespace level_editor
         level_editor::commands::press_keys_query_cmd              CmdPressKeys;
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         level_editor::commands::virtual_input_cmd                 CmdVirtualInput;
+        level_editor::commands::finger_cmd                        CmdFinger;
         level_editor::commands::mouse_move_cmd                    CmdMouseMove;
         level_editor::commands::mouse_button_cmd                  CmdMouseButton;
         level_editor::commands::mouse_wheel_cmd                   CmdMouseWheel;
@@ -358,6 +359,7 @@ namespace level_editor
         , CmdPressKeys(Workspace, pEditor)
         , CmdExplainLastKey(Workspace, pEditor)
         , CmdVirtualInput(Workspace, pEditor)
+        , CmdFinger(Workspace, pEditor)
         , CmdMouseMove(Workspace, pEditor)
         , CmdMouseButton(Workspace, pEditor)
         , CmdMouseWheel(Workspace, pEditor)

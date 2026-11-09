@@ -12,6 +12,7 @@
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_App.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_Actions.h"
 #include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Commands_VirtualInput.h"
+#include "source/Editors/LevelEditor/extensions/command_console/LevelEditor_Finger.h"
 #include "dependencies/actions.imgui/ximgui_actions_keymap.h"
 #include "dependencies/xeditor/include/xeditor/shortcuts.h"
 #include "dependencies/xeditor/include/xeditor/hint.h"
