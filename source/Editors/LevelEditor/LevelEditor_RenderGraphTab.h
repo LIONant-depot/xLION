@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <format>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,6 +23,8 @@ namespace level_editor::render_graph_tab
     struct post_pass  { bool m_bInit = false, m_bRan = false; int m_Node = -1; std::string m_Source, m_Scope, m_Kernel, m_W, m_H, m_GX, m_GY, m_When; };
     struct post_state
     {
+        std::vector<bool>        m_On;                       // each node's bypass state (N lines' last field)
+        std::string              m_LastReply;                // the last edit's reply (a refusal says why)
         std::vector<char>        m_Buffer = std::vector<char>(16 * 1024);
         std::string              m_Error;
         std::vector<std::string> m_Nodes;
@@ -74,14 +77,14 @@ namespace level_editor::render_graph_tab
     // xlionrender::post::Describe: "E <error>", "N <i> <type>", "P <name> <value> <source> <min> <max> <raw>", "X|I <node> <ran> <source> <scope> <kernel> <W> <H> <gx> <gy> <when>"
     inline void ParsePost(post_state& S, std::string_view T) noexcept
     {
-        S.m_Error.clear(); S.m_Nodes.clear(); S.m_Params.clear(); S.m_Passes.clear();
+        S.m_Error.clear(); S.m_Nodes.clear(); S.m_On.clear(); S.m_Params.clear(); S.m_Passes.clear();
         while (!T.empty())
         {
             const std::size_t e = T.find('\n');
             const auto F = Split(T.substr(0, e));
             T = e == std::string_view::npos ? std::string_view() : T.substr(e + 1);
             if (F[0] == "E" && F.size() >= 2) S.m_Error = std::string(F[1]);
-            else if (F[0] == "N" && F.size() >= 3) S.m_Nodes.emplace_back(F[2]);
+            else if (F[0] == "N" && F.size() >= 3) { S.m_Nodes.emplace_back(F[2]); S.m_On.push_back(F.size() < 4 || F[3] == "1"); }
             else if (F[0] == "P" && F.size() >= 7) S.m_Params.push_back({ std::string(F[1]), std::string(F[2]), std::string(F[3]), std::string(F[4]), std::string(F[5]), std::string(F[6]) });
             else if ((F[0] == "X" || F[0] == "I") && F.size() >= 11)
                 S.m_Passes.push_back({ F[0] == "I", F[2] == "1", std::atoi(std::string(F[1]).c_str()), std::string(F[3]), std::string(F[4]), std::string(F[5]), std::string(F[6]), std::string(F[7]), std::string(F[8]), std::string(F[9]), std::string(F[10]) });
@@ -108,12 +111,48 @@ namespace level_editor::render_graph_tab
         if (!S.m_Error.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "The chain's description is not valid - tone map only: %s", S.m_Error.c_str());
         if (S.m_Nodes.empty()) { ImGui::TextDisabled("No post chain yet (the Level has not rendered)."); return; }
 
-        // The recipe: its nodes in order (a node clicked lights its passes below)
+        // The recipe: its nodes in order (a node clicked lights its passes below). Editing (P6): each node's checkbox bypasses it, "x" removes
+        // it, a "+" between nodes offers only the types that keep the chain valid. Every action is a PostEdit command (the console's text)
+        const auto Send = [&](const std::string& Edit)
+        {
+            char Reply[512] = {};
+            pRender->EditPost(pWorld, Edit.c_str(), Reply, static_cast<int>(sizeof(Reply)));
+            S.m_LastReply = Edit + ": " + Reply;
+            St.m_Refresh = 0;       // (read again next frame)
+        };
+        const auto Plus = [&](int Gap)
+        {
+            ImGui::PushID(1000 + Gap);
+            if (ImGui::SmallButton("+")) ImGui::OpenPopup("##insert");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Insert a node here (only those that keep the chain valid are offered)");
+            if (ImGui::BeginPopup("##insert"))
+            {
+                char Types[256] = {};
+                pRender->EditPost(pWorld, std::format("insertable {}", Gap).c_str(), Types, static_cast<int>(sizeof(Types)));
+                std::string_view T(Types); int nOffered = 0;
+                for (std::size_t b = 0; b < T.size(); )
+                {
+                    std::size_t e = T.find(' ', b); if (e == std::string_view::npos) e = T.size();
+                    if (e > b) { const std::string Name(T.substr(b, e - b)); ++nOffered; if (ImGui::MenuItem(Name.c_str())) Send(std::format("insert {} {}", Gap, Name)); }
+                    b = e + 1;
+                }
+                if (!nOffered) ImGui::TextDisabled("Nothing fits here (each node once; TAA first, the tone map last)");
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        };
         ImGui::TextDisabled("Recipe");
+        ImGui::SameLine(); Plus(0);
         for (int i = 0; i < static_cast<int>(S.m_Nodes.size()); ++i)
         {
-            if (i) { ImGui::SameLine(); ImGui::TextDisabled("->"); ImGui::SameLine(); }
+            if (i) { ImGui::SameLine(); ImGui::TextDisabled("->"); }
+            ImGui::SameLine();
             ImGui::PushID(i);
+            bool bOn = i < static_cast<int>(S.m_On.size()) ? S.m_On[static_cast<std::size_t>(i)] : true;
+            if (ImGui::Checkbox("##on", &bOn)) Send(std::format("bypass {} {}", i, bOn ? 1 : 0));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(bOn ? "On: uncheck to bypass it (kept in the recipe, left out of the frame)" : "Bypassed: check to put it back");
+            ImGui::SameLine(0, 2);
+            if (!bOn) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45f);
             const bool bSel = S.m_Selected == i;
             if (bSel) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
             if (ImGui::Button(S.m_Nodes[static_cast<std::size_t>(i)].c_str())) S.m_Selected = bSel ? -1 : i;
@@ -123,8 +162,14 @@ namespace level_editor::render_graph_tab
                 int nPasses = 0; for (const auto& P : S.m_Passes) nPasses += !P.m_bInit && P.m_Node == i;
                 ImGui::SetTooltip("%s: %d pass%s this frame%s", S.m_Nodes[static_cast<std::size_t>(i)].c_str(), nPasses, nPasses == 1 ? "" : "es", bSel ? " (click: show all)" : " (click: light them)");
             }
+            if (!bOn) ImGui::PopStyleVar();
+            ImGui::SameLine(0, 2);
+            if (ImGui::SmallButton("x")) Send(std::format("remove {}", i));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove it from the recipe (refused if the chain would be invalid: the tone map stays)");
+            ImGui::SameLine(); Plus(i + 1);
             ImGui::PopID();
         }
+        if (!S.m_LastReply.empty()) ImGui::TextColored(S.m_LastReply.find("refused") != std::string::npos || S.m_LastReply.find("not an edit") != std::string::npos || S.m_LastReply.find("no node type") != std::string::npos ? kWarn : kDim, "%s", S.m_LastReply.c_str());
         ImGui::Spacing();
 
         // Side by side (the drawer is wide and short): the parameters on the left, the passes on the right
