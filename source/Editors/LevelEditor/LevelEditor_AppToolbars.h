@@ -54,9 +54,10 @@ namespace level_editor
         case 9:
         {
             static render_graph_tab::state s_RenderGraph;       // (one drawer, one tab)
-            xlionrender::xRenderEditor* pRender = nullptr; const void* pWorld = nullptr;
-            ForEachLevelSession([&](xlevel::session& S) { if (!pRender && S.m_pRender && S.m_pGameMgr) { pRender = S.m_pRender.get(); pWorld = S.m_pGameMgr.get(); } });
-            render_graph_tab::Draw(s_RenderGraph, pRender, pWorld);     // the first open Level's last frame, read only
+            xlionrender::xRenderEditor* pRender = nullptr; const void* pWorld = nullptr; xlevel::session* pSession = nullptr;
+            ForEachLevelSession([&](xlevel::session& S) { if (!pRender && S.m_pRender && S.m_pGameMgr) { pRender = S.m_pRender.get(); pWorld = S.m_pGameMgr.get(); pSession = &S; } });
+            // the first open Level's last frame; the Post chain's edits go through the Level's PostEdit (into its RenderGraph resource when it has one)
+            render_graph_tab::Draw(s_RenderGraph, pRender, pWorld, [pSession](const std::string& Edit) { return pSession && pSession->m_CmdContext.m_EditPost ? pSession->m_CmdContext.m_EditPost(Edit) : std::string("PostEdit: no Level"); });
             break;
         }
         default:

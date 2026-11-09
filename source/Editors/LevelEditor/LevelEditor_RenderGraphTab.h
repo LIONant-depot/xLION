@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <format>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -98,7 +99,9 @@ namespace level_editor::render_graph_tab
     }
 
     // The post chain: the recipe (nodes, parameters) and what it expands to (passes), read only
-    inline void DrawPost(state& St, xlionrender::xRenderEditor* pRender, const void* pWorld) noexcept
+    using edit_fn = std::function<std::string(const std::string&)>;     // a Level's PostEdit: its reply
+
+    inline void DrawPost(state& St, xlionrender::xRenderEditor* pRender, const void* pWorld, const edit_fn& EditFn) noexcept
     {
         auto& S = St.m_Post;
         if (!St.m_bFrozen && St.m_Refresh == 30)        // (read with the scopes: the same frame)
@@ -115,11 +118,15 @@ namespace level_editor::render_graph_tab
         // it, a "+" between nodes offers only the types that keep the chain valid. Every action is a PostEdit command (the console's text)
         const auto Send = [&](const std::string& Edit)
         {
-            char Reply[512] = {};
-            pRender->EditPost(pWorld, Edit.c_str(), Reply, static_cast<int>(sizeof(Reply)));
-            S.m_LastReply = Edit + ": " + Reply;
+            S.m_LastReply = Edit + ": " + EditFn(Edit);
             St.m_Refresh = 0;       // (read again next frame)
         };
+        {   // where the edits go: the Level's RenderGraph resource (saved; it compiles, the view follows) or the view (lost on reload)
+            char Source[32] = {};
+            pRender->EditPost(pWorld, "source", Source, static_cast<int>(sizeof(Source)));
+            if (std::strtoull(Source, nullptr, 16)) ImGui::TextDisabled("Edits are saved in the Level's RenderGraph %s (its Environment's)", Source);
+            else ImGui::TextDisabled("Edits apply to this view only (the built-in chain: give the Environment a RenderGraph to keep them)");
+        }
         const auto Plus = [&](int Gap)
         {
             ImGui::PushID(1000 + Gap);
@@ -233,7 +240,7 @@ namespace level_editor::render_graph_tab
     inline void DrawScopes(state& S) noexcept;
 
     // pRender, pWorld: the Level whose last frame is shown (null: none open with a render module)
-    inline void Draw(state& S, xlionrender::xRenderEditor* pRender, const void* pWorld) noexcept
+    inline void Draw(state& S, xlionrender::xRenderEditor* pRender, const void* pWorld, const edit_fn& EditFn) noexcept
     {
         if (!pRender || !pWorld) { ImGui::TextDisabled("No Level with a render module is open."); return; }
         if (!S.m_bFrozen && S.m_Refresh-- <= 0)
@@ -244,7 +251,7 @@ namespace level_editor::render_graph_tab
             S.m_Refresh = 30;
         }
         if (!ImGui::BeginTabBar("##rgviews")) return;
-        if (ImGui::BeginTabItem("Post chain")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawPost(S, pRender, pWorld); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Post chain")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawPost(S, pRender, pWorld, EditFn); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Frame scopes")) { DrawScopes(S); ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
