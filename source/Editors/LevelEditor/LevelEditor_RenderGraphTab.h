@@ -269,14 +269,18 @@ namespace level_editor::render_graph_tab
             const int s = static_cast<int>(Steps.size());
             for (const auto& A : Sc.m_Accesses)
             {
-                if (A.m_bWrite) continue;
+                // a read of a version; a write that keeps the contents (preserve, partial) reads the version before it - drawing onto the
+                // prepass's image, the tile pass consumes it (Tomas 2026-11-09: its output looked unconnected)
+                const bool bKeeps = A.m_bWrite && (A.m_Policy == "preserve" || A.m_Policy == "partial");
+                if (A.m_bWrite && !bKeeps) continue;
+                const std::string Version = bKeeps ? std::to_string(std::atoi(A.m_Version.c_str()) - 1) : A.m_Version;
                 const auto Name = ShortName(A.m_Res);
                 if (std::find(S.m_In.begin(), S.m_In.end(), Name) != S.m_In.end()) continue;
                 const int Row = static_cast<int>(S.m_In.size());
                 S.m_In.push_back(Name); S.m_InLife.push_back(A.m_Life);
-                if (const auto It = Writer.find(A.m_Res + "#" + A.m_Version); It != Writer.end())
+                if (const auto It = Writer.find(A.m_Res + "#" + Version); It != Writer.end())
                 {
-                    Edges.push_back({ It->second.first, It->second.second, s, Row, std::hash<std::string>{}(A.m_Res + "#" + A.m_Version), Edges.size() });
+                    Edges.push_back({ It->second.first, It->second.second, s, Row, std::hash<std::string>{}(A.m_Res + "#" + Version), Edges.size() });
                     SourceLife.push_back(A.m_Life);
                 }
             }
