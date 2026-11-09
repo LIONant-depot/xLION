@@ -324,6 +324,13 @@ namespace level_editor
         g_WindowCapture.BeforeFlip(MainWindow);
         g_WindowNoise.BeforeFlip(MainWindow);
         MainWindow.PageFlip();
+        // The pipeline cache saved every 30 s when it grew (the device writes nothing otherwise), not only at shutdown: an editor that is
+        // killed or crashes kept none of its pipelines - the next Police open spent ~70 s making them again in Debug (1 s with a saved cache)
+        if (!PipelineCachePath.empty())
+        {
+            static auto s_Last = std::chrono::steady_clock::now();
+            if (const auto Now = std::chrono::steady_clock::now(); Now - s_Last > std::chrono::seconds(30)) { s_Last = Now; (void)Device.SavePipelineCache(PipelineCachePath); }
+        }
         g_WindowCapture.AfterFlip();
         g_WindowNoise.AfterFlip();
         XPROFILE_FRAME();
