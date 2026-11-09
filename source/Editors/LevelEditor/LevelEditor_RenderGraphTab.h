@@ -289,7 +289,7 @@ namespace level_editor::render_graph_tab
                 if (!A.m_bWrite) continue;
                 const auto Name = ShortName(A.m_Res);
                 int Row = static_cast<int>(std::find(S.m_Out.begin(), S.m_Out.end(), Name) - S.m_Out.begin());
-                if (Row == static_cast<int>(S.m_Out.size())) { S.m_Out.push_back(Name); S.m_OutLife.push_back(A.m_Life); }
+                if (Row == static_cast<int>(S.m_Out.size())) { S.m_Out.push_back(Name); S.m_OutLife.push_back(A.m_Policy == "discard" ? std::string("scratch") : A.m_Life); }      // (discard: a pass's scratch attachment - nothing should read it)
                 Writer[A.m_Res + "#" + A.m_Version] = { s, Row };
             }
             Steps.push_back(std::move(S));
@@ -309,13 +309,14 @@ namespace level_editor::render_graph_tab
             if (L == "history")  return IM_COL32(230, 170, 80, 255);
             if (L == "retained") return IM_COL32(120, 200, 130, 255);
             if (L == "external") return IM_COL32(120, 170, 235, 255);
+            if (L == "scratch")  return IM_COL32(90, 90, 95, 255);
             return IM_COL32(175, 175, 185, 255);
         };
         std::vector<ImU32> SourceColor(R.m_Sources.size(), IM_COL32(175, 175, 185, 255));
         for (std::size_t e = 0; e < Edges.size(); ++e) SourceColor[std::size_t(R.m_RouteSource[e])] = LifeColor(SourceLife[e]);
 
         if (ImGui::SmallButton("Fit")) F.m_bFit = true;
-        ImGui::SameLine(); ImGui::TextDisabled("%d scopes, %d wires - click a step to light what it reads and writes; right drag pans, the wheel zooms", static_cast<int>(Steps.size()), static_cast<int>(Edges.size()));
+        ImGui::SameLine(); ImGui::TextDisabled("%d scopes, %d wires - click a step to light what it reads and writes; right drag pans, the wheel zooms. Grey outputs: scratch (a pass's own attachments, never read)", static_cast<int>(Steps.size()), static_cast<int>(Edges.size()));
         ImGui::BeginChild("##framegraph", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         static const xgraph::view::style Style = [] { xgraph::view::style S; S.m_ZoomMin = 0.1f; return S; }();     // (a whole frame: zoomed far out)
         const ImVec2 Avail = ImGui::GetContentRegionAvail();
@@ -364,7 +365,8 @@ namespace level_editor::render_graph_tab
             {
                 const float y = a.y + V.Len(gl::RowY(static_cast<int>(r)));
                 pDL->AddCircleFilled(ImVec2(b.x, y), V.Len(4.0f), LifeColor(S.m_OutLife[r]));
-                pDL->AddText(pFont, Font, ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(S.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), IM_COL32(230, 230, 230, 255), S.m_Out[r].c_str());
+                const bool bScratch = S.m_OutLife[r] == "scratch";
+                pDL->AddText(pFont, Font, ImVec2(b.x - V.Len(8) - ImGui::CalcTextSize(S.m_Out[r].c_str()).x * V.m_Zoom, y - Font * 0.5f), bScratch ? IM_COL32(120, 120, 120, 255) : IM_COL32(230, 230, 230, 255), S.m_Out[r].c_str());
             }
         }
         if (Hover >= 0 && !Steps[std::size_t(Hover)].m_Recorded.empty())
