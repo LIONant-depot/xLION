@@ -3,8 +3,12 @@
 // last frame, read only - every scope in recording order (managed, or a legacy group), what it reads and writes (resource, version, usage,
 // content policy, lifetime), and the declaration errors. A resource clicked: every scope that touches it lit, its writers orange and its
 // readers blue - the graph's edges for that resource. The data: xlionrender::xRenderEditor::DescribeGraph (rg::graph::Text).
+// Post chain (render graph P5, read only): the chain's recipe - its nodes in order, its parameters with the value a frame used, where it
+// came from and its range (a clamped one says the Scene's value) - and what it expands to: every pass with its size, dispatch, the
+// setting it runs on and whether it ran last frame; a node clicked lights its passes. The data: xRenderEditor::DescribePost.
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,8 +18,22 @@ namespace level_editor::render_graph_tab
     struct access { bool m_bWrite = false; std::string m_Version, m_Usage, m_Policy, m_Life, m_Res; };
     struct scope  { bool m_bManaged = true; std::string m_Name, m_Recorded; std::vector<access> m_Accesses; };
 
+    struct post_param { std::string m_Name, m_Value, m_Source, m_Min, m_Max, m_Raw; };
+    struct post_pass  { bool m_bInit = false, m_bRan = false; int m_Node = -1; std::string m_Source, m_Scope, m_Kernel, m_W, m_H, m_GX, m_GY, m_When; };
+    struct post_state
+    {
+        std::vector<char>        m_Buffer = std::vector<char>(16 * 1024);
+        std::string              m_Error;
+        std::vector<std::string> m_Nodes;
+        std::vector<post_param>  m_Params;
+        std::vector<post_pass>   m_Passes;
+        int                      m_Selected = -1;            // the node clicked (-1: none)
+        bool                     m_bInits = false;           // show the initialisations too
+    };
+
     struct state
     {
+        post_state               m_Post;
         std::vector<char>        m_Buffer = std::vector<char>(64 * 1024);
         std::vector<std::string> m_Errors;
         std::vector<scope>       m_Scopes;
@@ -53,11 +71,121 @@ namespace level_editor::render_graph_tab
         }
     }
 
+    // xlionrender::post::Describe: "E <error>", "N <i> <type>", "P <name> <value> <source> <min> <max> <raw>", "X|I <node> <ran> <source> <scope> <kernel> <W> <H> <gx> <gy> <when>"
+    inline void ParsePost(post_state& S, std::string_view T) noexcept
+    {
+        S.m_Error.clear(); S.m_Nodes.clear(); S.m_Params.clear(); S.m_Passes.clear();
+        while (!T.empty())
+        {
+            const std::size_t e = T.find('\n');
+            const auto F = Split(T.substr(0, e));
+            T = e == std::string_view::npos ? std::string_view() : T.substr(e + 1);
+            if (F[0] == "E" && F.size() >= 2) S.m_Error = std::string(F[1]);
+            else if (F[0] == "N" && F.size() >= 3) S.m_Nodes.emplace_back(F[2]);
+            else if (F[0] == "P" && F.size() >= 7) S.m_Params.push_back({ std::string(F[1]), std::string(F[2]), std::string(F[3]), std::string(F[4]), std::string(F[5]), std::string(F[6]) });
+            else if ((F[0] == "X" || F[0] == "I") && F.size() >= 11)
+                S.m_Passes.push_back({ F[0] == "I", F[2] == "1", std::atoi(std::string(F[1]).c_str()), std::string(F[3]), std::string(F[4]), std::string(F[5]), std::string(F[6]), std::string(F[7]), std::string(F[8]), std::string(F[9]), std::string(F[10]) });
+        }
+    }
+
     inline bool Contains(std::string_view Text, std::string_view Pattern) noexcept
     {
         return std::search(Text.begin(), Text.end(), Pattern.begin(), Pattern.end(),
             [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != Text.end();
     }
+
+    // The post chain: the recipe (nodes, parameters) and what it expands to (passes), read only
+    inline void DrawPost(state& St, xlionrender::xRenderEditor* pRender, const void* pWorld) noexcept
+    {
+        auto& S = St.m_Post;
+        if (!St.m_bFrozen && St.m_Refresh == 30)        // (read with the scopes: the same frame)
+        {
+            int n = pRender->DescribePost(pWorld, S.m_Buffer.data(), static_cast<int>(S.m_Buffer.size()));
+            if (n >= static_cast<int>(S.m_Buffer.size())) { S.m_Buffer.resize(static_cast<std::size_t>(n) * 2); n = pRender->DescribePost(pWorld, S.m_Buffer.data(), static_cast<int>(S.m_Buffer.size())); }
+            ParsePost(S, n > 0 ? std::string_view(S.m_Buffer.data(), std::min<std::size_t>(static_cast<std::size_t>(n), S.m_Buffer.size() - 1)) : std::string_view());
+        }
+        const ImVec4 kNode(0.45f, 0.75f, 1.0f, 1.0f), kDim(0.55f, 0.55f, 0.55f, 1.0f), kWarn(1.0f, 0.62f, 0.25f, 1.0f);
+        if (!S.m_Error.empty()) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "The chain's description is not valid - tone map only: %s", S.m_Error.c_str());
+        if (S.m_Nodes.empty()) { ImGui::TextDisabled("No post chain yet (the Level has not rendered)."); return; }
+
+        // The recipe: its nodes in order (a node clicked lights its passes below)
+        ImGui::TextDisabled("Recipe");
+        for (int i = 0; i < static_cast<int>(S.m_Nodes.size()); ++i)
+        {
+            if (i) { ImGui::SameLine(); ImGui::TextDisabled("->"); ImGui::SameLine(); }
+            ImGui::PushID(i);
+            const bool bSel = S.m_Selected == i;
+            if (bSel) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+            if (ImGui::Button(S.m_Nodes[static_cast<std::size_t>(i)].c_str())) S.m_Selected = bSel ? -1 : i;
+            if (bSel) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+            {
+                int nPasses = 0; for (const auto& P : S.m_Passes) nPasses += !P.m_bInit && P.m_Node == i;
+                ImGui::SetTooltip("%s: %d pass%s this frame%s", S.m_Nodes[static_cast<std::size_t>(i)].c_str(), nPasses, nPasses == 1 ? "" : "es", bSel ? " (click: show all)" : " (click: light them)");
+            }
+            ImGui::PopID();
+        }
+        ImGui::Spacing();
+
+        // Side by side (the drawer is wide and short): the parameters on the left, the passes on the right
+        if (!ImGui::BeginTable("##postlayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) return;
+        ImGui::TableSetupColumn("params", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+        ImGui::TableSetupColumn("passes", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+        ImGui::TableNextRow(); ImGui::TableNextColumn();
+        ImGui::BeginChild("##postparamsc");
+        // Its parameters: the value the last frame used, where it came from, its range
+        if (ImGui::BeginTable("##postparams", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("parameter"); ImGui::TableSetupColumn("value"); ImGui::TableSetupColumn("range"); ImGui::TableSetupColumn("from", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+            for (const auto& P : S.m_Params)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(P.m_Name.c_str());
+                ImGui::TableNextColumn();
+                if (P.m_Raw.empty()) ImGui::TextUnformatted(P.m_Value.c_str());
+                else
+                {
+                    ImGui::TextColored(kWarn, "%s (clamped)", P.m_Value.c_str());
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The Scene says %s, outside %s .. %s: %s is used", P.m_Raw.c_str(), P.m_Min.c_str(), P.m_Max.c_str(), P.m_Value.c_str());
+                }
+                ImGui::TableNextColumn();
+                if (P.m_Value == "on" || P.m_Value == "off") ImGui::TextColored(kDim, "on / off"); else ImGui::TextColored(kDim, "%s .. %s", P.m_Min.c_str(), P.m_Max.c_str());
+                ImGui::TableNextColumn(); ImGui::TextColored(kDim, "%s", P.m_Source.c_str());
+            }
+            ImGui::EndTable();
+        }
+        ImGui::EndChild();
+        ImGui::TableNextColumn();
+
+        // What it expands to: the passes in order, those that did not run last frame dimmed (and why: the setting they run on)
+        int nRan = 0, nFrame = 0; for (const auto& P : S.m_Passes) if (!P.m_bInit) { ++nFrame; nRan += P.m_bRan; }
+        ImGui::TextDisabled("Expanded: %d passes, %d ran last frame", nFrame, nRan);
+        ImGui::SameLine(); ImGui::Checkbox("show the initialisations", &S.m_bInits);
+        if (!ImGui::BeginTable("##postpasses", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit)) { ImGui::EndTable(); return; }
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("pass", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("kernel"); ImGui::TableSetupColumn("dispatch"); ImGui::TableSetupColumn("runs when"); ImGui::TableSetupColumn("last frame");
+        ImGui::TableHeadersRow();
+        for (const auto& P : S.m_Passes)
+        {
+            if (P.m_bInit && !S.m_bInits) continue;
+            const bool bLit = S.m_Selected >= 0 && P.m_Node == S.m_Selected, bDim = S.m_Selected >= 0 ? !bLit : (!P.m_bRan && !P.m_bInit);
+            const ImVec4 Col = bLit ? kNode : bDim ? kDim : ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::TextColored(Col, "%s", P.m_Source.c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("render graph scope: %s", P.m_Scope.c_str());
+            ImGui::TableNextColumn(); ImGui::TextColored(Col, "%s", P.m_Kernel.c_str());
+            ImGui::TableNextColumn(); ImGui::TextColored(Col, "%s", P.m_Kernel.find("raster") != std::string::npos ? "a triangle" : (P.m_GX + " x " + P.m_GY + " groups").c_str());
+            ImGui::TableNextColumn(); ImGui::TextColored(Col, "%s", P.m_bInit ? "once" : P.m_When.c_str());
+            ImGui::TableNextColumn(); ImGui::TextColored(P.m_bRan ? Col : kDim, "%s", P.m_bInit ? "" : P.m_bRan ? "ran" : "skipped");
+        }
+        ImGui::EndTable();
+        ImGui::EndTable();      // (the layout)
+    }
+
+    inline void DrawScopes(state& S) noexcept;
 
     // pRender, pWorld: the Level whose last frame is shown (null: none open with a render module)
     inline void Draw(state& S, xlionrender::xRenderEditor* pRender, const void* pWorld) noexcept
@@ -70,6 +198,15 @@ namespace level_editor::render_graph_tab
             Parse(S, n > 0 ? std::string_view(S.m_Buffer.data(), std::min<std::size_t>(static_cast<std::size_t>(n), S.m_Buffer.size() - 1)) : std::string_view());
             S.m_Refresh = 30;
         }
+        if (!ImGui::BeginTabBar("##rgviews")) return;
+        if (ImGui::BeginTabItem("Post chain")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawPost(S, pRender, pWorld); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Frame scopes")) { DrawScopes(S); ImGui::EndTabItem(); }
+        ImGui::EndTabBar();
+    }
+
+    // Every scope of the last frame, what it reads and writes
+    inline void DrawScopes(state& S) noexcept
+    {
 
         // the bar: freeze, filter, counts, the selection
         ImGui::Checkbox("Freeze", &S.m_bFrozen);
