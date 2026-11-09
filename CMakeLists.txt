@@ -198,6 +198,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONCore.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONRender.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xundo.git" "main")
+FetchAndPopulate("https://github.com/LIONant-depot/xgraph.git" "main")          # the graph editors' shared mechanics (layout, routing, ordering): the Material Editor, the Render Graph Editor
 FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
 FetchAndPopulate("https://github.com/CedricGuillemet/ImGuizmo.git" "master")
