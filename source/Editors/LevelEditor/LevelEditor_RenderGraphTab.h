@@ -48,6 +48,7 @@ namespace level_editor::render_graph_tab
         std::vector<std::string> m_Errors;
         std::vector<scope>       m_Scopes;
         std::string              m_Selected;                // the resource clicked ("": none)
+        std::string              m_ViewReply;               // the last DebugView edit's reply (a refusal says why: integer data, not made)
         char                     m_Filter[128] = {};
         bool                     m_bFrozen = false;          // keep the frame shown (the declarations change with what the view draws)
         int                      m_Refresh = 0;              // frames to the next read
@@ -243,7 +244,7 @@ namespace level_editor::render_graph_tab
         ImGui::EndTable();      // (the layout)
     }
 
-    inline void DrawScopes(state& S) noexcept;
+    inline void DrawScopes(state& S, const edit_fn& EditFn) noexcept;
 
     // The whole frame as a graph (read only): every scope of the last frame a step in recording order - its inputs the resources it reads,
     // its outputs the ones it writes - and a wire from the scope that wrote a resource's version to each scope that reads that version.
@@ -402,12 +403,12 @@ namespace level_editor::render_graph_tab
         if (!ImGui::BeginTabBar("##rgviews")) return;
         if (ImGui::BeginTabItem("Post chain")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawPost(S, pRender, pWorld, EditFn); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Frame graph")) { ImGui::Checkbox("Freeze", &S.m_bFrozen); DrawFrameGraph(S); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Frame scopes")) { DrawScopes(S); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Frame scopes")) { DrawScopes(S, EditFn); ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
 
     // Every scope of the last frame, what it reads and writes
-    inline void DrawScopes(state& S) noexcept
+    inline void DrawScopes(state& S, const edit_fn& EditFn) noexcept
     {
 
         // the bar: freeze, filter, counts, the selection
@@ -422,7 +423,10 @@ namespace level_editor::render_graph_tab
         {
             ImGui::SameLine(); ImGui::Text("| %s", S.m_Selected.c_str());
             ImGui::SameLine(); if (ImGui::SmallButton("clear")) S.m_Selected.clear();
+            ImGui::SameLine(); if (ImGui::SmallButton("show") && EditFn) S.m_ViewReply = EditFn("view " + S.m_Selected);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show it in the viewport in place of the frame (DebugView)");
         }
+        if (!S.m_ViewReply.empty() && S.m_ViewReply != "PostEdit: ok") { ImGui::TextDisabled("%s", S.m_ViewReply.c_str()); ImGui::SameLine(); if (ImGui::SmallButton("x")) S.m_ViewReply.clear(); }
         if (S.m_Scopes.empty()) ImGui::TextDisabled("No frame declared yet (the Level has not rendered).");
         for (const auto& E : S.m_Errors) ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "error: %s", E.c_str());
 
@@ -463,7 +467,18 @@ namespace level_editor::render_graph_tab
                     ImGui::TableNextRow(); ImGui::TableNextColumn();
                     ImGui::Indent();
                     ImGui::PushStyleColor(ImGuiCol_Text, A.m_Res == S.m_Selected ? (A.m_bWrite ? kWrite : kRead) : ImGui::GetStyleColorVec4(ImGuiCol_Text));
-                    if (ImGui::Selectable(A.m_Res.c_str(), A.m_Res == S.m_Selected, ImGuiSelectableFlags_SpanAllColumns)) S.m_Selected = A.m_Res == S.m_Selected ? std::string() : A.m_Res;
+                    if (ImGui::Selectable(A.m_Res.c_str(), A.m_Res == S.m_Selected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick))
+                    {
+                        S.m_Selected = A.m_Res == S.m_Selected && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) ? std::string() : A.m_Res;
+                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && EditFn) S.m_ViewReply = EditFn("view " + A.m_Res);     // (DebugView: the image in the viewport)
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click: light its writers and readers. Double-click or right-click: show it in the viewport");
+                    if (ImGui::BeginPopupContextItem("##rgres"))
+                    {
+                        if (ImGui::MenuItem("Show in the viewport") && EditFn) S.m_ViewReply = EditFn("view " + A.m_Res);
+                        if (ImGui::MenuItem("Show the frame") && EditFn)      S.m_ViewReply = EditFn("view off");
+                        ImGui::EndPopup();
+                    }
                     ImGui::PopStyleColor();
                     ImGui::Unindent();
                     ImGui::TableNextColumn(); ImGui::TextColored(A.m_bWrite ? kWrite : kRead, "%s", A.m_bWrite ? "write" : "read");

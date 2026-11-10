@@ -32,6 +32,7 @@ namespace level_editor
         xlevel::commands::describe_text_draw_query_cmd      CmdDescribeTextDraw;
         xlevel::commands::describe_scene_query_cmd          CmdDescribeScene;
         xlevel::commands::post_edit_query_cmd               CmdPostEdit;
+        xlevel::commands::debug_view_query_cmd              CmdDebugView;
         xlevel::commands::pick_ray_query_cmd                CmdPickRay;
         xlevel::commands::pick_pixel_query_cmd              CmdPickPixel;
         xlevel::commands::dump_gi_query_cmd                 CmdDumpGI;
@@ -148,6 +149,7 @@ namespace level_editor
         , CmdDescribeTextDraw(Level, pEditor)
         , CmdDescribeScene(Level, pEditor)
         , CmdPostEdit(Level, pEditor)
+        , CmdDebugView(Level, pEditor)
         , CmdPickRay(Level, pEditor)
         , CmdPickPixel(Level, pEditor)
         , CmdDumpGI(Level, pEditor)
