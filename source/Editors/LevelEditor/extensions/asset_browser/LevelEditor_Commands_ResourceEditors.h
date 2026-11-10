@@ -42,6 +42,8 @@ namespace level_editor
         std::wstring                m_Path;
         std::vector<std::uint32_t>  m_Pixels;
         int                         m_Width = 0, m_Height = 0;
+        int                         m_nBurst = 0;               // -Frames n: that many consecutive frames, kept in memory and written after the last (name_000 ...)
+        std::vector<std::vector<std::uint32_t>> m_Burst;
 
         void BeforeFlip(xgpu::window& Window) noexcept
         {
@@ -52,7 +54,26 @@ namespace level_editor
         void AfterFlip() noexcept
         {
             if (!m_bRequested) return;
-            m_bPending = m_bRequested = false;
+            m_bRequested = false;
+            if (m_nBurst > 0)       // (a burst: every frame kept, the files written after the last - writing each would slow the frames it captures)
+            {
+                m_Burst.push_back(std::move(m_Pixels)); m_Pixels.clear();
+                if (static_cast<int>(m_Burst.size()) < m_nBurst) return;
+                const std::filesystem::path Base(m_Path);
+                for (std::size_t k = 0; k < m_Burst.size(); ++k)
+                {
+                    m_Pixels = std::move(m_Burst[k]);
+                    m_Path = (Base.parent_path() / (Base.stem().wstring() + std::format(L"_{:03}", k) + Base.extension().wstring())).wstring();
+                    Write();
+                }
+                m_Burst.clear(); m_nBurst = 0; m_bPending = false;
+                return;
+            }
+            m_bPending = false;
+            Write();
+        }
+        void Write() noexcept
+        {
             if (m_Width <= 0 || m_Height <= 0 || m_Pixels.size() < static_cast<std::size_t>(m_Width) * m_Height) return;
 
             // An xbitmap of raw pixels starts with the offset of its first mip: one slot ahead of the pixels. The alpha of a back buffer is
@@ -302,7 +323,7 @@ namespace level_editor::commands
     {
         capture_window_cmd(xundo::system& System, void* pDataBase) noexcept : xlevel::commands::level_query_command(System, "CaptureWindow", pDataBase) { RegisterArguments(); }
         const char* getCommandHelp() const noexcept override { return "Saves a picture of the whole editor window (png, bmp, tga or jpg by the extension). The file appears when the next frame is presented. Usage: CaptureWindow -File path"; }
-        void RegisterArguments() noexcept override { m_hFile = m_Parser.addOption("File", "Where to write the picture", true, 1); }
+        void RegisterArguments() noexcept override { m_hFile = m_Parser.addOption("File", "Where to write the picture", true, 1); m_hFrames = m_Parser.addOption("Frames", "n consecutive frames (name_000 ...), written after the last", false, 1); }
         std::string Query() noexcept override
         {
             auto FileArg = m_Parser.getOptionArgAs<std::string>(m_hFile, 0);
@@ -314,10 +335,13 @@ namespace level_editor::commands
             if (Path.has_parent_path()) std::filesystem::create_directories(Path.parent_path(), Ec);
             std::filesystem::remove(Path, Ec);
             g_WindowCapture.m_Path     = Path.wstring();
+            const auto Frames = m_Parser.getOptionArgAs<std::string>(m_hFrames, 0);
+            g_WindowCapture.m_nBurst   = std::holds_alternative<std::string>(Frames) ? std::clamp(std::atoi(std::get<std::string>(Frames).c_str()), 1, 240) : 0;
+            g_WindowCapture.m_Burst.clear();
             g_WindowCapture.m_bPending = true;
-            return "CaptureWindow: queued, the file appears when the next frame is presented";
+            return g_WindowCapture.m_nBurst ? "CaptureWindow: queued, the files appear after the last of the frames" : "CaptureWindow: queued, the file appears when the next frame is presented";
         }
-        xcmdline::parser::handle m_hFile;
+        xcmdline::parser::handle m_hFile, m_hFrames;
     };
 
     struct noise_check_cmd : xlevel::commands::level_query_command
