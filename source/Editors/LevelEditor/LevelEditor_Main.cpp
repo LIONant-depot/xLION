@@ -104,7 +104,7 @@ static void SetRendererDefaults() noexcept
     // ~0.7 ms and ~300 MB of the Bistro's): its slices, links and shown light do not run and its read structures are not packed
     // (gi::gpu_trace::SurfelsOff). XLION_GI_NO_SURFELS=0 turns it on again (the smoke's surfel GI tests: test_scene_render.py surfel_editor)
     Default("XLION_GI_NO_SURFELS", "1");
-    Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 16384");
+    Default("XLION_GI_NO_PROBES", "1"); Default("XLION_GI_VOX_HITS", "1"); Default("XLION_GI_VOX", "0.5 2 1024");      // (the samples a face keeps: 16384 until 2026-11-12 - a long mean that lagged the bounces filling in; 1024: 31 -> 25 % off the path tracer at 20 s, the dark bias gone)
     // (Tomas, 2026-11-03: contact shadows: XLION_CONTACT="0.35 8 0.15 30 1")
     Default("XLION_TILE", "1");
     // (2026-11-06: the reflections' coarse directional store, 16 x 16 directions at the 4 m level, read by the receivers from .15 to .4 (rays below): 13.05 to 10.27 ms on Bistro, better against the path tracer at .15 to .4. XLION_VOX_DIRS=-1: off)
