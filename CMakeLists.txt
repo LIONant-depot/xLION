@@ -541,6 +541,7 @@ set(XLION_PLUGIN_INCLUDES
   "${CMAKE_SOURCE_DIR}/plugins/xskeleton.plugin"
   "${CMAKE_SOURCE_DIR}/plugins/xfont.plugin"
   "${CMAKE_SOURCE_DIR}/plugins/xanim_package.plugin"
+  "${CMAKE_SOURCE_DIR}/plugins/xretarget.plugin"
 )
 
 add_executable(${TARGET_PROJECT} ${XLION_SOURCES})
