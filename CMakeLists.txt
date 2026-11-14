@@ -194,6 +194,7 @@ FetchAndPopulate("https://github.com/LIONant-depot/xbmp_tools.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xserializer.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xscheduler.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xprofile.git" "main")         # the profiler (Tracy's client in xprofile.dll): XLION_PROFILE
+FetchAndPopulate("https://github.com/LIONant-depot/xAnimation.git" "main")       # the animation library (xAnimation: poses, clips, blending, ...): the renderer poses skeletons with it (XLION_ANIM)
 FetchAndPopulate("https://github.com/LIONant-depot/xECSV2.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONCore.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xLIONRender.git" "main")
