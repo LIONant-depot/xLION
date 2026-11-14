@@ -856,3 +856,55 @@ def test_14_swizzle_picker(cv):
     refused = cv.C("SetInputSwizzle -Input @Output__Target_Color.Color -Swizzle xyq")
     assert "components" in refused and cv.stack() == before, refused
     measure("14", "pass", "swizzle from the chip: 1 click + 3 letters + Enter (Albedo.zyx, connection id kept); component w: 1 click + 2 keys; SetInputSwizzle all / refusals; undo steps 1 each")
+
+
+def test_15_vertex_color_into_the_output(cv):
+    """The vertex color (Input: Vertex Variants' Color, the geometry's COLOR0 stream) into the output's color: a Color(4) into a Color(3) truncates (.rgb)."""
+    cv.clear()
+    s = cv.section("Surface")
+    cv.node("Inputs", "Vert", s)
+    cv.ed._frames(4)
+    before = cv.stack()
+    cv.link("Vert.Color(4)", "Output__Target_Color.Color")
+    cv.ed._frames(4)
+    after = cv.stack()
+    assert re.search(r"Color\(3\) <- Vert\.Color\(4\)\.rgb", after), after
+    cv.invariants("test 15")
+    cv.one_undo_step(before, after, "test 15")
+    measure("15", "pass", "vertex color into the output color: chip Vert.Color(4).rgb, undo steps 1")
+
+
+def test_16_group_steps_into_a_subgraph_and_back(cv):
+    """MakeSubgraph moves steps into a new MaterialSubgraph and one group node takes their place, wired as they were; UngroupStep puts the
+    steps back. One undo step each. (The new sub-graph's descriptor is a new file: project_guard removes it after the run.)"""
+    cv.clear()
+    s = cv.section("Surface")
+    cv.node("Float", "K", s)
+    cv.node("Vec4 Add", "Sum", s)
+    cv.node("Vec4 Multiply", "Scale", s)
+    cv.node("ToVec3", "ToRGB", s)
+    cv.link("K", "Sum.A")
+    cv.link("K", "Sum.B")
+    cv.link("Sum", "Scale.A")
+    cv.link("Scale", "ToRGB.A")
+    cv.link("ToRGB", "Output__Target_Color.Color")
+    cv.ed._frames(4)
+    before = cv.stack()
+    sub = "%016X" % (rnd.getrandbits(64) | 1)
+    cv.E(f"MakeSubgraph -Nodes @Sum,@Scale -Name Doubler -Subgraph {sub} -Node {gid()}")
+    cv.ed._frames(4)
+    grouped = cv.stack()
+    assert cv.order() == ["K", "Doubler", "ToRGB", "Output__Target_Color"], grouped
+    assert re.search(r"<- K\b", grouped) and re.search(r"A\(4\) <- Doubler", grouped), grouped
+    assert "Doubler" in cv.C("ListSubgraphs"), "the new sub-graph is listed"
+    cv.invariants("test 16 group")
+    cv.one_undo_step(before, grouped, "test 16 group")
+
+    cv.E("UngroupStep -Node @Doubler")
+    cv.ed._frames(4)
+    ungrouped = cv.stack()
+    assert cv.order() == ["K", "Doubler_Sum", "Doubler_Scale", "ToRGB", "Output__Target_Color"], ungrouped
+    assert re.search(r"A\(4\) <- Doubler_Scale", ungrouped), ungrouped
+    cv.invariants("test 16 ungroup")
+    cv.one_undo_step(grouped, ungrouped, "test 16 ungroup")
+    measure("16", "pass", "MakeSubgraph of 2 steps -> 1 group node wired as before; UngroupStep -> the steps back; undo steps 1 each")
