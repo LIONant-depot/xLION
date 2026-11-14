@@ -284,6 +284,7 @@ namespace level_editor
         xresource_editor::commands::restore_asset_cmd                 CmdRestoreAsset;
         xresource_editor::commands::create_asset_cmd                  CmdCreateAsset;
         xresource_editor::commands::save_assets_query_cmd             CmdSaveAssets;
+        xresource_editor::commands::empty_trash_query_cmd             CmdEmptyTrash;
         level_editor::commands::add_script_source_file_cmd        CmdAddScriptSourceFile;
         level_editor::commands::remove_script_source_file_cmd     CmdRemoveScriptSourceFile;
         level_editor::commands::list_script_source_files_query_cmd CmdListScriptSourceFiles;
@@ -400,6 +401,7 @@ namespace level_editor
         , CmdRestoreAsset(Workspace, pEditor)
         , CmdCreateAsset(Workspace, pEditor)
         , CmdSaveAssets(Workspace, pEditor)
+        , CmdEmptyTrash(Workspace, pEditor)
         , CmdAddScriptSourceFile(Workspace, pEditor)
         , CmdRemoveScriptSourceFile(Workspace, pEditor)
         , CmdListScriptSourceFiles(Workspace, pEditor)
@@ -506,6 +508,7 @@ namespace level_editor
             CmdRestoreAsset.m_pDataBase = pEditor;
             CmdCreateAsset.m_pDataBase = pEditor;
             CmdSaveAssets.m_pDataBase = pEditor;
+            CmdEmptyTrash.m_pDataBase = pEditor;
             CmdAddScriptSourceFile.m_pDataBase = pEditor;
             CmdRemoveScriptSourceFile.m_pDataBase = pEditor;
             CmdListScriptSourceFiles.m_pDataBase = pEditor;
