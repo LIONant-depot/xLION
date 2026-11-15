@@ -552,8 +552,12 @@ namespace xeditor
     template<class T_DOC>
     struct document_editor : resource_editor
     {
-        // Where a panel docks: left column (a second panel there docks below the first), the middle (a second one docks below), right column.
-        enum class dock { left, left_bottom, center, bottom, right };
+        // Where a panel docks: left column (a second panel there docks below the first), the middle (a second one docks below), right column,
+        // or bottom_wide: a strip along the whole bottom, under the side columns too (a timeline).
+        enum class dock { left, left_bottom, center, bottom, right, bottom_wide };
+
+        // Bump in an editor when its default layout changes: the saved layout of the old version is not reused (the dock space is built again)
+        virtual int LayoutVersion() const noexcept { return 0; }
 
         struct panel
         {
@@ -721,19 +725,20 @@ namespace xeditor
             };
             if (const ImGuiID Id = DockOf(P.m_Where); Id) return Id;
             if (P.m_Where == dock::left_bottom) return DockOf(dock::left);
-            if (P.m_Where == dock::bottom)      return DockOf(dock::center);
+            if (P.m_Where == dock::bottom || P.m_Where == dock::bottom_wide) return DockOf(dock::bottom) ? DockOf(dock::bottom) : DockOf(dock::center);
             return 0;
         }
 
         void RenderPanels() noexcept
         {
             const auto WindowClass = DockClassForResource(m_Document.m_Guid);
-            const ImGuiID DockId = ImGui::GetID((m_TypeName + "EditorDock").c_str());
+            const ImGuiID DockId = ImGui::GetID((m_TypeName + "EditorDock" + (LayoutVersion() ? std::format("v{}", LayoutVersion()) : std::string{})).c_str());
             if (ImGui::DockBuilderGetNode(DockId) == nullptr)
             {
                 ImGui::DockBuilderAddNode(DockId, ImGuiDockNodeFlags_DockSpace);
                 ImGui::DockBuilderSetNodeSize(DockId, ImGui::GetContentRegionAvail());
-                ImGuiID Left = 0, LeftBottom = 0, Right = 0, Center = DockId, Bottom = 0;
+                ImGuiID Left = 0, LeftBottom = 0, Right = 0, Center = DockId, Bottom = 0, BottomWide = 0;
+                if (UsesDock(dock::bottom_wide)) { ImGuiID Rest; ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, 0.32f, &BottomWide, &Rest); Center = Rest; }    // first: under everything
                 if (UsesDock(dock::left))  { ImGuiID Rest; ImGui::DockBuilderSplitNode(Center, ImGuiDir_Left, 0.25f, &Left, &Rest); Center = Rest; }
                 if (UsesDock(dock::right)) { ImGuiID Rest; ImGui::DockBuilderSplitNode(Center, ImGuiDir_Right, 0.35f, &Right, &Rest); Center = Rest; }
                 if (UsesDock(dock::bottom)) { ImGuiID Rest; ImGui::DockBuilderSplitNode(Center, ImGuiDir_Down, 0.3f, &Bottom, &Rest); Center = Rest; }
@@ -747,6 +752,7 @@ namespace xeditor
                     case dock::left_bottom: Id = LeftBottom; break;
                     case dock::right:       Id = Right;      break;
                     case dock::bottom:      Id = Bottom;     break;
+                    case dock::bottom_wide: Id = BottomWide; break;
                     case dock::center:      break;
                     }
                     ImGui::DockBuilderDockWindow(P.m_Title.c_str(), Id);

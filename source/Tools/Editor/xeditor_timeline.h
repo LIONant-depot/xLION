@@ -33,6 +33,7 @@ namespace xeditor::timeline
         std::uint64_t m_Id = 0, m_Type = 0;
         int           m_Depth = 0;                      // children come after their parent (pre-order), one deeper
         bool          m_bHasChildren = false, m_bMute = false, m_bLock = false;
+        bool          m_bToggles = true;                // eye / solo / lock in its header (off: a child row that shares its parent's, a read-only row)
         std::string   m_Name;
         ImU32         m_Color = IM_COL32(86, 132, 210, 255);
     };
@@ -86,7 +87,10 @@ namespace xeditor::timeline
         virtual ~row_type() = default;
         virtual void Query(const row_desc&, const query&, std::vector<item>& Out) = 0;
         virtual void Overlay(const row_desc&, ImDrawList&, const draw_args&) {}          // optional custom drawing over the standard items
-        virtual void Header(const row_desc&, document&) {}
+        // the row type's own header widgets (a weight, a mode, a mask chip...): it says how wide they are, the core gives them that box,
+        // between the name (never covered: it is clipped before them) and the eye / solo / lock toggles
+        virtual float HeaderWidth(const row_desc&) { return 0; }
+        virtual void  Header(const row_desc&, document&, const ImRect& /*Box*/) {}
     };
     using registry = std::unordered_map<std::uint64_t, row_type*>;
 
@@ -255,7 +259,7 @@ namespace xeditor::timeline
         if (Size.x > 0) Avail.x = Size.x;
         if (Size.y > 0) Avail.y = Size.y;
         // a narrow panel: the header column gives way (never wider than the panel: a body drawn past it could not be clicked)
-        const float HeaderWidth = S.m_HeaderWidth;
+        float HeaderWidth = S.m_HeaderWidth;            // the preferred width (the edge drag changes it)
         if (Avail.x < S.m_HeaderWidth + 160) S.m_HeaderWidth = std::max(110.0f, Avail.x * 0.42f);
         Avail.x = std::max(Avail.x, S.m_HeaderWidth + 60); Avail.y = std::max(Avail.y, S.m_RulerHeight + S.m_RowHeight);
         const ImVec2 P0 = ImGui::GetCursorScreenPos();
@@ -564,13 +568,22 @@ namespace xeditor::timeline
         }
         D.PopClipRect();
 
-        // the header column: fold (the view's), name, eye / lock (the document's), solo (the transport's), the row type's widgets
+        // the header column, left to right: the row's colour, fold (the view's), the name (the grip to reorder; clipped, never covered),
+        // the row type's widgets, then eye / solo / lock (eye and lock the document's, solo the transport's)
+        constexpr float ToggleW = 22, Gap = 4;
+        // Segoe MDL2: View, Hide, Headphone, Lock, Unlock
+        static constexpr const char *EyeOn = "\xEE\xA2\x90", *EyeOff = "\xEE\xB4\x9A", *SoloIcon = "\xEE\x9F\xB6", *LockOn = "\xEE\x9C\xAE", *LockOff = "\xEE\x9E\x85";
         for (int i = First; i <= Last; ++i)
         {
             auto& Vr = Rows[i];
             const float y = S.m_Body.Min.y + float(i) * S.m_RowHeight - S.m_ScrollY;
             if (y + S.m_RowHeight > Whole.Max.y + 1) break;
             ImGui::PushID(static_cast<int>(Vr.m_Row.m_Id ^ (Vr.m_Row.m_Id >> 32)));
+            D.AddRectFilled({ Whole.Min.x, y + 2 }, { Whole.Min.x + 3, y + S.m_RowHeight - 2 }, Vr.m_Row.m_Color);
+            const bool  bToggles = Vr.m_pType && Vr.m_Row.m_bToggles;
+            const float xToggles = S.m_Body.Min.x - (bToggles ? 3 * ToggleW + 6 : 0);
+            const float wType    = Vr.m_pType ? std::min(Vr.m_pType->HeaderWidth(Vr.m_Row), std::max(0.0f, xToggles - Whole.Min.x - 90)) : 0;
+            const float xType    = xToggles - wType - (wType > 0 ? Gap : 0);
             ImGui::SetCursorScreenPos({ Whole.Min.x + 8 + float(Vr.m_Row.m_Depth) * 14, y + 4 });
             if (Vr.m_Row.m_bHasChildren)
             {
@@ -578,33 +591,53 @@ namespace xeditor::timeline
                 if (ImGui::ArrowButton("##fold", bFolded ? ImGuiDir_Right : ImGuiDir_Down)) { if (bFolded) S.m_Folded.erase(Vr.m_Row.m_Id); else S.m_Folded.insert(Vr.m_Row.m_Id); }
                 ImGui::SameLine(0, 4);
             }
+            const ImVec2 NamePos = ImGui::GetCursorScreenPos();
+            const float  NameW   = std::max(10.0f, xType - Gap - NamePos.x);
+            ImGui::InvisibleButton("##rowname", { NameW, S.m_RowHeight - 6 });
+            const bool bNameHovered = ImGui::IsItemHovered();
             if (Doc.CanMoveRow(Vr.m_Row.m_Id) && !Vr.m_Row.m_bLock)
             {
                 // the name is the grip: drag it up or down to reorder (the document decides what the order means)
-                const ImVec2 NamePos = ImGui::GetCursorScreenPos();
-                ImGui::InvisibleButton("##rowgrip", { std::max(10.0f, S.m_Body.Min.x - 70 - NamePos.x), S.m_RowHeight - 6 });
                 if (ImGui::IsItemActive() && std::abs(IO.MouseDragMaxDistanceSqr[0]) > 16.0f) S.m_DragRow = Vr.m_Row.m_Id;
-                if (ImGui::IsItemHovered() && !S.m_DragRow) ImGui::SetTooltip("Drag up or down to change the order");
-                ImGui::SetCursorScreenPos(NamePos);
+                if (bNameHovered && !S.m_DragRow) ImGui::SetTooltip("%s\nDrag up or down to change the order", Vr.m_Row.m_Name.c_str());
             }
-            ImGui::TextUnformatted(Vr.m_Row.m_Name.c_str());
-            auto Toggle = [&](const char* pLabel, const char* pTip, bool bOn, float x, auto&& Fn)
+            else if (bNameHovered) ImGui::SetTooltip("%s", Vr.m_Row.m_Name.c_str());
+            D.PushClipRect(NamePos, { NamePos.x + NameW, y + S.m_RowHeight }, true);
+            D.AddText({ NamePos.x, y + (S.m_RowHeight - ImGui::GetTextLineHeight()) * 0.5f }, ImGui::GetColorU32(ImGuiCol_Text), Vr.m_Row.m_Name.c_str());
+            D.PopClipRect();
+            auto Toggle = [&](int Slot, const char* pId, const char* pIcon, const char* pTip, bool bOn, auto&& Fn)
             {
-                ImGui::SetCursorScreenPos({ S.m_Body.Min.x - x, y + 3 });
-                ImGui::PushStyleColor(ImGuiCol_Button, bOn ? IM_COL32(200, 150, 60, 255) : IM_COL32(60, 62, 68, 255));
-                if (ImGui::SmallButton(pLabel)) Fn();
+                ImGui::SetCursorScreenPos({ xToggles + 3 + float(Slot) * ToggleW, y + 3 });
+                ImGui::PushStyleColor(ImGuiCol_Button, bOn ? IM_COL32(200, 150, 60, 255) : IM_COL32(52, 54, 60, 255));
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 2, 1 });
+                ImGui::PushID(pId);
+                if (ImGui::Button(pIcon, { ToggleW - 2, S.m_RowHeight - 6 })) Fn();
+                ImGui::PopID();
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", pTip);
-                ImGui::PopStyleColor();
+                ImGui::PopStyleVar(); ImGui::PopStyleColor();
             };
             if (Vr.m_pType)
             {
-                Toggle(Vr.m_Row.m_bMute ? "-" : "o", "Mute (the eye): an authoring flag of the document", Vr.m_Row.m_bMute, 66, [&] { S.m_Reply = Doc.SetRowFlag(Vr.m_Row.m_Id, row_flag::mute, !Vr.m_Row.m_bMute); });
+                if (wType > 0) Vr.m_pType->Header(Vr.m_Row, Doc, ImRect({ xType, y + 2 }, { xType + wType, y + S.m_RowHeight - 2 }));
+            }
+            if (bToggles)
+            {
+                Toggle(0, "eye", Vr.m_Row.m_bMute ? EyeOff : EyeOn, Vr.m_Row.m_bMute ? "Muted: click to play this row again (saved with the document)" : "Shown: click to mute this row (saved with the document)", Vr.m_Row.m_bMute
+                      , [&] { S.m_Reply = Doc.SetRowFlag(Vr.m_Row.m_Id, row_flag::mute, !Vr.m_Row.m_bMute); });
                 const bool bSolo = Tr.m_Solo.count(Vr.m_Row.m_Id) != 0;
-                Toggle("S", "Solo: audition only (the session's; never saved or compiled)", bSolo, 46, [&] { if (bSolo) Tr.m_Solo.erase(Vr.m_Row.m_Id); else Tr.m_Solo.insert(Vr.m_Row.m_Id); });
-                Toggle("L", "Lock: no edits", Vr.m_Row.m_bLock, 26, [&] { S.m_Reply = Doc.SetRowFlag(Vr.m_Row.m_Id, row_flag::lock, !Vr.m_Row.m_bLock); });
-                Vr.m_pType->Header(Vr.m_Row, Doc);
+                Toggle(1, "solo", SoloIcon, "Solo: hear/see only this row - an audition, never saved or compiled", bSolo, [&] { if (bSolo) Tr.m_Solo.erase(Vr.m_Row.m_Id); else Tr.m_Solo.insert(Vr.m_Row.m_Id); });
+                Toggle(2, "lock", Vr.m_Row.m_bLock ? LockOn : LockOff, Vr.m_Row.m_bLock ? "Locked: no edits (click to unlock)" : "Unlocked (click to lock: no edits)", Vr.m_Row.m_bLock
+                      , [&] { S.m_Reply = Doc.SetRowFlag(Vr.m_Row.m_Id, row_flag::lock, !Vr.m_Row.m_bLock); });
             }
             ImGui::PopID();
+        }
+
+        // the header column's edge: drag it to resize the column (the state keeps it; a narrow panel only borrows space for a frame)
+        {
+            ImGui::SetCursorScreenPos({ S.m_Body.Min.x - 3, Whole.Min.y });
+            ImGui::InvisibleButton("##headeredge", { 6, Whole.GetHeight() });
+            if (ImGui::IsItemHovered() || ImGui::IsItemActive()) { ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW); D.AddLine({ S.m_Body.Min.x, Whole.Min.y }, { S.m_Body.Min.x, Whole.Max.y }, IM_COL32(110, 170, 255, 200), 2.0f); }
+            if (ImGui::IsItemActive() && IO.MouseDelta.x != 0) HeaderWidth = std::clamp(S.m_HeaderWidth + IO.MouseDelta.x, 140.0f, std::max(140.0f, Whole.GetWidth() - 160));
         }
 
         // a row header dragged: the line where it would go; on release the document reorders (one command)
