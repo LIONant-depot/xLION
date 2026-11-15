@@ -251,6 +251,8 @@ namespace level_editor
         level_editor::commands::explain_last_key_query_cmd        CmdExplainLastKey;
         level_editor::commands::virtual_input_cmd                 CmdVirtualInput;
         level_editor::commands::finger_cmd                        CmdFinger;
+        level_editor::commands::timeline_lab_cmd                  CmdTimelineLab;       // the editor timeline's core on a fake document (TimelineLab)
+        level_editor::commands::timeline_lab_edit_cmd             CmdTimelineLabEdit;   // its one undoable edit
         level_editor::commands::mouse_move_cmd                    CmdMouseMove;
         level_editor::commands::mouse_button_cmd                  CmdMouseButton;
         level_editor::commands::mouse_wheel_cmd                   CmdMouseWheel;
@@ -365,6 +367,8 @@ namespace level_editor
         , CmdExplainLastKey(Workspace, pEditor)
         , CmdVirtualInput(Workspace, pEditor)
         , CmdFinger(Workspace, pEditor)
+        , CmdTimelineLab(Workspace, pEditor)
+        , CmdTimelineLabEdit(Workspace, pEditor)
         , CmdMouseMove(Workspace, pEditor)
         , CmdMouseButton(Workspace, pEditor)
         , CmdMouseWheel(Workspace, pEditor)

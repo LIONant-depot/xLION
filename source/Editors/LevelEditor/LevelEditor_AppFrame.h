@@ -300,6 +300,7 @@ namespace level_editor
         ximgui::actions::DrawKeyboardOverlay(Actions);
         ximgui::actions::DrawPinnedCard(Actions);
         ximgui::actions::DrawStatusLine(Actions);
+        level_editor::timeline_lab::Draw();            // the Timeline Lab's window when shown (TimelineLab -Show true)
         level_editor::finger::Draw();                  // the AI's finger, over everything (Finger command)
         Actions.EndFrame();
 
