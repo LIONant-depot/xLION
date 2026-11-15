@@ -65,6 +65,8 @@ namespace xeditor::timeline
         virtual std::string   SetRowFlag(std::uint64_t, row_flag, bool) { return {}; }
         virtual bool          CanMoveRow(std::uint64_t) { return false; }                               // its header can be dragged to reorder
         virtual std::string   MoveRow(std::uint64_t, std::uint64_t /*Above: the row it goes above; 0 = the bottom*/) { return {}; }
+        virtual bool          CanDropInto(std::uint64_t /*Row*/) { return false; }                     // a container row (a folder, a group): a dragged row dropped on its middle goes inside
+        virtual std::string   DropInto(std::uint64_t /*Row*/, std::uint64_t /*Into*/) { return {}; }
         virtual void          OnSelection(const std::set<item_ref>&) {}             // the editor shows the selection's properties
         virtual void          Seek(tick) {}                                         // navigation: sample only, never dispatch
     };
@@ -646,14 +648,28 @@ namespace xeditor::timeline
             const float yRel = M.y - S.m_Body.Min.y + S.m_ScrollY;
             const int i = std::clamp(int(std::floor(yRel / S.m_RowHeight + 0.5f)), 0, int(Rows.size()));      // the gap the row goes into
             const std::uint64_t Above = i < int(Rows.size()) ? Rows[i].m_Row.m_Id : 0;
-            const float yLine = S.m_Body.Min.y + float(i) * S.m_RowHeight - S.m_ScrollY;
-            D.AddLine({ Whole.Min.x, yLine }, { Whole.Max.x, yLine }, IM_COL32(255, 210, 90, 255), 2.0f);
-            ImGui::SetTooltip("Move the row here (the order is the mix order: lower rows are under)");
+            // over the middle half of a container row (a folder, a group): into it
+            const int iOn = int(std::floor(yRel / S.m_RowHeight));
+            const float Frac = yRel / S.m_RowHeight - float(iOn);
+            const std::uint64_t Into = (iOn >= 0 && iOn < int(Rows.size()) && Frac > 0.25f && Frac < 0.75f && Rows[iOn].m_Row.m_Id != S.m_DragRow && Doc.CanDropInto(Rows[iOn].m_Row.m_Id)) ? Rows[iOn].m_Row.m_Id : 0;
+            if (Into)
+            {
+                const float y0 = S.m_Body.Min.y + float(iOn) * S.m_RowHeight - S.m_ScrollY;
+                D.AddRect({ Whole.Min.x + 1, y0 + 1 }, { Whole.Max.x - 1, y0 + S.m_RowHeight - 1 }, IM_COL32(255, 210, 90, 255), 3.0f, 0, 2.0f);
+                ImGui::SetTooltip("Into '%s' (it then mixes as part of it)", Rows[iOn].m_Row.m_Name.c_str());
+            }
+            else
+            {
+                const float yLine = S.m_Body.Min.y + float(i) * S.m_RowHeight - S.m_ScrollY;
+                D.AddLine({ Whole.Min.x, yLine }, { Whole.Max.x, yLine }, IM_COL32(255, 210, 90, 255), 2.0f);
+                ImGui::SetTooltip("Move the row here (the order is the mix order: lower rows are under)");
+            }
             if (ImGui::IsKeyPressed(ImGuiKey_Escape)) S.m_DragRow = 0;
             else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
             {
                 const std::uint64_t R = S.m_DragRow; S.m_DragRow = 0;
-                if (Above != R) S.m_Reply = Doc.MoveRow(R, Above);
+                if (Into) S.m_Reply = Doc.DropInto(R, Into);
+                else if (Above != R) S.m_Reply = Doc.MoveRow(R, Above);
             }
         }
 
