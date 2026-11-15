@@ -62,6 +62,8 @@ namespace xeditor::timeline
         virtual std::string   Duplicate(std::span<const item_ref>) { return {}; }
         virtual std::string   AddMarker(tick) { return {}; }
         virtual std::string   SetRowFlag(std::uint64_t, row_flag, bool) { return {}; }
+        virtual bool          CanMoveRow(std::uint64_t) { return false; }                               // its header can be dragged to reorder
+        virtual std::string   MoveRow(std::uint64_t, std::uint64_t /*Above: the row it goes above; 0 = the bottom*/) { return {}; }
         virtual void          OnSelection(const std::set<item_ref>&) {}             // the editor shows the selection's properties
         virtual void          Seek(tick) {}                                         // navigation: sample only, never dispatch
     };
@@ -112,6 +114,7 @@ namespace xeditor::timeline
         tick                    m_RangeA = 0, m_RangeB = 0;
         std::string             m_Reply;
         bool                    m_bFramed       = false;
+        std::uint64_t           m_DragRow       = 0;    // a row header being dragged (reorder): previewed by a line, committed on release
         // the layout and the picking regions of the last frame (tests and virtual input read them)
         ImRect                  m_Body, m_Ruler;
         std::vector<std::pair<std::uint64_t, ImRect>> m_RowRects;
@@ -251,7 +254,10 @@ namespace xeditor::timeline
         ImVec2 Avail = ImGui::GetContentRegionAvail();
         if (Size.x > 0) Avail.x = Size.x;
         if (Size.y > 0) Avail.y = Size.y;
-        Avail.x = std::max(Avail.x, S.m_HeaderWidth + 100); Avail.y = std::max(Avail.y, S.m_RulerHeight + S.m_RowHeight);
+        // a narrow panel: the header column gives way (never wider than the panel: a body drawn past it could not be clicked)
+        const float HeaderWidth = S.m_HeaderWidth;
+        if (Avail.x < S.m_HeaderWidth + 160) S.m_HeaderWidth = std::max(110.0f, Avail.x * 0.42f);
+        Avail.x = std::max(Avail.x, S.m_HeaderWidth + 60); Avail.y = std::max(Avail.y, S.m_RulerHeight + S.m_RowHeight);
         const ImVec2 P0 = ImGui::GetCursorScreenPos();
         const ImRect Whole(P0, { P0.x + Avail.x, P0.y + Avail.y });
         S.m_Ruler = ImRect({ P0.x + S.m_HeaderWidth, P0.y }, { Whole.Max.x, P0.y + S.m_RulerHeight });
@@ -572,6 +578,15 @@ namespace xeditor::timeline
                 if (ImGui::ArrowButton("##fold", bFolded ? ImGuiDir_Right : ImGuiDir_Down)) { if (bFolded) S.m_Folded.erase(Vr.m_Row.m_Id); else S.m_Folded.insert(Vr.m_Row.m_Id); }
                 ImGui::SameLine(0, 4);
             }
+            if (Doc.CanMoveRow(Vr.m_Row.m_Id) && !Vr.m_Row.m_bLock)
+            {
+                // the name is the grip: drag it up or down to reorder (the document decides what the order means)
+                const ImVec2 NamePos = ImGui::GetCursorScreenPos();
+                ImGui::InvisibleButton("##rowgrip", { std::max(10.0f, S.m_Body.Min.x - 70 - NamePos.x), S.m_RowHeight - 6 });
+                if (ImGui::IsItemActive() && std::abs(IO.MouseDragMaxDistanceSqr[0]) > 16.0f) S.m_DragRow = Vr.m_Row.m_Id;
+                if (ImGui::IsItemHovered() && !S.m_DragRow) ImGui::SetTooltip("Drag up or down to change the order");
+                ImGui::SetCursorScreenPos(NamePos);
+            }
             ImGui::TextUnformatted(Vr.m_Row.m_Name.c_str());
             auto Toggle = [&](const char* pLabel, const char* pTip, bool bOn, float x, auto&& Fn)
             {
@@ -590,6 +605,23 @@ namespace xeditor::timeline
                 Vr.m_pType->Header(Vr.m_Row, Doc);
             }
             ImGui::PopID();
+        }
+
+        // a row header dragged: the line where it would go; on release the document reorders (one command)
+        if (S.m_DragRow)
+        {
+            const float yRel = M.y - S.m_Body.Min.y + S.m_ScrollY;
+            const int i = std::clamp(int(std::floor(yRel / S.m_RowHeight + 0.5f)), 0, int(Rows.size()));      // the gap the row goes into
+            const std::uint64_t Above = i < int(Rows.size()) ? Rows[i].m_Row.m_Id : 0;
+            const float yLine = S.m_Body.Min.y + float(i) * S.m_RowHeight - S.m_ScrollY;
+            D.AddLine({ Whole.Min.x, yLine }, { Whole.Max.x, yLine }, IM_COL32(255, 210, 90, 255), 2.0f);
+            ImGui::SetTooltip("Move the row here (the order is the mix order: lower rows are under)");
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) S.m_DragRow = 0;
+            else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                const std::uint64_t R = S.m_DragRow; S.m_DragRow = 0;
+                if (Above != R) S.m_Reply = Doc.MoveRow(R, Above);
+            }
         }
 
         // the playhead, the marquee, the snap line and the drag's tooltip (over everything of the timeline)
@@ -625,6 +657,7 @@ namespace xeditor::timeline
         ImGui::SetCursorScreenPos({ Whole.Min.x, Whole.Max.y });
         ImGui::Dummy({ 0, 0 });
         ImGui::PopID();
+        S.m_HeaderWidth = HeaderWidth;      // the preferred width (a narrow panel only borrows it this frame)
         S.m_DrawMs = Ms(tDraw);
         return S.m_Reply;
     }
