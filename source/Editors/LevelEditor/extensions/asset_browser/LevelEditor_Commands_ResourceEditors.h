@@ -15,6 +15,7 @@
 #include "plugins/xfont.plugin/source/Editor/xfont_editor.h"
 #include "plugins/xanim_package.plugin/source/Editor/xanim_package_editor.h"
 #include "plugins/xretarget.plugin/source/Editor/xretarget_editor.h"
+#include "plugins/xragdoll.plugin/source/Editor/xragdoll_editor.h"
 #include "plugins/xgeom_skin.plugin/source/Editor/xgeom_skin_editor.h"
 #include "plugins/xskeleton.plugin/source/Editor/xskeleton_editor.h"
 #include "plugins/xPhysicsMaterial.plugin/source/Editor/xphysics_material_editor.h"
