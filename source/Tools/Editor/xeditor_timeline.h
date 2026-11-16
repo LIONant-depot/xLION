@@ -177,6 +177,16 @@ namespace xeditor::timeline
             // key / marker: a diamond (a marker: a flag); an aggregate is bigger and shows its count
             const float x = A.X(S.m_Start);
             if (x < A.m_Min.x - 8 || x > A.m_Max.x + 8) return;
+            if (I.HasValue())
+            {
+                // a valued key (a curve lane): a dot at its value's height, picked there (so the lane stays clickable around it)
+                const float u = (I.m_Value - I.m_ValueMin) / std::max(1e-6f, I.m_ValueMax - I.m_ValueMin), yv = y1 - std::clamp(u, 0.0f, 1.0f) * (y1 - y0);
+                if (bGhost) { D.AddCircle({ x, yv }, 4.5f, IM_COL32(255, 255, 255, 90)); return; }
+                D.AddCircleFilled({ x, yv }, 4.5f, bSelected ? IM_COL32(255, 210, 90, 255) : C);
+                D.AddCircle({ x, yv }, 4.5f, bSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(0, 0, 0, 170), 0, 1.2f);
+                Hit(ImRect({ x - 7, yv - 7 }, { x + 7, yv + 7 }), handle::key, 2);
+                return;
+            }
             const float r = I.m_Count > 1 ? 6.5f : 5.5f;
             if (bGhost) { D.AddQuad({ x, ym - r }, { x + r, ym }, { x, ym + r }, { x - r, ym }, IM_COL32(255, 255, 255, 90), 1.0f); return; }
             if (I.m_Kind == item_kind::marker)
@@ -423,6 +433,8 @@ namespace xeditor::timeline
                 S.m_SnapMs = Ms(t);
                 plan_inputs In; In.m_Dragged = S.m_Originals; In.m_Others = S.m_Others; In.m_LockedRows = Locked; In.m_Handle = S.m_Handle;
                 In.m_Delta = S.m_Snap.m_Delta; In.m_MinLength = V.FrameTicks(); In.m_Revision = Doc.Revision();
+                // valued keys: the vertical drag is the value (the lane's height is its range)
+                for (const auto& O : S.m_Originals) if (O.HasValue()) { In.m_ValueDelta = -(M.y - S.m_StartMouse.y) / std::max(1.0f, S.m_RowHeight - 6.0f) * (O.m_ValueMax - O.m_ValueMin); break; }
                 S.m_Plan = MakePlan(In);
                 if (S.m_Plan.m_Conflicts.empty() && !S.m_Plan.NoOp()) if (auto E = Doc.Validate(S.m_Plan); !E.empty()) S.m_Plan.m_Conflicts.push_back(E);
                 break;
@@ -550,14 +562,35 @@ namespace xeditor::timeline
             else
             {
                 std::vector<hit_region>* pHits = Vr.m_Row.m_bLock ? nullptr : &S.m_Hits;
+                // a curve lane: the valued keys joined by lines (where they will be while dragged)
+                {
+                    std::vector<std::pair<float, float>> Pts;
+                    const float y0 = A.m_Min.y + 3, y1 = A.m_Max.y - 3;
+                    for (const auto& I : Visible[i])
+                    {
+                        if (!I.HasValue()) continue;
+                        float v = I.m_Value; tick tt = I.m_Seg.m_Start;
+                        if (const auto It = Preview.find(I.m_Ref); It != Preview.end()) { v = It->second->HasValue() ? It->second->m_NewValue : v; tt = It->second->m_New.m_Start; }
+                        const float u = (v - I.m_ValueMin) / std::max(1e-6f, I.m_ValueMax - I.m_ValueMin);
+                        Pts.push_back({ A.X(tt), y1 - std::clamp(u, 0.0f, 1.0f) * (y1 - y0) });
+                    }
+                    std::sort(Pts.begin(), Pts.end());
+                    if (!Pts.empty())
+                    {
+                        D.AddLine({ A.m_Min.x, Pts.front().second }, { Pts.front().first, Pts.front().second }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
+                        for (std::size_t k = 1; k < Pts.size(); ++k) D.AddLine({ Pts[k - 1].first, Pts[k - 1].second }, { Pts[k].first, Pts[k].second }, Vr.m_Row.m_Color, 1.5f);
+                        D.AddLine({ Pts.back().first, Pts.back().second }, { A.m_Max.x, Pts.back().second }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
+                    }
+                }
                 for (const auto& I : Visible[i])
                 {
                     const bool bSel = S.m_Selection.count(I.m_Ref) || std::any_of(I.m_Represents.begin(), I.m_Represents.end(), [&](const item_ref& r) { return S.m_Selection.count(r); });
                     const auto It = Preview.find(I.m_Ref);
-                    if (It != Preview.end() && !(It->second->m_Old == It->second->m_New))
+                    if (It != Preview.end() && (!(It->second->m_Old == It->second->m_New) || (It->second->HasValue() && It->second->m_NewValue != It->second->m_OldValue)))
                     {
                         DrawItem(D, A, I, I.m_Seg, Vr.m_Row.m_Color, false, true, i, nullptr);                       // the ghost where it was
                         item P = I; if (!bPlanOk) P.m_Color = IM_COL32(200, 70, 60, 255);
+                        if (It->second->HasValue()) P.m_Value = It->second->m_NewValue;
                         DrawItem(D, A, P, It->second->m_New, Vr.m_Row.m_Color, true, false, i, nullptr);             // where it goes
                     }
                     else DrawItem(D, A, I, I.m_Seg, Vr.m_Row.m_Color, bSel, false, i, pHits);
@@ -697,6 +730,7 @@ namespace xeditor::timeline
                 {
                     std::string Tip = std::format("{} {}\nDelta {:+.3f} s ({:+} f), {} item(s){}", Name(S.m_Handle), S.m_Snap.m_bSnapped ? std::format("snapped to the {} at {}", S.m_Snap.m_pWhat, Seconds(S.m_Snap.m_Target, V)) : std::string{},
                                                   double(S.m_Plan.m_Delta) / double(V.m_TPS), V.FrameIndex(double(S.m_Plan.m_Delta)), S.m_Plan.m_Entries.size(), bSnapOn ? "" : "\n(snap off)");
+                    for (const auto& E : S.m_Plan.m_Entries) if (E.HasValue()) { Tip += std::format("\nvalue {:.2f} -> {:.2f}", E.m_OldValue, E.m_NewValue); break; }
                     for (const auto& C : S.m_Plan.m_Conflicts) Tip += "\nREFUSED: " + C;
                     ImGui::SetTooltip("%s", Tip.c_str());
                 }

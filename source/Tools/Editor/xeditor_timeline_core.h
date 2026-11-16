@@ -116,6 +116,9 @@ namespace xeditor::timeline
         std::string             m_Label;
         std::uint32_t           m_Count = 1;                // > 1: an aggregate (a summary diamond, a pixel bin) standing for m_Represents
         std::vector<item_ref>   m_Represents;               // the real items behind an aggregate (selection and edits resolve to these)
+        float                   m_Value = std::numeric_limits<float>::quiet_NaN();   // a key with a value (a curve lane: a weight): drawn at its height, dragged up and down too
+        float                   m_ValueMin = 0, m_ValueMax = 1;                     // the value's bounds (the lane's bottom and top)
+        bool HasValue() const noexcept { return m_Value == m_Value; }
         tick Time() const noexcept { return m_Seg.m_Start; }
     };
 
@@ -188,6 +191,8 @@ namespace xeditor::timeline
         item_ref    m_Ref;
         item_kind   m_Kind = item_kind::key;
         segment     m_Old, m_New;
+        float       m_OldValue = std::numeric_limits<float>::quiet_NaN(), m_NewValue = std::numeric_limits<float>::quiet_NaN();   // a valued key
+        bool HasValue() const noexcept { return m_NewValue == m_NewValue; }
     };
     struct plan
     {
@@ -197,7 +202,7 @@ namespace xeditor::timeline
         std::vector<plan_entry>     m_Entries;
         std::vector<std::string>    m_Conflicts;
         bool Valid() const noexcept { return m_Conflicts.empty() && !m_Entries.empty(); }
-        bool NoOp() const noexcept { for (const auto& E : m_Entries) if (!(E.m_Old == E.m_New)) return false; return true; }
+        bool NoOp() const noexcept { for (const auto& E : m_Entries) if (!(E.m_Old == E.m_New) || (E.HasValue() && E.m_OldValue != E.m_NewValue)) return false; return true; }
     };
 
     struct plan_inputs
@@ -207,6 +212,7 @@ namespace xeditor::timeline
         std::set<std::uint64_t>     m_LockedRows;
         handle                      m_Handle = handle::none;
         tick                        m_Delta = 0;
+        float                       m_ValueDelta = 0;       // valued keys: the vertical drag (each clamped to its own bounds)
         tick                        m_MinLength = 1;
         std::uint64_t               m_Revision = 0;
         bool                        m_bRejectKeyCollisions = true;
@@ -238,7 +244,11 @@ namespace xeditor::timeline
         };
         for (const auto& I : In.m_Dragged) { const tick m = Moved(I, D); if (std::abs(m) < std::abs(D)) D = m; }
         P.m_Delta = D;
-        for (const auto& I : In.m_Dragged) P.m_Entries.push_back({ I.m_Ref, I.m_Kind, I.m_Seg, Drag(I.m_Seg, In.m_Handle, D, In.m_MinLength) });
+        for (const auto& I : In.m_Dragged)
+        {
+            P.m_Entries.push_back({ I.m_Ref, I.m_Kind, I.m_Seg, Drag(I.m_Seg, In.m_Handle, D, In.m_MinLength) });
+            if (I.HasValue()) { P.m_Entries.back().m_OldValue = I.m_Value; P.m_Entries.back().m_NewValue = (In.m_Handle == handle::key || In.m_Handle == handle::body) ? std::clamp(I.m_Value + In.m_ValueDelta, I.m_ValueMin, I.m_ValueMax) : I.m_Value; }
+        }
 
         // a key moved onto another key of its row is refused (replace, merge and swap are explicit operations)
         if (In.m_bRejectKeyCollisions && (In.m_Handle == handle::key || In.m_Handle == handle::body))
@@ -268,12 +278,13 @@ namespace xeditor::timeline
         {
             if (E.m_Kind == item_kind::segment || E.m_Kind == item_kind::interval)
                 S += std::format("; seg {} {} {} {} {} {} {}", E.m_Ref.m_Row, E.m_Ref.m_Item, E.m_New.m_Start, E.m_New.m_End, E.m_New.m_Offset, E.m_New.m_EaseIn, E.m_New.m_EaseOut);
+            else if (E.HasValue()) S += std::format("; vkey {} {} {} {}", E.m_Ref.m_Row, E.m_Ref.m_Item, E.m_New.m_Start, E.m_NewValue);
             else S += std::format("; key {} {} {}", E.m_Ref.m_Row, E.m_Ref.m_Item, E.m_New.m_Start);
         }
         return S;
     }
     // Parses the text back (the document applies it): false on anything malformed
-    struct text_op { char m_Kind = 0; item_ref m_Ref; segment m_Seg; };      // 's' segment, 'k' key
+    struct text_op { char m_Kind = 0; item_ref m_Ref; segment m_Seg; float m_Value = std::numeric_limits<float>::quiet_NaN(); };      // 's' segment, 'k' key (a valued key: m_Value)
     inline bool FromText(std::string_view Text, std::uint64_t& Revision, std::vector<text_op>& Out)
     {
         Out.clear(); Revision = 0; bool bRev = false;
@@ -289,6 +300,12 @@ namespace xeditor::timeline
             if (O == "rev" && n == 2) { Revision = R; bRev = true; continue; }
             if (O == "seg" && n == 8) { Out.push_back({ 's', { R, I }, { a, b, c, d, e, -1 } }); continue; }
             if (O == "key" && n == 4) { Out.push_back({ 'k', { R, I }, { a, a, 0, 0, 0, -1 } }); continue; }
+            if (O == "vkey" && n >= 4)
+            {
+                float v = 0; char Op2[16] = {}; unsigned long long R2 = 0, I2 = 0; long long a2 = 0;
+                if (std::sscanf(Part.c_str(), " %15s %llu %llu %lld %f", Op2, &R2, &I2, &a2, &v) != 5 || !(v == v)) return false;
+                Out.push_back({ 'k', { R2, I2 }, { a2, a2, 0, 0, 0, -1 }, v }); continue;
+            }
             return false;
         }
         return bRev && !Out.empty();
