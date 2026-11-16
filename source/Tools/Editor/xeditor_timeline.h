@@ -564,7 +564,8 @@ namespace xeditor::timeline
                 std::vector<hit_region>* pHits = Vr.m_Row.m_bLock ? nullptr : &S.m_Hits;
                 // a curve lane: the valued keys joined by lines (where they will be while dragged)
                 {
-                    std::vector<std::pair<float, float>> Pts;
+                    struct pt { float x, y; bool bStep; bool operator<(const pt& o) const noexcept { return x < o.x; } };
+                    std::vector<pt> Pts;
                     const float y0 = A.m_Min.y + 3, y1 = A.m_Max.y - 3;
                     for (const auto& I : Visible[i])
                     {
@@ -572,14 +573,19 @@ namespace xeditor::timeline
                         float v = I.m_Value; tick tt = I.m_Seg.m_Start;
                         if (const auto It = Preview.find(I.m_Ref); It != Preview.end()) { v = It->second->HasValue() ? It->second->m_NewValue : v; tt = It->second->m_New.m_Start; }
                         const float u = (v - I.m_ValueMin) / std::max(1e-6f, I.m_ValueMax - I.m_ValueMin);
-                        Pts.push_back({ A.X(tt), y1 - std::clamp(u, 0.0f, 1.0f) * (y1 - y0) });
+                        Pts.push_back({ A.X(tt), y1 - std::clamp(u, 0.0f, 1.0f) * (y1 - y0), I.m_bStepValue });
                     }
-                    std::sort(Pts.begin(), Pts.end());
+                    std::stable_sort(Pts.begin(), Pts.end());
                     if (!Pts.empty())
                     {
-                        D.AddLine({ A.m_Min.x, Pts.front().second }, { Pts.front().first, Pts.front().second }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
-                        for (std::size_t k = 1; k < Pts.size(); ++k) D.AddLine({ Pts[k - 1].first, Pts[k - 1].second }, { Pts[k].first, Pts[k].second }, Vr.m_Row.m_Color, 1.5f);
-                        D.AddLine({ Pts.back().first, Pts.back().second }, { A.m_Max.x, Pts.back().second }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
+                        D.AddLine({ A.m_Min.x, Pts.front().y }, { Pts.front().x, Pts.front().y }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
+                        for (std::size_t k = 1; k < Pts.size(); ++k)
+                        {
+                            const auto& P0 = Pts[k - 1]; const auto& P1 = Pts[k];
+                            if (P0.bStep) { D.AddLine({ P0.x, P0.y }, { P1.x, P0.y }, Vr.m_Row.m_Color, 1.5f); D.AddLine({ P1.x, P0.y }, { P1.x, P1.y }, Vr.m_Row.m_Color, 1.5f); }   // holds, then jumps
+                            else D.AddLine({ P0.x, P0.y }, { P1.x, P1.y }, Vr.m_Row.m_Color, 1.5f);
+                        }
+                        D.AddLine({ Pts.back().x, Pts.back().y }, { A.m_Max.x, Pts.back().y }, Shade(Vr.m_Row.m_Color, 0.8f), 1.5f);
                     }
                 }
                 for (const auto& I : Visible[i])

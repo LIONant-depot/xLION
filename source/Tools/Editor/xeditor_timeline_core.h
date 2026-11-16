@@ -118,6 +118,7 @@ namespace xeditor::timeline
         std::vector<item_ref>   m_Represents;               // the real items behind an aggregate (selection and edits resolve to these)
         float                   m_Value = std::numeric_limits<float>::quiet_NaN();   // a key with a value (a curve lane: a weight): drawn at its height, dragged up and down too
         float                   m_ValueMin = 0, m_ValueMax = 1;                     // the value's bounds (the lane's bottom and top)
+        bool                    m_bStepValue = false;                               // the value holds until the next key (drawn as a step)
         bool HasValue() const noexcept { return m_Value == m_Value; }
         tick Time() const noexcept { return m_Seg.m_Start; }
     };
