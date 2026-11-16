@@ -136,7 +136,8 @@ namespace xeditor::scale_reference
     // The previews' Human toggle: one for all of them, remembered in the ImGui settings ("[ScaleReference][Preview]"). An editor opens after ImGui
     // read its settings file, so the handler (registered on first use) reads its own line from that file then.
     //---------------------------------------------------------------------------------------------------------------------------------------------
-    inline bool& Shown() noexcept { static bool bShown = true; return bShown; }
+    // off until the user turns it on (Tomas 2026-11-16: off by default in every editor)
+    inline bool& Shown() noexcept { static bool bShown = false; return bShown; }
 
     inline void ReadLine(const char* pLine) noexcept
     {

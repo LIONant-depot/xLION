@@ -109,7 +109,8 @@ namespace xeditor::transform_gizmo
     };
 
     // The tools on a viewport toolbar (xeditor::camera_toolbar's Extra: its SameLine first when horizontal; a button in the Header color is on)
-    inline void Buttons(state& S, bool bHorizontal, float ButtonHeight) noexcept
+    // pSubject: what the gizmo edits when it is not the import transform (the hints then name it)
+    inline void Buttons(state& S, bool bHorizontal, float ButtonHeight, const char* pSubject = nullptr) noexcept
     {
         if (bHorizontal) { ImGui::SameLine(); ImGui::TextDisabled("|"); }
         else ImGui::Separator();
@@ -123,9 +124,18 @@ namespace xeditor::transform_gizmo
             if (ImGui::IsItemHovered()) xeditor::hint::Text("%s", pHint);
         };
         Tool("Q###GizmoNone",   TOOL_NONE,   "No gizmo (key Q)");
+        if (pSubject)
+        {
+            const std::string M = std::format("Move (key W): moves {}. Ctrl: steps of 1 cm", pSubject), Ro = std::format("Rotate (key E): turns {}. Ctrl: steps of 15 degrees", pSubject)
+                            , Sc = std::format("Size (key R): resizes {} with its handles", pSubject);
+            Tool("W###GizmoMove", TOOL_MOVE, M.c_str()); Tool("E###GizmoRotate", TOOL_ROTATE, Ro.c_str()); Tool("R###GizmoScale", TOOL_SCALE, Sc.c_str());
+        }
+        else
+        {
         Tool("W###GizmoMove",   TOOL_MOVE,   "Move (key W): drags the import Translation of the descriptor. Ctrl: steps of 0.1 m");
         Tool("E###GizmoRotate", TOOL_ROTATE, "Rotate (key E): drags the import Rotation of the descriptor. Ctrl: steps of 15 degrees");
         Tool("R###GizmoScale",  TOOL_SCALE,  "Scale (key R): drags the import Scale of the descriptor (all three axes when its Scale is locked). Ctrl: steps of 0.1");
+        }
 
         if (bHorizontal) ImGui::SameLine();
         const bool bOn = S.m_bLocal;
@@ -147,6 +157,39 @@ namespace xeditor::transform_gizmo
         layer(state& S, ImDrawList& DL) noexcept : m_S(S), m_DL(DL) { m_S.m_Splitter.Split(&m_DL, 2); m_S.m_Splitter.SetCurrentChannel(&m_DL, 0); }
         ~layer() noexcept { m_S.m_Splitter.Merge(&m_DL); }
     };
+
+    //---------------------------------------------------------------------------------------------------------------------------------------------
+    // The same gizmo (tool, keys, look, Ctrl snaps) on any matrix an editor owns, not a descriptor's pre-transform: the Ragdoll editor's shapes.
+    // World is edited in place. Returns what happened this frame; the editor writes its data and makes the undo step on m_bEnded.
+    //---------------------------------------------------------------------------------------------------------------------------------------------
+    struct manipulate_result { bool m_bInteracting = false, m_bChanged = false, m_bStarted = false, m_bEnded = false; };
+
+    template<typename T_VIEW>
+    manipulate_result Manipulate(state& S, T_VIEW& View, const ImVec2& Min, const ImVec2& Size, xmath::fmat4& World) noexcept
+    {
+        manipulate_result R;
+        if (S.m_Tool < TOOL_MOVE || S.m_Tool > TOOL_SCALE || Size.x <= 1.0f || Size.y <= 1.0f)
+        {
+            if (S.m_bWasUsing) { S.m_bWasUsing = false; R.m_bEnded = true; }
+            return R;
+        }
+        ImGuizmo::BeginFrame();
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist();
+        ImGuizmo::SetRect(Min.x, Min.y, Size.x, Size.y);
+        const xmath::fmat4 W2V        = View.getW2V();
+        xmath::fmat4       Projection = View.getV2C();      // OpenGL convention: undo the Vulkan Y flip (as Run)
+        Projection.m_10 = -Projection.m_10; Projection.m_11 = -Projection.m_11; Projection.m_12 = -Projection.m_12; Projection.m_13 = -Projection.m_13;
+        const auto  Operation = S.m_Tool == TOOL_MOVE ? ImGuizmo::TRANSLATE : S.m_Tool == TOOL_ROTATE ? ImGuizmo::ROTATE : ImGuizmo::SCALE;
+        const float Step = S.m_Tool == TOOL_ROTATE ? 15.0f : 0.01f;
+        const float Snap[3] = { Step, Step, Step };
+        R.m_bChanged = ImGuizmo::Manipulate(reinterpret_cast<const float*>(&W2V), reinterpret_cast<const float*>(&Projection), Operation
+                                           , S.m_bLocal ? ImGuizmo::LOCAL : ImGuizmo::WORLD, reinterpret_cast<float*>(&World), nullptr, ImGui::GetIO().KeyCtrl ? Snap : nullptr);
+        if (ImGuizmo::IsUsing() && !S.m_bWasUsing) { S.m_bWasUsing = true; R.m_bStarted = true; }
+        if (S.m_bWasUsing && !ImGuizmo::IsUsing()) { S.m_bWasUsing = false; R.m_bEnded = true; }
+        R.m_bInteracting = ImGuizmo::IsOver(Operation) || ImGuizmo::IsUsing();
+        return R;
+    }
 
     //---------------------------------------------------------------------------------------------------------------------------------------------
     // The gizmo, over the view's rectangle Min, Size, with the camera View (an xgpu::tools::view: its non-const getters refresh any matrix a camera or toolbar change left stale since the preview last rendered).
