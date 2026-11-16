@@ -363,6 +363,7 @@ namespace level_editor
         // Save All: the open editors (the Levels among them) save theirs, then the resource database (renames and moves). Anything else that keeps unsaved work subscribes here too.
         EditorHost.m_SaveAll.m_OnSave.Register<&xeditor::open_resource_editors::SaveAll>(ResourceEditors);
         EditorHost.m_SaveAll.m_OnSave.Register<&xresource_editor::SaveAssetsOnSaveAll>();
+        xgpu::close_request::s_bAskFirst = true;        // the window's close button asks first when something is not saved (DrawQuitQuestion)
 
         if (auto Err = EditorHost.m_Workspace.Init({}, false); !Err.empty())
             xeditor::NotifyModal(std::format("LevelEditor: xundo Init failed: {}", Err));

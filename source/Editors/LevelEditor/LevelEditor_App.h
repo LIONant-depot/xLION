@@ -211,7 +211,8 @@ namespace level_editor
         host_actions                      HostActions{ EditorHost, Actions };
         files_actions                     FilesActions;            // the Assets tab's file keys
         xeditor::shortcut_labels          ShortcutLabels;          // menus ask the host which key an action has (xeditor/shortcuts.h)
-        xeditor::open_resource_editors    ResourceEditors;         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
+        xeditor::open_resource_editors    ResourceEditors;
+        bool                              bAskQuit = false;        // the window's close button with unsaved work: the question opens next frame (DrawQuitQuestion)         // the resource editors open in their own windows (Texture, Static Geom, Level, ...)
         xprofile::editor::tab             ProfilerTab;             // the drawer's Profiler tab (a host service: Profiler -Show opens it on a sub-tab)
         xeditor::compile_log_bridge       CompileLogs;             // every asset compile as an operation of the Logs (what the resource editors' Feedback shows)
         xeditor::resource_updates         ResourceUpdates;         // a resource compiled again: the references to it move to the new data (xresource::mgr::MarkUpdated)
@@ -250,6 +251,7 @@ namespace level_editor
 
         int  Init(bool bHeadlessMode = false);   // 0 on success, otherwise the process exit code
         void Frame();          // one iteration of the graphical main loop
+        void DrawQuitQuestion(); // the window's close button: unsaved work asks Save All / Don't Save / Cancel first (as closing one editor does)
         void Run();            // Frame() until the window closes or the Exit command runs
         void RunHeadless();    // pumps the command console/idle work with no window, until the Exit command runs
         void Shutdown();

@@ -187,6 +187,47 @@ namespace level_editor
     };
     inline frame_times g_FrameTimes;
 
+    // The window's close button (xgpu::close_request): nothing unsaved, it closes; else the question - Save All (closes when everything saved),
+    // Don't Save, Cancel - over the editor, the same question closing one editor asks. What counts is what the Unsaved command lists.
+    inline void app::DrawQuitQuestion()
+    {
+        auto Unsaved = [this]
+        {
+            std::vector<std::string> Names;
+            for (auto& E : ResourceEditors.m_List)
+                if (E && E->m_bOpen && E->isLoaded() && E->HasPendingChanges()) Names.push_back(E->DisplayName());
+            if (xresource_editor::g_LibMgr.isReadyToSave()) Names.push_back("Resource database");
+            return Names;
+        };
+        if (xgpu::close_request::s_bRequested.exchange(false))
+        {
+            if (Unsaved().empty()) ExitState.bRequested = true;
+            else                   bAskQuit = true;
+        }
+        constexpr const char* pTitle = "Unsaved changes###QuitQuestion";
+        if (bAskQuit) { ImGui::OpenPopup(pTitle); bAskQuit = false; }
+        if (!ImGui::BeginPopupModal(pTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+        const auto Names = Unsaved();
+        ImGui::TextUnformatted("Close xLION? These have changes that are not saved:");
+        for (const auto& N : Names) ImGui::BulletText("%s", N.c_str());
+        if (ImGui::Button("Save All"))
+        {
+            const auto Report = EditorHost.m_SaveAll.Run();
+            if (Report.m_Failed.empty() && Unsaved().empty()) ExitState.bRequested = true;
+            else
+            {
+                std::string Why; for (const auto& F : Report.m_Failed) Why += F + "; ";
+                xeditor::NotifyModal(std::format("Not closed: some changes could not be saved: {}", Why));
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Don't Save")) { ExitState.bRequested = true; ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     inline void app::Frame()
     {
         XPROFILE_SCOPE("Editor frame");
@@ -286,6 +327,7 @@ namespace level_editor
         // The error popup belongs to the application, not to one editor: it is drawn here, once a frame, whichever editor is in front (drawn from
         // the Level editor it never showed while another editor had the screen), and it opens in the middle of the editor that had the focus.
         EditorHost.render_notifications();
+        DrawQuitQuestion();
 
         // With no Level open there is still a (empty) Level tab, like at startup: its File menu reaches the Asset Browser to open one.
         {
