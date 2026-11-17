@@ -117,7 +117,7 @@ namespace xeditor
                 if (Exe.empty() || !std::filesystem::exists(Exe, Ec)) { m_Result += " (ffmpeg not found: no video encoded)"; return; }
             }
             const std::wstring Fps = std::to_wstring(m_Fps), In = L"\"" + (m_Folder / L"frame_%04d.png").wstring() + L"\"", Out = L"\"" + m_Video.wstring() + L"\"", Prog = L"\"" + Exe.wstring() + L"\"";
-            const wchar_t* Args[] = { Prog.c_str(), L"-y", L"-loglevel", L"error", L"-framerate", Fps.c_str(), L"-i", In.c_str(), L"-c:v", L"libx264", L"-pix_fmt", L"yuv420p", L"-crf", L"18", Out.c_str(), nullptr };
+            const wchar_t* Args[] = { Prog.c_str(), L"-y", L"-loglevel", L"error", L"-framerate", Fps.c_str(), L"-i", In.c_str(), L"-c:v", L"h264_nvenc", L"-preset", L"p4", L"-cq", L"23", L"-pix_fmt", L"yuv420p", Out.c_str(), nullptr };
             if (_wspawnv(_P_NOWAIT, Exe.c_str(), Args) != -1) m_Result += " -> encoding " + m_Video.string();
             else m_Result += " (ffmpeg did not start: no video encoded)";
 #else
