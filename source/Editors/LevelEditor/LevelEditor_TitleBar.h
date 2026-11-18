@@ -78,6 +78,24 @@ namespace level_editor::title_bar
         }
     };
 
+    // The compile queue as a batch (Tomas 2026-11-18): how many resources were marked for compiling since the queue was last empty, and how many
+    // are left - so anyone glancing at the window sees whether it is busy and how long until it is done
+    struct compile_batch
+    {
+        std::size_t m_Total     = 0;                        // marked since the queue was last empty
+        std::size_t m_Remaining = 0;                        // compiling + waiting, now
+        std::size_t m_Failed    = 0;
+
+        void Update(std::size_t Remaining, std::size_t Failed) noexcept
+        {
+            if (Remaining == 0)                    m_Total = 0;                          // the batch is over
+            else if (Remaining > m_Remaining)      m_Total += Remaining - m_Remaining;   // more were marked (the first ones included)
+            if (m_Total < Remaining)               m_Total = Remaining;
+            m_Remaining = Remaining;
+            m_Failed    = Failed;
+        }
+    };
+
     struct state
     {
         float             m_Height = 0;                     // of the bar, in client pixels (0: not drawn yet - the OS caption hit-test is not taken over)
@@ -86,6 +104,7 @@ namespace level_editor::title_bar
         int               m_Hot     = BUTTON_NONE;          // the button the mouse is over (set by the window procedure)
         int               m_Pressed = BUTTON_NONE;
         fps_history       m_Fps;
+        compile_batch     m_Compile;
         std::wstring      m_ProjectPath;                    // what m_ProjectName was made from
         std::string       m_ProjectName;
         bool              m_bAIInput = false;               // the title says AI-only input (xgpu::virtual_input active)
@@ -550,10 +569,12 @@ namespace level_editor::title_bar
     }
 
     // Once a frame, right after BeginRendering (the bar reserves its height at the top of the main viewport, from the next frame on)
-    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath, const xgpu::texture* pBrandIcon = nullptr) noexcept
+    // CompileRemaining / CompileFailed: the resource compile queue now (compiling + waiting, failed)
+    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath, const xgpu::texture* pBrandIcon = nullptr, std::size_t CompileRemaining = 0, std::size_t CompileFailed = 0) noexcept
     {
         auto& S = State();
         S.m_Fps.Frame();
+        S.m_Compile.Update(CompileRemaining, CompileFailed);
 
         // AI-only input (Tomas, 2026-10-29): while an AI or a test drives the editor (XEDITOR_VIRTUAL_INPUT, VirtualInput -On) the
         // person's mouse and keys are ignored - a stray click cannot disturb the run - all but Esc, which hands them back. The command
@@ -702,6 +723,36 @@ namespace level_editor::title_bar
                 DL.AddText(pText, TextSize, ImVec2(X0 + NumberWidth, TextY), TextDim, " FPS");
                 const ImVec2 GMin(X0 + NumberWidth + LabelWidth + 8.0f, ImFloor(MidY - GraphHeight * 0.5f));
                 details::DrawFpsGraph(DL, S.m_Fps, GMin, ImVec2(GMin.x + GraphWidth, GMin.y + GraphHeight));
+
+                //
+                // The compile queue, right of the graph: "Compiling 12/105" and a bar of what is done; "N failed" in red; nothing when idle
+                //
+                const auto& C = S.m_Compile;
+                if (C.m_Remaining || C.m_Failed)
+                {
+                    char Label[48], Fail[32] = "";
+                    if (C.m_Remaining) std::snprintf(Label, sizeof(Label), "Compiling %zu/%zu", C.m_Total - C.m_Remaining, C.m_Total);
+                    else               Label[0] = 0;
+                    if (C.m_Failed)    std::snprintf(Fail, sizeof(Fail), "%s%zu failed", C.m_Remaining ? "  " : "", C.m_Failed);
+                    constexpr float BarWidth = 96.0f;
+                    const float     LabelW   = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, Label).x;
+                    const float     FailW    = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, Fail).x;
+                    const float     CX0      = X1 + 16.0f;
+                    const float     CX1      = CX0 + LabelW + FailW + (C.m_Remaining ? 8.0f + BarWidth : 0.0f);
+                    if (CX1 + 12.0f < ButtonsX)
+                    {
+                        DL.AddText(pText, TextSize, ImVec2(CX0, TextY), TextBright, Label);
+                        DL.AddText(pText, TextSize, ImVec2(CX0 + LabelW, TextY), IM_COL32(235, 90, 80, 255), Fail);
+                        if (C.m_Remaining)
+                        {
+                            const ImVec2 BMin(CX0 + LabelW + FailW + 8.0f, ImFloor(MidY - 3.0f));
+                            const ImVec2 BMax(BMin.x + BarWidth, BMin.y + 6.0f);
+                            const float  Done = C.m_Total ? static_cast<float>(C.m_Total - C.m_Remaining) / static_cast<float>(C.m_Total) : 0.0f;
+                            DL.AddRectFilled(BMin, BMax, details::Color(0xFF, 0xFF, 0xFF, 30), 3.0f);
+                            DL.AddRectFilled(BMin, ImVec2(BMin.x + ImMax(6.0f, BarWidth * Done), BMax.y), details::Color(0x3A, 0x9B, 0xE8), 3.0f);
+                        }
+                    }
+                }
             }
         }
 

@@ -272,7 +272,15 @@ namespace level_editor
 
 #if defined(_WIN32) || defined(XLION_LINUX_GUI)
         // The title bar first: it takes the top of the main viewport, the dock space starts below it
-        title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get());
+        {
+            // The compile queue for the title bar's progress (as CompileStatus counts it: compiling + waiting, failed)
+            auto&       Compilation = xresource_editor::g_LibMgr.m_Compilation;
+            std::size_t Remaining = 0, Failed = 0;
+            { std::lock_guard Lk(Compilation.m_Compiling.m_Mutex); Remaining += Compilation.m_Compiling.m_List.size(); }
+            { xcontainer::lock::scope Lk(Compilation.m_Queue); for (auto& Q : Compilation.m_Queue.get()) Remaining += Q.size(); }
+            { std::scoped_lock Lk(Compilation.m_Failed.m_Mutex); Failed = Compilation.m_Failed.m_Map.size(); }
+            title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get(), Remaining, Failed);
+        }
 #endif
 
         // Real mouse/keyboard activity this frame resets Idle Work's clock AND cancels any in-flight idle task.
