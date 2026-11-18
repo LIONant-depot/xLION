@@ -182,7 +182,22 @@ FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
 FetchAndPopulate("https://github.com/CedricGuillemet/ImGuizmo.git" "master")
 
-# The compilers Install.bat does not build (the comment where this block used to be says why they are built here); after the shared dependencies, which they include.
+# A fresh setup: the plugins are cloned and built now that every shared engine dependency is on disk (see the example.lionprj block above).
+if(XLION_RUN_INSTALL_BAT)
+    set(XEXAMPLE_PLUGIN_BUILD_DIR "${CMAKE_SOURCE_DIR}/example.lionprj")
+    message(STATUS "Running Install.bat in ${XEXAMPLE_PLUGIN_BUILD_DIR}...")
+    # (XCMAKE_PINS_FILE in the environment: the plugin builds Install.bat starts fetch the same pinned third party commits as this build - E60)
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env "XCMAKE_PINS_FILE=${CMAKE_SOURCE_DIR}/Build/third_party.txt" "${XEXAMPLE_PLUGIN_BUILD_DIR}/Install.bat" "return"
+        WORKING_DIRECTORY "${XEXAMPLE_PLUGIN_BUILD_DIR}"
+        RESULT_VARIABLE result
+    )
+    if(result)
+        message(FATAL_ERROR "Failed to execute Install.bat: ${result}")
+    endif()
+endif()
+
+# The compilers Install.bat does not build (the comment where this block used to be says why they are built here); after the shared dependencies, which they include, and after Install.bat (xrender_graph's compiler needs shaderc, which Install.bat's plugins bring).
 foreach(CompilerPlugin xscript_module xgame xrender_graph)
     set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
     if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
@@ -200,21 +215,6 @@ foreach(CompilerPlugin xscript_module xgame xrender_graph)
         endif()
     endif()
 endforeach()
-
-# A fresh setup: the plugins are cloned and built now that every shared engine dependency is on disk (see the example.lionprj block above).
-if(XLION_RUN_INSTALL_BAT)
-    set(XEXAMPLE_PLUGIN_BUILD_DIR "${CMAKE_SOURCE_DIR}/example.lionprj")
-    message(STATUS "Running Install.bat in ${XEXAMPLE_PLUGIN_BUILD_DIR}...")
-    # (XCMAKE_PINS_FILE in the environment: the plugin builds Install.bat starts fetch the same pinned third party commits as this build - E60)
-    execute_process(
-        COMMAND "${CMAKE_COMMAND}" -E env "XCMAKE_PINS_FILE=${CMAKE_SOURCE_DIR}/Build/third_party.txt" "${XEXAMPLE_PLUGIN_BUILD_DIR}/Install.bat" "return"
-        WORKING_DIRECTORY "${XEXAMPLE_PLUGIN_BUILD_DIR}"
-        RESULT_VARIABLE result
-    )
-    if(result)
-        message(FATAL_ERROR "Failed to execute Install.bat: ${result}")
-    endif()
-endif()
 
 # xproperty's own imgui-inspector example header (xPropertyImGuiInspector.h) falls back to a
 # same-directory example "my_properties.h" stub (guard MY_PROPERTIES_H, missing several
