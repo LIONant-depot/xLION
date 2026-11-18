@@ -23,8 +23,9 @@
 namespace xeditor::bone_field
 {
     // The Animation component's bone fields
-    inline constexpr std::array<std::string_view, 6> fields_v{ "Animation/Overlay/FromBone", "Animation/Springs/From", "Animation/Aim/Bone"
-                                                             , "Animation/Copy/From", "Animation/Copy/To", "Animation/Offset/Bone" };
+    inline constexpr std::array<std::string_view, 8> fields_v{ "Animation/Overlay/FromBone", "Animation/Springs/From", "Animation/Aim/Bone"
+                                                             , "Animation/Copy/From", "Animation/Copy/To", "Animation/Offset/Bone"
+                                                             , "Animation/Trail/From", "Animation/Trail/To" };
     inline bool IsBoneField(std::string_view Path) noexcept { return std::find(fields_v.begin(), fields_v.end(), Path) != fields_v.end(); }
 
     inline std::unordered_map<std::uint64_t, std::vector<std::string>> g_Names;            // per skeleton instance (empty: none found yet, asked again)
