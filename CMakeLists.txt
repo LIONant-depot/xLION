@@ -58,16 +58,10 @@ if(WIN32 AND NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/check
     )
     FetchContent_Populate(xresource_pipeline_example)
 
-    set(XEXAMPLE_PLUGIN_BUILD_DIR "${CMAKE_SOURCE_DIR}/example.lionprj")
-    message(STATUS "Running Install.bat in ${XEXAMPLE_PLUGIN_BUILD_DIR}...")
-    execute_process(
-        COMMAND "${XEXAMPLE_PLUGIN_BUILD_DIR}/Install.bat" "return"
-        WORKING_DIRECTORY "${XEXAMPLE_PLUGIN_BUILD_DIR}"
-        RESULT_VARIABLE result
-    )
-    if(result)
-        message(FATAL_ERROR "Failed to execute Install.bat: ${result}")
-    endif()
+    # Install.bat (it clones and BUILDS the plugins) runs after the shared engine dependencies are fetched below: a plugin that includes
+    # one of them (xmaterial: xgraph, xgeom_static: xLIONRender, ...) failed on a fresh machine, where nothing was on disk yet (E57).
+    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies")
+    set(XLION_RUN_INSTALL_BAT ON)
 endif()
 
 #
@@ -107,27 +101,11 @@ endforeach()
 # the CMake project of the game). The resource pipeline runs the compilers of every type as exes, and Install.bat only builds the ones it knows, so these are built here when they
 # are missing (a developer rebuilds one with its plugin's build/CreateAndBuildProject.bat). A failed build is a warning: the resources then report "compiler not found" when they are
 # compiled, and nothing else is affected.
-foreach(CompilerPlugin xscript_module xgame xrender_graph)
-    set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
-    if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
-        if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
-            file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies" "${COMPILER_PLUGIN_DIR}/dependencies" SYMBOLIC RESULT result)
-        endif()
-        message(STATUS "Building the ${CompilerPlugin} compiler...")
-        execute_process(
-            COMMAND "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" "return"
-            WORKING_DIRECTORY "${COMPILER_PLUGIN_DIR}/build"
-            RESULT_VARIABLE result
-        )
-        if(result)
-            message(WARNING "The ${CompilerPlugin} compiler did not build (${result}): its resources cannot be compiled until it does")
-        endif()
-    endif()
-endforeach()
+# (built after the shared engine dependencies are fetched: see below, after the FetchAndPopulate list - xrender_graph's compiler includes xLIONRender)
 
 # Config-only plugins (no source/ folder): they just register a resource type, its name and icon, with
 # the Asset Browser - without a clone here the type shows up with no icon and a raw guid for a name.
-foreach(ConfigOnlyPlugin xprefab.plugin)
+foreach(ConfigOnlyPlugin xprefab.plugin xShareComponent.plugin xmaterial_subgraph.plugin)
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${ConfigOnlyPlugin}/Plugin.config")
         execute_process(
             COMMAND git clone --depth 1 https://github.com/LIONant-depot/${ConfigOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${ConfigOnlyPlugin}"
@@ -203,6 +181,40 @@ FetchAndPopulate("https://github.com/LIONant-depot/xgraph.git" "main")          
 FetchAndPopulate("https://github.com/LIONant-depot/xsource_control.git" "main")
 FetchAndPopulate("https://github.com/thedmd/imgui-node-editor.git" "master")
 FetchAndPopulate("https://github.com/CedricGuillemet/ImGuizmo.git" "master")
+
+# The compilers Install.bat does not build (the comment where this block used to be says why they are built here); after the shared dependencies, which they include.
+foreach(CompilerPlugin xscript_module xgame xrender_graph)
+    set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
+    if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
+        if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
+            file(CREATE_LINK "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/dependencies" "${COMPILER_PLUGIN_DIR}/dependencies" SYMBOLIC RESULT result)
+        endif()
+        message(STATUS "Building the ${CompilerPlugin} compiler...")
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" -E env "XCMAKE_PINS_FILE=${CMAKE_SOURCE_DIR}/Build/third_party.txt" "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" "return"
+            WORKING_DIRECTORY "${COMPILER_PLUGIN_DIR}/build"
+            RESULT_VARIABLE result
+        )
+        if(result)
+            message(WARNING "The ${CompilerPlugin} compiler did not build (${result}): its resources cannot be compiled until it does")
+        endif()
+    endif()
+endforeach()
+
+# A fresh setup: the plugins are cloned and built now that every shared engine dependency is on disk (see the example.lionprj block above).
+if(XLION_RUN_INSTALL_BAT)
+    set(XEXAMPLE_PLUGIN_BUILD_DIR "${CMAKE_SOURCE_DIR}/example.lionprj")
+    message(STATUS "Running Install.bat in ${XEXAMPLE_PLUGIN_BUILD_DIR}...")
+    # (XCMAKE_PINS_FILE in the environment: the plugin builds Install.bat starts fetch the same pinned third party commits as this build - E60)
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E env "XCMAKE_PINS_FILE=${CMAKE_SOURCE_DIR}/Build/third_party.txt" "${XEXAMPLE_PLUGIN_BUILD_DIR}/Install.bat" "return"
+        WORKING_DIRECTORY "${XEXAMPLE_PLUGIN_BUILD_DIR}"
+        RESULT_VARIABLE result
+    )
+    if(result)
+        message(FATAL_ERROR "Failed to execute Install.bat: ${result}")
+    endif()
+endif()
 
 # xproperty's own imgui-inspector example header (xPropertyImGuiInspector.h) falls back to a
 # same-directory example "my_properties.h" stub (guard MY_PROPERTIES_H, missing several
