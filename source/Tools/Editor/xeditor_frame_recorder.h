@@ -100,8 +100,9 @@ namespace xeditor
             // ffmpeg on the PATH, else winget's link folder; none: the frames stay (the result says so)
             std::filesystem::path Exe = L"ffmpeg.exe";
             bool bOnPath = false;
-            if (const wchar_t* pPath = _wgetenv(L"PATH"))
-                for (std::wstring_view Rest(pPath); !Rest.empty() && !bOnPath; )
+            auto EnvW = [](const wchar_t* pName) { wchar_t* p = nullptr; std::size_t n = 0; std::wstring V; if (_wdupenv_s(&p, &n, pName) == 0 && p) V = p; std::free(p); return V; };   // (Windows only: its own _s form)
+            if (const std::wstring PathVar = EnvW(L"PATH"); !PathVar.empty())
+                for (std::wstring_view Rest(PathVar); !Rest.empty() && !bOnPath; )
                 {
                     const auto Cut = Rest.find(L';');
                     const std::filesystem::path Dir(Rest.substr(0, Cut));
@@ -111,9 +112,9 @@ namespace xeditor
                 }
             if (!bOnPath)
             {
-                const wchar_t* pLocal = _wgetenv(L"LOCALAPPDATA");
+                const std::wstring Local = EnvW(L"LOCALAPPDATA");
                 std::error_code Ec;
-                Exe = pLocal ? std::filesystem::path(pLocal) / L"Microsoft" / L"WinGet" / L"Links" / L"ffmpeg.exe" : std::filesystem::path{};
+                Exe = !Local.empty() ? std::filesystem::path(Local) / L"Microsoft" / L"WinGet" / L"Links" / L"ffmpeg.exe" : std::filesystem::path{};
                 if (Exe.empty() || !std::filesystem::exists(Exe, Ec)) { m_Result += " (ffmpeg not found: no video encoded)"; return; }
             }
             const std::wstring Fps = std::to_wstring(m_Fps), In = L"\"" + (m_Folder / L"frame_%04d.png").wstring() + L"\"", Out = L"\"" + m_Video.wstring() + L"\"", Prog = L"\"" + Exe.wstring() + L"\"";

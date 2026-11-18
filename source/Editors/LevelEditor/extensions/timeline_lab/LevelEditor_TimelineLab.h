@@ -414,7 +414,7 @@ namespace level_editor::commands
             }
             if (Arg(m_hFold, A)) S.m_View.m_Folded.insert(std::strtoull(A.c_str(), nullptr, 10));
             if (Arg(m_hUnfold, A)) S.m_View.m_Folded.erase(std::strtoull(A.c_str(), nullptr, 10));
-            if (Arg(m_hFrame, A)) { double a = 0, b = 0; if (std::sscanf(A.c_str(), "%lf %lf", &a, &b) == 2) { S.m_View.m_View.Frame(tl::tick(a * timeline_lab::tps_v), tl::tick(b * timeline_lab::tps_v)); S.m_View.m_bFramed = true; S.m_View.m_ScrollY = 0; } }
+            if (Arg(m_hFrame, A)) { double a = 0, b = 0; if (xeditor::timeline::Scan(A.c_str(), "%lf %lf", &a, &b) == 2) { S.m_View.m_View.Frame(tl::tick(a * timeline_lab::tps_v), tl::tick(b * timeline_lab::tps_v)); S.m_View.m_bFramed = true; S.m_View.m_ScrollY = 0; } }
             const auto& V = S.m_View.m_View;
             std::string T = std::format("TimelineLab: {}; revision {} dirty {}; dispatched {} seeks {}; time {} ticks; selection [{}]; view left {:.0f} px/tick {:.6f} fps {:g}; last reply '{}'\n",
                                         S.m_bVisible ? "shown" : "hidden", S.m_Doc.m_Revision, int(S.m_bDirty), S.m_nDispatched, S.m_nSeeks, S.m_Transport.m_Time, S.m_LastSelection, V.m_Left, V.m_PxPerTick, V.FPS(), S.m_View.m_Reply);

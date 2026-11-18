@@ -24,6 +24,21 @@
 
 namespace xeditor::timeline
 {
+    // std::sscanf: the standard's and safe here (every %s has a width); MSVC deprecates it (C4996, its own sscanf_s), so the warning is
+    // answered once, here (a pure header: no engine dependency; the same answer as xlionrender::Scan)
+    template< typename... T_ARGS >
+    int Scan( const char* pText, const char* pFormat, T_ARGS... Args ) noexcept
+    {
+#if defined(_MSC_VER)
+    #pragma warning(push)
+    #pragma warning(disable: 4996)
+#endif
+        return std::sscanf(pText, pFormat, Args...);
+#if defined(_MSC_VER)
+    #pragma warning(pop)
+#endif
+    }
+
     using tick = std::int64_t;                                  // document time, in the host's ticks
     inline constexpr tick animation_ticks_per_second_v = 6000;  // the animation documents' time base (divides 24, 25, 30, 50, 60 and 120 fps)
 
@@ -296,7 +311,7 @@ namespace xeditor::timeline
             Text = Semi == std::string_view::npos ? std::string_view{} : Text.substr(Semi + 1);
             if (std::all_of(Part.begin(), Part.end(), [](char c) { return c == ' '; })) continue;
             char Op[16] = {}; unsigned long long R = 0, I = 0; long long a = 0, b = 0, c = 0, d = 0, e = 0;
-            const int n = std::sscanf(Part.c_str(), " %15s %llu %llu %lld %lld %lld %lld %lld", Op, &R, &I, &a, &b, &c, &d, &e);
+            const int n = Scan(Part.c_str(), " %15s %llu %llu %lld %lld %lld %lld %lld", Op, &R, &I, &a, &b, &c, &d, &e);
             const std::string_view O(Op);
             if (O == "rev" && n == 2) { Revision = R; bRev = true; continue; }
             if (O == "seg" && n == 8) { Out.push_back({ 's', { R, I }, { a, b, c, d, e, -1 } }); continue; }
@@ -304,7 +319,7 @@ namespace xeditor::timeline
             if (O == "vkey" && n >= 4)
             {
                 float v = 0; char Op2[16] = {}; unsigned long long R2 = 0, I2 = 0; long long a2 = 0;
-                if (std::sscanf(Part.c_str(), " %15s %llu %llu %lld %f", Op2, &R2, &I2, &a2, &v) != 5 || !(v == v)) return false;
+                if (Scan(Part.c_str(), " %15s %llu %llu %lld %f", Op2, &R2, &I2, &a2, &v) != 5 || !(v == v)) return false;
                 Out.push_back({ 'k', { R2, I2 }, { a2, a2, 0, 0, 0, -1 }, v }); continue;
             }
             return false;
