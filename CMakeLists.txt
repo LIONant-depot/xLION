@@ -624,6 +624,22 @@ if(XECS_BUILD_SHARED_LIBRARY)
   add_custom_command(TARGET xLION_Headless POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:xLIONRender>" "$<TARGET_FILE_DIR:xLION_Headless>"
   )
+
+  # Visual Script (R84): LIONRender binds the recovery graph's generated header when xvisual_script.plugin is there (xlionrender_recovery_vs.h,
+  # __has_include). A header that appears is no change an incremental build sees, so a tree that gained the plugin kept running the hand
+  # function (2026-11-19). Saying so in the compile definitions makes the plugin's arrival (or removal) recompile what binds it.
+  if(EXISTS "${CMAKE_SOURCE_DIR}/plugins/xvisual_script.plugin/generated/PlanRecoveryVS.h")
+    foreach(_xlr xLIONRender xLIONRender_lib)
+      if(TARGET ${_xlr})
+        get_target_property(_xlr_type ${_xlr} TYPE)
+        if(_xlr_type STREQUAL "INTERFACE_LIBRARY")      # (xLIONRender_lib: its sources compile in whoever links it)
+          target_compile_definitions(${_xlr} INTERFACE XLION_VISUAL_SCRIPT_GENERATED=1)
+        else()
+          target_compile_definitions(${_xlr} PRIVATE XLION_VISUAL_SCRIPT_GENERATED=1)
+        endif()
+      endif()
+    endforeach()
+  endif()
 endif()
 
 # The profiler (xprofile, tracy_plan.md): one client in xprofile.dll, imported by the executables and the engine's DLLs (a Level's
