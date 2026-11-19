@@ -4,7 +4,7 @@
     python Build/ci/pick_fast.py suite.xml [--max-seconds 60]
 
 A file is a candidate when it ran at least 2 tests, none of them failed or errored, and no single test took longer than --max-seconds. Candidates are ranked by
-breadth per second: breadth = how many rows of golden/test_impact.json list the file (how many source areas it exercises), seconds = the time the file took.
+breadth per second: breadth = how many console commands the file drives (impact_gen.py, from the code), seconds = the time the file took.
 """
 import collections
 import json
@@ -20,11 +20,8 @@ def main(argv):
         print(__doc__)
         return 2
     max_test = float(argv[argv.index("--max-seconds") + 1]) if "--max-seconds" in argv else 60.0
-    impact = json.loads((SMOKE / "golden" / "test_impact.json").read_text())
-    breadth = collections.Counter()
-    for _pattern, tests in impact["map"]:
-        for t in (tests if isinstance(tests, list) else [tests]):
-            breadth[t if t.endswith(".py") else t + ".py"] += 1
+    sys.path.insert(0, str(SMOKE)); import impact_gen      # (R97: the generated map; breadth = the commands a test drives)
+    breadth = collections.Counter({t: len(cmds) for t, cmds in impact_gen.build()["tests"].items()})
 
     per = collections.defaultdict(lambda: {"n": 0, "bad": 0, "skip": 0, "t": 0.0, "tmax": 0.0})
     for c in ET.parse(argv[0]).iter("testcase"):
