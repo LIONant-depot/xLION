@@ -17,8 +17,10 @@ DeleteAsset
 DeleteAssetFileToTrash
 DescribeAsset
 DescribeLevel
+EmptyTrash
 Exit
 ExplainLastKey
+Finger
 GeomResidency
 GetBrowserState
 GetIdleTasks
@@ -85,6 +87,7 @@ MouseMove
 MouseWheel
 MoveAsset
 MoveAssetFile
+NoiseCheck
 OpenInVisualStudio
 OpenLevel
 OpenPrefab
@@ -137,6 +140,8 @@ Step
 Stop
 Text
 TextureResidency
+TimelineLab
+TimelineLabEdit
 Undo
 Unsaved
 UseKeymap
