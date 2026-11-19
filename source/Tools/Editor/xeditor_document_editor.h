@@ -194,7 +194,14 @@ namespace xeditor
             auto Number = [&]<typename T>(std::type_identity<T>) -> bool
             {
                 T Value{};
-                const auto Result = std::from_chars(Text.data(), Text.data() + Text.size(), Value);
+                // an integer may be written in hex as #1F or 0x1F (guids: what descriptor files and ShowGraph show)
+                auto Result = std::from_chars_result{ Text.data(), std::errc::invalid_argument };
+                if constexpr (std::is_integral_v<T>)
+                {
+                    const int Skip = Text.starts_with('#') ? 1 : (Text.starts_with("0x") || Text.starts_with("0X")) ? 2 : 0;
+                    Result = std::from_chars(Text.data() + Skip, Text.data() + Text.size(), Value, Skip ? 16 : 10);
+                }
+                else Result = std::from_chars(Text.data(), Text.data() + Text.size(), Value);
                 if (Result.ec != std::errc() || Result.ptr != Text.data() + Text.size()) return false;
                 Out.set<T>(Value);
                 return true;
@@ -366,7 +373,14 @@ namespace xeditor
             save_cmd(xundo::system& System, file_document& Doc) noexcept : query_command_base(System, "Save", nullptr), m_Doc(Doc) {}
             const char* getCommandHelp() const noexcept override { return "Saves the resource's file (which queues its compile). Usage: Save"; }
             void RegisterArguments() noexcept override {}
-            std::string Query() noexcept override { auto Err = m_Doc.Save(); return Err.empty() ? "Save: saved" : "Save: " + Err; }
+            std::string Query() noexcept override
+            {
+                auto Err = m_Doc.Save();
+                if (!Err.empty()) return "Save: " + Err;
+                std::vector<std::string> Errors;            // (saved, but a compile of it will fail: say so here, not only in CompileStatus)
+                if (m_Doc.isLoaded()) m_Doc.Validate(Errors);
+                return Errors.empty() ? "Save: saved" : std::format("Save: saved, but it will NOT compile ({} validation error{}; the last good compile stays): {}", Errors.size(), Errors.size() == 1 ? "" : "s", Errors.front());
+            }
         };
 
         struct compile_cmd : xundo::query_command_base
