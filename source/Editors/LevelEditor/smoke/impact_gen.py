@@ -47,7 +47,7 @@ def library(rel):
     return "/".join(parts[:2]) if parts[0] in ("plugins", "dependencies") else parts[0]
 
 
-def build():
+def build(namespace_edges=True):      # (False: #include edges only - include_cycles.py, KPI Q3)
     files = dict(sources())
     by_name = {}
     for rel in files:
@@ -71,7 +71,7 @@ def build():
     # what the file before them included (LevelEditor_Commands_Scripting.h uses xlevel::engine from xlevel_engine_copies.h); only
     # namespaces declared by at most 3 files: a wide one says nothing
     for ns, decl in spaces.items():
-        if len(decl) <= 3:
+        if namespace_edges and len(decl) <= 3:
             for rel, text in texts.items():
                 if rel not in decl and ns + "::" in text:
                     for d in decl:
