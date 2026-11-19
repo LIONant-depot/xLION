@@ -98,6 +98,8 @@ namespace level_editor
         xeditor::camera_cmds::get_cmd                       CmdGetCamera;
         xlevel::commands::set_time_scale_cmd                CmdSetTimeScale;       // Name\SetTimeScale / GetTimeScale: the speed slider next to Play
         xlevel::commands::get_time_scale_cmd                CmdGetTimeScale;
+        xlevel::commands::fire_box_cmd                      CmdFireBox;            // Name\FireBox / PlayTool: the Play tools (Tomas 2026-11-19)
+        xlevel::commands::play_tool_cmd                     CmdPlayTool;
         xlevel::commands::play_query_cmd                    CmdSessionPlay;        // Name\Play / Pause / Step / Stop / GetPlayState: this Level's own transport (any number of Levels can play at once)
         xlevel::commands::pause_query_cmd                   CmdSessionPause;
         xlevel::commands::step_query_cmd                    CmdSessionStep;
@@ -119,6 +121,8 @@ namespace level_editor
         , CmdGetCamera(Level, Camera)
         , CmdSetTimeScale(Level, pEditor)
         , CmdGetTimeScale(Level, pEditor)
+        , CmdFireBox(Level, pEditor)
+        , CmdPlayTool(Level, pEditor)
         , CmdSessionPlay(Level, pEditor)
         , CmdSessionPause(Level, pEditor)
         , CmdSessionStep(Level, pEditor)
