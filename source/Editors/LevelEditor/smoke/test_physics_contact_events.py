@@ -9,8 +9,13 @@ import time
 from test_physics_events import FLOAT, BOOL, scene_backup
 
 
-def contact_lines(editor, kind):
-    return [l for l in editor.log_text().splitlines() if l.startswith(f"[System] Contact {kind} ")]
+def contact_lines(editor, kind, ids=None):
+    """The log's "[System] Contact <kind>" lines; with ids, only those naming one of these entities (C100: a contact line names its
+    entities by their scene id, so a test counts its own contacts whatever earlier tests left playing)"""
+    lines = [l for l in editor.log_text().splitlines() if l.startswith(f"[System] Contact {kind} ")]
+    if ids is None: return lines
+    want = {i.upper().lstrip("0") for i in ids}
+    return [l for l in lines if {x.upper().lstrip("0") for x in re.findall(r"\b[ab]=(\w+)", l)} & want]
 
 
 def make(level, entity, parts, position, size=None, events=False):
@@ -71,11 +76,12 @@ def test_a_ball_that_falls_on_a_floor_is_reported_touching_and_hitting_with_its_
 def test_shapes_that_did_not_ask_for_contact_events_say_nothing(level):
     editor = level.ed
     with scene_backup():
-        before = [len(contact_lines(editor, k)) for k in ("begin", "end", "hit")]
+        mine = ("7E570021", "7E570022")
+        before = [len(contact_lines(editor, k, mine)) for k in ("begin", "end", "hit")]
         make(level, "7E570021", FLOOR, (500, 0, 500))
         make(level, "7E570022", BALL, (500, 4, 500))
         play_for(level, seconds=6)
-    assert [len(contact_lines(editor, k)) for k in ("begin", "end", "hit")] == before, "ContactEvents is off by default"
+    assert [len(contact_lines(editor, k, mine)) for k in ("begin", "end", "hit")] == before, "ContactEvents is off by default"
 
 
 def test_a_ball_that_rolls_off_its_support_is_reported_leaving_it(level):
