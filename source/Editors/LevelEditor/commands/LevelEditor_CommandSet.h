@@ -101,6 +101,7 @@ namespace level_editor
         xlevel::commands::get_time_scale_cmd                CmdGetTimeScale;
         xlevel::commands::fire_box_cmd                      CmdFireBox;            // Name\FireBox / PlayTool: the Play tools (Tomas 2026-11-19)
         xlevel::commands::play_tool_cmd                     CmdPlayTool;
+        xlevel::commands::hand_cmd                          CmdHand;               // Name\Hand: the hand as a command (QE, console parity)
         xlevel::commands::play_query_cmd                    CmdSessionPlay;        // Name\Play / Pause / Step / Stop / GetPlayState: this Level's own transport (any number of Levels can play at once)
         xlevel::commands::pause_query_cmd                   CmdSessionPause;
         xlevel::commands::step_query_cmd                    CmdSessionStep;
@@ -124,6 +125,7 @@ namespace level_editor
         , CmdGetTimeScale(Level, pEditor)
         , CmdFireBox(Level, pEditor)
         , CmdPlayTool(Level, pEditor)
+        , CmdHand(Level, pEditor)
         , CmdSessionPlay(Level, pEditor)
         , CmdSessionPause(Level, pEditor)
         , CmdSessionStep(Level, pEditor)
