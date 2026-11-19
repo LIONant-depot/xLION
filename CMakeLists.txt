@@ -85,7 +85,9 @@ endif()
 # core LevelEditor is actually built on - plus xPhysicsMaterial.plugin (its editor). Header-only
 # (nothing to compile ahead of time), so - same as xGPU's own root CMakeLists.txt - they're never in
 # Install.bat's PLUGINS loop, just cloned straight here and referenced through the plugins/ worm hole above.
-foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xgame.plugin xPhysicsMaterial.plugin xrender_graph.plugin)
+# xvisual_script.plugin (Visual Script, R84): the VisualScript editor, and its generated/ headers (PlanRecoveryVS.h), which LIONRender
+# binds when they exist (xlionrender_recovery_vs.h: XLION_RECOVERY_EVALUATOR=shadow|generated); without it the hand function runs.
+foreach(HeaderOnlyPlugin xscene.plugin xlevel.plugin xscript_module.plugin xgame.plugin xPhysicsMaterial.plugin xrender_graph.plugin xvisual_script.plugin)
     if(NOT EXISTS "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}/source")
         execute_process(
             COMMAND git clone --depth 1 https://github.com/LIONant-depot/${HeaderOnlyPlugin}.git "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${HeaderOnlyPlugin}"
