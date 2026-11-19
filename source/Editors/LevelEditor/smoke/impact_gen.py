@@ -52,13 +52,15 @@ def build():
     by_name = {}
     for rel in files:
         by_name.setdefault(rel.rsplit("/", 1)[-1], []).append(rel)
-    includers, commands, texts, spaces = {}, {}, {}, {}
+    includers, commands, texts, spaces, types = {}, {}, {}, {}, set()
     for rel, p in files.items():
         text = texts[rel] = p.read_text(encoding="utf-8", errors="replace")
         for ns in NAMESPACE.findall(text):
             spaces.setdefault(ns, set()).add(rel)
         for cmd, typ in REGISTER.findall(text):
             commands.setdefault(cmd or typ, []).append(rel)
+            if typ and not cmd:
+                types.add(typ)
         for inc in INCLUDE.findall(text):
             cands = [c for c in by_name.get(inc.rsplit("/", 1)[-1], []) if c.endswith(inc.lstrip("./"))] or by_name.get(inc.rsplit("/", 1)[-1], [])
             same = [c for c in cands if library(c) == library(rel)]      # (an ambiguous name: the includer's own library first)
@@ -74,7 +76,7 @@ def build():
                 if rel not in decl and ns + "::" in text:
                     for d in decl:
                         includers.setdefault(d, []).append(rel)
-    names = set(commands)
+    names = set(commands) - types      # (commands: a word in a test is a call)
     helpers = {}       # harness/conftest function -> the commands its body names
     for helper in ("harness.py", "conftest.py"):
         tree = ast.parse((SMOKE / helper).read_text(encoding="utf-8"))
@@ -86,7 +88,9 @@ def build():
     tests = {}
     for t in sorted(SMOKE.glob("test_*.py")):
         text = t.read_text(encoding="utf-8", errors="replace")
-        used = set(WORD.findall(text)) & names | {n for n in names if " " in n and n in text}      # (type names may hold spaces)
+        used = set(WORD.findall(text)) & names
+        # a type only where a test names it as a value (-Component Transform, "Physics Body"): "-Scene" or a word in a sentence is not a use
+        used |= {n for n in types if re.search(rf"""(-\w+\s+|["'])""" + re.escape(n) + r"""(?![\w])""", text)}
         for h, cmds in helpers.items():
             if re.search(rf"\b{h}\(", text):
                 used |= cmds
