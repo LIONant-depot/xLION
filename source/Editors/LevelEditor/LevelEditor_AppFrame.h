@@ -279,7 +279,23 @@ namespace level_editor
             { std::lock_guard Lk(Compilation.m_Compiling.m_Mutex); Remaining += Compilation.m_Compiling.m_List.size(); }
             { xcontainer::lock::scope Lk(Compilation.m_Queue); for (auto& Q : Compilation.m_Queue.get()) Remaining += Q.size(); }
             { std::scoped_lock Lk(Compilation.m_Failed.m_Mutex); Failed = Compilation.m_Failed.m_Map.size(); }
-            title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get(), Remaining, Failed);
+            // Warnings: the resources whose newest compile in the history (capped, ~200) ended with warnings; read a few times a second
+            static std::size_t  Warnings = 0;
+            static double       WarnTime = -1.0;
+            if (ImGui::GetTime() - WarnTime > 0.5)
+            {
+                WarnTime = ImGui::GetTime();
+                std::unordered_map<xresource::full_guid, bool> Last;
+                {
+                    std::lock_guard Lk(Compilation.m_Historical.m_Mutex);
+                    for (auto& H : Compilation.m_Historical.m_List)
+                        if (H.m_Log) { xcontainer::lock::scope L(*H.m_Log);
+                                       Last[H.m_Entry.m_FullGuid] = H.m_Log->get().m_Result == xresource_editor::compilation::historical_entry::result::SUCCESS_WARNINGS; }
+                }
+                Warnings = 0;
+                for (auto& [G, bWarn] : Last) Warnings += bWarn;
+            }
+            title_bar::Draw(MainWindow, xresource_editor::g_LibMgr.m_ProjectPath, BrandIcon.get(), Remaining, Failed, Warnings);
         }
 #endif
 
