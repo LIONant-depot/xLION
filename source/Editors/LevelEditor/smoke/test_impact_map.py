@@ -2,7 +2,6 @@
 
 These run without an editor.
 """
-import json
 import re
 import tempfile
 from pathlib import Path
@@ -16,17 +15,17 @@ pytestmark = pytest.mark.no_editor
 SMOKE = Path(__file__).resolve().parent
 
 
-def test_every_test_file_is_named_in_the_impact_map():
-    """A new test file has to be put in golden/test_impact.json, or `impact.py` would never suggest it."""
-    named = {t for _, tests in json.loads(impact.MAP.read_text())["map"] for t in tests}
-    files = {p.name for p in SMOKE.glob("test_*.py")}
-    missing = sorted(f for f in files if f not in named and f != "test_impact_map.py")
-    assert not missing, f"not in golden/test_impact.json: {missing}"
+def test_every_test_file_is_in_the_generated_map():
+    """The map is built from the code (R97): every test file is in it, with the commands it drives; nothing kept by hand."""
+    m = impact.load_map()
+    assert set(m["tests"]) == {p.name for p in SMOKE.glob("test_*.py")}
+    assert "OpenLevel" in m["commands"] and "OpenLevel" in m["tests"]["test_engine_copies.py"]
 
 
-def test_every_test_the_map_names_exists():
-    named = {t for _, tests in json.loads(impact.MAP.read_text())["map"] for t in tests if t != "$own"}
-    assert not [t for t in named if not (SMOKE / t).is_file()]
+def test_what_the_map_cannot_place():
+    """an ignore file needs no test; a build file or shader the map cannot place gets the core set (the nightly full run is the net)"""
+    assert impact.tests_for(".gitignore") == []
+    assert impact.tests_for("source/Editors/LevelEditor/CMakeLists.txt") is impact.CORE
 
 
 def test_a_changed_source_points_to_the_tests_that_cover_it():
