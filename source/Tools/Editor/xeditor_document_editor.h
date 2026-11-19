@@ -373,7 +373,14 @@ namespace xeditor
             save_cmd(xundo::system& System, file_document& Doc) noexcept : query_command_base(System, "Save", nullptr), m_Doc(Doc) {}
             const char* getCommandHelp() const noexcept override { return "Saves the resource's file (which queues its compile). Usage: Save"; }
             void RegisterArguments() noexcept override {}
-            std::string Query() noexcept override { auto Err = m_Doc.Save(); return Err.empty() ? "Save: saved" : "Save: " + Err; }
+            std::string Query() noexcept override
+            {
+                auto Err = m_Doc.Save();
+                if (!Err.empty()) return "Save: " + Err;
+                std::vector<std::string> Errors;            // (saved, but a compile of it will fail: say so here, not only in CompileStatus)
+                if (m_Doc.isLoaded()) m_Doc.Validate(Errors);
+                return Errors.empty() ? "Save: saved" : std::format("Save: saved, but it will NOT compile ({} validation error{}; the last good compile stays): {}", Errors.size(), Errors.size() == 1 ? "" : "s", Errors.front());
+            }
         };
 
         struct compile_cmd : xundo::query_command_base
