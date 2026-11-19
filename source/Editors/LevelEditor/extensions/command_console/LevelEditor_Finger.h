@@ -40,9 +40,25 @@ namespace level_editor::finger
         if (!pCtx || Name.empty()) return nullptr;
         const auto Low = [](std::string S) { for (auto& c : S) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return S; };
         const std::string Want = Low(Name);
-        for (auto* pW : pCtx->Windows)
-            if (pW && pW->WasActive && !pW->Hidden && Low(pW->Name).starts_with(Want)) return pW;
+        // the start of its name first, then anywhere in it ("Viewport" finds "JointTest - Viewport###..."; 2026-11-19 a live look's --point missed)
+        for (int Pass = 0; Pass < 2; ++Pass)
+            for (auto* pW : pCtx->Windows)
+                if (pW && pW->WasActive && !pW->Hidden && (Pass ? Low(pW->Name).find(Want) != std::string::npos : Low(pW->Name).starts_with(Want))) return pW;
         return nullptr;
+    }
+
+    // The open panels' names (what -Window takes), for the error that says a name was not found
+    inline std::string OpenWindowNames() noexcept
+    {
+        std::string Out;
+        if (auto* pCtx = ImGui::GetCurrentContext())
+            for (auto* pW : pCtx->Windows)
+                if (pW && pW->WasActive && !pW->Hidden && !(pW->Flags & ImGuiWindowFlags_ChildWindow) && pW->Name[0] != '#')
+                {
+                    std::string N = pW->Name; if (auto h = N.find("##"); h != std::string::npos) N.resize(h);
+                    if (!N.empty()) Out += (Out.empty() ? "" : ", ") + N;
+                }
+        return Out;
     }
 
     // Each frame, over everything (after the editors and the drawer)
@@ -155,7 +171,7 @@ namespace level_editor::commands
             }
             if (bWindow)
             {
-                if (!finger::FindWindow(Window)) return std::format("Finger: no open panel named '{}'", Window);
+                if (!finger::FindWindow(Window)) return std::format("Finger: no open panel named '{}' (open: {})", Window, finger::OpenWindowNames());
                 S.m_Window = Window; S.m_bVisible = true;
             }
             if (bMessage) { S.m_Message = Message; S.m_bVisible = true; S.m_bSeen = false; }
