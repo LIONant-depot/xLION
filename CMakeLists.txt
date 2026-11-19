@@ -200,7 +200,7 @@ if(XLION_RUN_INSTALL_BAT)
 endif()
 
 # The compilers Install.bat does not build (the comment where this block used to be says why they are built here); after the shared dependencies, which they include, and after Install.bat (xrender_graph's compiler needs shaderc, which Install.bat's plugins bring).
-foreach(CompilerPlugin xscript_module xgame xrender_graph)
+foreach(CompilerPlugin xscript_module xgame xrender_graph xvisual_script)      # (xvisual_script: the VisualScript resource, R84)
     set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
     if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
         if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
