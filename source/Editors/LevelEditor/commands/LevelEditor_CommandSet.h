@@ -69,6 +69,7 @@ namespace level_editor
         level_editor::commands::serialize_roundtrip_query_cmd     CmdSerializeRoundtrip;
         xlevel::commands::describe_entity_query_cmd         CmdDescribeEntity;
         xlevel::commands::list_component_types_query_cmd    CmdListComponentTypes;
+        xlevel::commands::component_fields_query_cmd        CmdComponentFields;
         xlevel::commands::list_systems_query_cmd            CmdListSystems;
         xlevel::commands::list_event_handlers_query_cmd     CmdListEventHandlers;
         xlevel::commands::set_system_parent_cmd             CmdSetSystemParent;
@@ -190,6 +191,7 @@ namespace level_editor
         , CmdSerializeRoundtrip(Level, pEditor)
         , CmdDescribeEntity(Level, pEditor)
         , CmdListComponentTypes(Level, pEditor)
+        , CmdComponentFields(Level, pEditor)
         , CmdListSystems(Level, pEditor)
         , CmdListEventHandlers(Level, pEditor)
         , CmdSetSystemParent(Level, pEditor)
