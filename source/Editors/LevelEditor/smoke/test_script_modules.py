@@ -7,10 +7,10 @@ import secrets
 
 import pytest
 
-from harness import REPO, quote
+from harness import REPO, PROJECT, quote
 from script_project import CMAKELISTS, game_project_text
 
-PROJECT = REPO / "example.lionprj"
+PROJECT = PROJECT
 MODULE_GUID = "3849E1DE2402B1A5"
 MODULE_TYPE = "8D3968CB1287FA04"
 MODULE_DIR = PROJECT / "Descriptors" / "ScriptModule" / "A5" / "B1" / f"{MODULE_GUID}.desc"

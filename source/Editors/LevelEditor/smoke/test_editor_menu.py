@@ -10,12 +10,12 @@ import re
 
 import pytest
 
-from harness import REPO
+from harness import REPO, PROJECT
 
 def descriptor_of(texture):
     """The Descriptor.txt of the texture the test opened (which texture it is depends on what the asset tree lists first): Descriptors/Texture/<byte 0>/<byte 1>/<instance>.desc"""
     instance = texture.guid[:16]
-    return REPO / "example.lionprj" / "Descriptors" / "Texture" / instance[-2:] / instance[-4:-2] / f"{instance}.desc" / "Descriptor.txt"
+    return PROJECT / "Descriptors" / "Texture" / instance[-2:] / instance[-4:-2] / f"{instance}.desc" / "Descriptor.txt"
 
 
 @pytest.fixture

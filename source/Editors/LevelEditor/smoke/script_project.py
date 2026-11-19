@@ -8,9 +8,9 @@ import re
 import secrets
 import time
 
-from harness import REPO, quote
+from harness import REPO, PROJECT, quote
 
-PROJECT = REPO / "example.lionprj"
+PROJECT = PROJECT
 MODULE_GUID = "3849E1DE2402B1A5"
 MODULE_REST = f"ScriptModule/A5/B1/{MODULE_GUID}"
 MODULE_DESCRIPTOR = PROJECT / "Descriptors" / f"{MODULE_REST}.desc" / "Descriptor.txt"

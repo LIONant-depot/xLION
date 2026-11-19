@@ -14,12 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from harness import REPO, compiler_exe
+from harness import REPO, PROJECT, compiler_exe
 
 pytestmark = pytest.mark.no_editor
 
 SKIN_GUID = "1234567890AB0007"
-MODEL     = REPO / "example.lionprj/Assets/WalkingSkin/Walking.fbx"
+MODEL     = PROJECT / "Assets/WalkingSkin/Walking.fbx"
 
 HEADER = """[ DescriptorVersion ]
 { Major:d  Minor:d }
@@ -241,7 +241,7 @@ def test_walking_needs_no_palette_and_compiles_the_same_bytes_twice(project):
     assert compiled_skin(project) == first, "the same input gives the same binary"
 
 
-LADY = REPO / "example.lionprj/Assets/LadyNJ/lady.fbx"
+LADY = PROJECT / "Assets/LadyNJ/lady.fbx"
 
 def test_a_952_bone_rig_compiles_with_palettes_deterministically(tmp_path):
     """lady.fbx: a shoulder vertex's bones lie 179 skeleton slots apart, more than the base offset reaches: its clusters use palettes."""

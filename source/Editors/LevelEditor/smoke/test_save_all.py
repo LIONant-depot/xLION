@@ -5,11 +5,11 @@ does, and so does SaveAll, which fires the editor's Save All event - everything 
 """
 import re
 
-from harness import REPO
+from harness import REPO, PROJECT
 
 LIBRARY = "ADEB2E3BF97B6E03"
 FONT = "5549D8C8E9220001" + "3285CB58BB79E1AD"                    # Arial MTSDF of the example project: instance + type
-INFO = REPO / "example.lionprj/Descriptors/Font/01/00/5549D8C8E9220001.desc/info.txt"
+INFO = PROJECT / "Descriptors/Font/01/00/5549D8C8E9220001.desc/info.txt"
 
 
 def name_on_disk() -> str:

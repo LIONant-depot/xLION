@@ -12,10 +12,10 @@ import re
 
 import pytest
 
-from harness import REPO
+from harness import REPO, PROJECT
 from test_text_render import draw, quiet, labels      # noqa: F401  (fixtures)
 
-PROJECT = REPO / "example.lionprj"
+PROJECT = PROJECT
 
 
 def component(level, name: str) -> tuple[str, str]:

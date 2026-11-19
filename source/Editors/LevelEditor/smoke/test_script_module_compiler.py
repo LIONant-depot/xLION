@@ -9,9 +9,9 @@ import time
 
 import pytest
 
-from harness import REPO, compiler_exe, quote
+from harness import REPO, PROJECT, compiler_exe, quote
 
-PROJECT = REPO / "example.lionprj"
+PROJECT = PROJECT
 MODULE_GUID = "3849E1DE2402B1A5"
 MODULE_TYPE = "8D3968CB1287FA04"
 COMPILER = compiler_exe("xscript_module")

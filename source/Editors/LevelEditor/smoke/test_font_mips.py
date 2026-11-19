@@ -4,9 +4,9 @@
 import re
 import time
 
-from harness import REPO
+from harness import REPO, PROJECT
 
-PROJECT = REPO / "example.lionprj"
+PROJECT = PROJECT
 FONT_DESC = PROJECT / "Descriptors/Font/01/00/5549D8C8E9220001.desc/Descriptor.txt"          # Arial, MTSDF
 FONT_LOG = PROJECT / "Cache/Resources/Logs/Font/01/00/5549D8C8E9220001.log/Log.txt"
 TEXTURE_DESC = PROJECT / "Descriptors/Texture/93/EB/D28D2B241BAFEB93.desc/Descriptor.txt"   # the atlas, a virtual resource of the font

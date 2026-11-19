@@ -85,9 +85,11 @@ namespace level_editor::title_bar
         std::size_t m_Total     = 0;                        // marked since the queue was last empty
         std::size_t m_Remaining = 0;                        // compiling + waiting, now
         std::size_t m_Failed    = 0;
+        std::size_t m_Warnings  = 0;                        // resources whose last compile ended with warnings
 
-        void Update(std::size_t Remaining, std::size_t Failed) noexcept
+        void Update(std::size_t Remaining, std::size_t Failed, std::size_t Warnings) noexcept
         {
+            m_Warnings = Warnings;
             if (Remaining == 0)                    m_Total = 0;                          // the batch is over
             else if (Remaining > m_Remaining)      m_Total += Remaining - m_Remaining;   // more were marked (the first ones included)
             if (m_Total < Remaining)               m_Total = Remaining;
@@ -570,11 +572,11 @@ namespace level_editor::title_bar
 
     // Once a frame, right after BeginRendering (the bar reserves its height at the top of the main viewport, from the next frame on)
     // CompileRemaining / CompileFailed: the resource compile queue now (compiling + waiting, failed)
-    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath, const xgpu::texture* pBrandIcon = nullptr, std::size_t CompileRemaining = 0, std::size_t CompileFailed = 0) noexcept
+    inline void Draw(xgpu::window& Window, const std::wstring& ProjectPath, const xgpu::texture* pBrandIcon = nullptr, std::size_t CompileRemaining = 0, std::size_t CompileFailed = 0, std::size_t CompileWarnings = 0) noexcept
     {
         auto& S = State();
         S.m_Fps.Frame();
-        S.m_Compile.Update(CompileRemaining, CompileFailed);
+        S.m_Compile.Update(CompileRemaining, CompileFailed, CompileWarnings);
 
         // AI-only input (Tomas, 2026-10-29): while an AI or a test drives the editor (XEDITOR_VIRTUAL_INPUT, VirtualInput -On) the
         // person's mouse and keys are ignored - a stray click cannot disturb the run - all but Esc, which hands them back. The command
@@ -725,33 +727,41 @@ namespace level_editor::title_bar
                 details::DrawFpsGraph(DL, S.m_Fps, GMin, ImVec2(GMin.x + GraphWidth, GMin.y + GraphHeight));
 
                 //
-                // The compile queue, right of the graph: "Compiling 12/105" and a bar of what is done; "N failed" in red; nothing when idle
+                // The compile queue, right of the graph (Tomas 2026-11-19): "Compiling 93" (resources compiling + waiting), a bar and
+                // "12%" of the batch done; right of it "20 failed" in red and "3 warnings" in amber. Nothing when idle and clean
                 //
                 const auto& C = S.m_Compile;
-                if (C.m_Remaining || C.m_Failed)
+                if (C.m_Remaining || C.m_Failed || C.m_Warnings)
                 {
-                    char Label[48], Fail[32] = "";
-                    if (C.m_Remaining) std::snprintf(Label, sizeof(Label), "Compiling %zu/%zu", C.m_Total - C.m_Remaining, C.m_Total);
-                    else               Label[0] = 0;
-                    if (C.m_Failed)    std::snprintf(Fail, sizeof(Fail), "%s%zu failed", C.m_Remaining ? "  " : "", C.m_Failed);
-                    constexpr float BarWidth = 96.0f;
-                    const float     LabelW   = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, Label).x;
-                    const float     FailW    = pText->CalcTextSizeA(TextSize, FLT_MAX, 0, Fail).x;
-                    const float     CX0      = X1 + 16.0f;
-                    const float     CX1      = CX0 + LabelW + FailW + (C.m_Remaining ? 8.0f + BarWidth : 0.0f);
-                    if (CX1 + 12.0f < ButtonsX)
+                    constexpr float BarWidth = 96.0f, Gap = 8.0f;
+                    const float     Done     = C.m_Total ? static_cast<float>(C.m_Total - C.m_Remaining) / static_cast<float>(C.m_Total) : 0.0f;
+                    char Label[48] = "", Pct[8] = "", Fail[32] = "", Warn[32] = "";
+                    if (C.m_Remaining) { std::snprintf(Label, sizeof(Label), "Compiling %zu", C.m_Remaining);
+                                         std::snprintf(Pct, sizeof(Pct), "%d%%", static_cast<int>(Done * 100.0f)); }
+                    if (C.m_Failed)      std::snprintf(Fail, sizeof(Fail), "%zu failed", C.m_Failed);
+                    if (C.m_Warnings)    std::snprintf(Warn, sizeof(Warn), "%zu warning%s", C.m_Warnings, C.m_Warnings == 1 ? "" : "s");
+                    const auto  W    = [&](const char* s) { return *s ? pText->CalcTextSizeA(TextSize, FLT_MAX, 0, s).x + Gap * 2.0f : 0.0f; };
+                    const float CX0  = X1 + 16.0f;
+                    const float BarW = C.m_Remaining ? BarWidth + Gap : 0.0f;
+                    // each part only while it fits before the buttons, in this order (2026-11-19: all-or-nothing hid the whole status in a
+                    // 1272 px window as soon as a failure and a warning joined the compile count)
+                    const float Limit = ButtonsX - 12.0f;
+                    float       X     = CX0;
+                    bool        bRoom = true;
+                    const auto  Fits  = [&](float w) { return bRoom = bRoom && X + w - Gap <= Limit; };
+                    const auto  Text  = [&](const char* s, ImU32 Col) { if (*s && Fits(W(s))) { DL.AddText(pText, TextSize, ImVec2(X, TextY), Col, s); X += W(s); } };
+                    Text(Label, TextBright);
+                    if (C.m_Remaining && Fits(BarW))
                     {
-                        DL.AddText(pText, TextSize, ImVec2(CX0, TextY), TextBright, Label);
-                        DL.AddText(pText, TextSize, ImVec2(CX0 + LabelW, TextY), IM_COL32(235, 90, 80, 255), Fail);
-                        if (C.m_Remaining)
-                        {
-                            const ImVec2 BMin(CX0 + LabelW + FailW + 8.0f, ImFloor(MidY - 3.0f));
-                            const ImVec2 BMax(BMin.x + BarWidth, BMin.y + 6.0f);
-                            const float  Done = C.m_Total ? static_cast<float>(C.m_Total - C.m_Remaining) / static_cast<float>(C.m_Total) : 0.0f;
-                            DL.AddRectFilled(BMin, BMax, details::Color(0xFF, 0xFF, 0xFF, 30), 3.0f);
-                            DL.AddRectFilled(BMin, ImVec2(BMin.x + ImMax(6.0f, BarWidth * Done), BMax.y), details::Color(0x3A, 0x9B, 0xE8), 3.0f);
-                        }
+                        const ImVec2 BMin(X - Gap, ImFloor(MidY - 3.0f));
+                        const ImVec2 BMax(BMin.x + BarWidth, BMin.y + 6.0f);
+                        DL.AddRectFilled(BMin, BMax, details::Color(0xFF, 0xFF, 0xFF, 30), 3.0f);
+                        DL.AddRectFilled(BMin, ImVec2(BMin.x + ImMax(6.0f, BarWidth * Done), BMax.y), details::Color(0x3A, 0x9B, 0xE8), 3.0f);
+                        X = BMax.x + Gap;
                     }
+                    Text(Pct,  TextDim);
+                    Text(Fail, IM_COL32(235, 90, 80, 255));
+                    Text(Warn, IM_COL32(230, 180, 60, 255));
                 }
             }
         }

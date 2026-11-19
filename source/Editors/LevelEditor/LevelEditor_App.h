@@ -31,6 +31,7 @@
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_text.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_hierarchy.h"
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_time.h"
+#include "plugins/xlevel.plugin/source/Editor/xlevel_commands_play_tools.h"
 
 #include "plugins/xlevel.plugin/source/Editor/xlevel_commands_viewport_tools.h"
 
