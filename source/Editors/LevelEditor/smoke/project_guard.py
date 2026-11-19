@@ -15,9 +15,8 @@ import tempfile
 import time
 from pathlib import Path
 
-from harness import REPO
+from harness import REPO, PROJECT
 
-PROJECT = REPO / "example.lionprj"
 WATCHED = [PROJECT / "Descriptors", PROJECT / "Project.config"]
 RESTORABLE = [PROJECT / "Descriptors" / "Scene", PROJECT / "Descriptors" / "Level", PROJECT / "Descriptors" / "Texture", PROJECT / "Descriptors" / "ScriptModule", PROJECT / "Descriptors" / "Game", PROJECT / "Descriptors" / "Prefab", PROJECT / "Descriptors" / "MaterialInstance", PROJECT / "Descriptors" / "GeomStatic", PROJECT / "Descriptors" / "GeomSkin"
               , PROJECT / "Project.config" / "Script.config.txt", PROJECT / "Project.config" / "SystemOrder.config.txt"]   # what a saved level rewrites, and a resource editor's Compile; the material instances UpgradeProject writes in the new form; the Game's module list and which Game the project builds; the saved order of the systems
@@ -81,5 +80,5 @@ def pytest_sessionfinish(session, exitstatus):
 
     shutil.rmtree(backup, ignore_errors=True)
     if removed or restored:
-        print(f"\n[project_guard] put example.lionprj back: {len(restored)} file(s) restored, {len(removed)} file(s) the run created removed")
+        print(f"\n[project_guard] put {PROJECT.name} back: {len(restored)} file(s) restored, {len(removed)} file(s) the run created removed")
     _state.clear()

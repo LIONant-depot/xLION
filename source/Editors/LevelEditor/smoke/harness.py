@@ -33,6 +33,8 @@ PIPE = os.environ.get("XEDITOR_PIPE") or (r"\\.\pipe\xEditor_Console" if os.name
 SMOKE_DIR = Path(__file__).resolve().parent
 GOLDEN_DIR = SMOKE_DIR / "golden"
 REPO = SMOKE_DIR.parents[3]
+# The project the suite tests (E26): XLION_PROJECT (the editor opens it too: LevelEditor_AppInit.h), else this repository's example.lionprj
+PROJECT = Path(os.environ.get("XLION_PROJECT") or REPO / "example.lionprj")
 # Debug on purpose: asserts (CRT assert, IM_ASSERT, xproperty/xecs asserts) only exist there. Pass --exe for another build.
 DEFAULT_EXE = (REPO / "Build" / "xLION.vs2022" / "Debug" / "xLION.exe") if os.name == "nt" else (REPO / "Build" / "xLION.linux" / "xLION_Headless")
 

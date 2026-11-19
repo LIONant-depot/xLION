@@ -2,9 +2,9 @@
 reads the same, and UpgradeProject writes it by id. The files it rewrites are put back when the run ends (project_guard: Descriptors/MaterialInstance)."""
 import re
 
-from harness import REPO
+from harness import REPO, PROJECT
 
-DESCRIPTORS = REPO / "example.lionprj" / "Descriptors"
+DESCRIPTORS = PROJECT / "Descriptors"
 OLD = DESCRIPTORS / "MaterialInstance" / "05" / "00" / "5E1CE0A110000005.desc" / "Descriptor.txt"      # one override of the old form
 
 

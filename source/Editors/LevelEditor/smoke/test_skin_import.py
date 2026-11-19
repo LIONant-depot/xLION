@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from harness import REPO, quote
+from harness import REPO, PROJECT, quote
 
-PROJECT     = REPO / "example.lionprj"
+PROJECT     = PROJECT
 SKIN_TYPE   = "0615D479BCA3267B"
 FOLDER_TYPE = "C4D90C5F0CC43021"
 

@@ -4,14 +4,14 @@ the same; source/Tools/Scripts/convert_keyed_geom_materials.py rewrites one. The
 import re
 import sys
 
-from harness import REPO, quote
+from harness import REPO, PROJECT, quote
 
 sys.path.insert(0, str(REPO / "source" / "Tools" / "Scripts"))
 from convert_keyed_geom_materials import convert, name_key      # noqa: E402
 
 CUBE = "5E1CE0A110000009"                   # SliceCube: one material
 ASSET = CUBE + "E5359948C52D26D1"            # instance + type (GeomStatic)
-DESC = REPO / "example.lionprj" / "Descriptors" / "GeomStatic" / "09" / "00" / f"{CUBE}.desc" / "Descriptor.txt"
+DESC = PROJECT / "Descriptors" / "GeomStatic" / "09" / "00" / f"{CUBE}.desc" / "Descriptor.txt"
 
 OLD = b"""[ xProperties : 6 ]
 { Name:s  Value:? }
@@ -46,7 +46,7 @@ def test_the_converter_does_a_skin_the_same_way():
 
 SKIN       = "5C1A5C1A5C1A0F1D"             # one material
 SKIN_ASSET = SKIN + "0615D479BCA3267B"      # instance + type (GeomSkin)
-SKIN_DESC  = REPO / "example.lionprj" / "Descriptors" / "GeomSkin" / "1D" / "0F" / f"{SKIN}.desc" / "Descriptor.txt"
+SKIN_DESC  = PROJECT / "Descriptors" / "GeomSkin" / "1D" / "0F" / f"{SKIN}.desc" / "Descriptor.txt"
 
 
 def check_editor(editor, kind, asset, desc):

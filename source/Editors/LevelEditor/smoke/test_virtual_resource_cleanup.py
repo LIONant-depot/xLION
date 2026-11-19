@@ -11,9 +11,9 @@ import time
 
 import pytest
 
-from harness import REPO, quote
+from harness import REPO, PROJECT, quote
 
-PROJECT     = REPO / "example.lionprj"
+PROJECT     = PROJECT
 ASSET_DIR   = PROJECT / "Assets" / "_smoke_virtual_cleanup"
 GEOM_TYPE   = "E5359948C52D26D1"
 FOLDER_TYPE = "C4D90C5F0CC43021"
