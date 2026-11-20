@@ -460,6 +460,9 @@ namespace level_editor
 
 
 
+                // (a busy name - another editor on the same XEDITOR_PIPE - was a silent hang: say why, once per new error)
+                static DWORD LastError = 0;
+                if (const DWORD Err = GetLastError(); Err != LastError) { LastError = Err; std::printf("[Console] CreateNamedPipe %s failed: error %lu%s\n", PipeName.c_str(), Err, Err == ERROR_ACCESS_DENIED || Err == ERROR_PIPE_BUSY ? " (the name is in use: another editor on this pipe?)" : ""); std::fflush(stdout); }
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
 

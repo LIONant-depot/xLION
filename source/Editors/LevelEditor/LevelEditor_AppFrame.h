@@ -54,6 +54,7 @@ namespace level_editor
 
         // Listed right away, so the very next command can already be addressed to it (Name\Command).
         ResourceEditors.SyncToHost(EditorHost);
+        pEditor->Focus();       // its tab in front (console parity: what a person sees after opening it, and what CaptureWindow shows)
 
         // Component-registry compatibility plan, Phase 4: informational, not blocking - EnsureLoaded already soft-fails a
         // per-entity missing-component-type case on its own; this surfaces it at the command's reply too.
