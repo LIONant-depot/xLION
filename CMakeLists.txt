@@ -200,7 +200,7 @@ if(XLION_RUN_INSTALL_BAT)
 endif()
 
 # The compilers Install.bat does not build (the comment where this block used to be says why they are built here); after the shared dependencies, which they include, and after Install.bat (xrender_graph's compiler needs shaderc, which Install.bat's plugins bring).
-foreach(CompilerPlugin xscript_module xgame xrender_graph)
+foreach(CompilerPlugin xscript_module xgame xrender_graph xvisual_script)      # (xvisual_script: the VisualScript resource, R84)
     set(COMPILER_PLUGIN_DIR "${CMAKE_SOURCE_DIR}/example.lionprj/Cache/Plugins/${CompilerPlugin}.plugin")
     if(WIN32 AND EXISTS "${COMPILER_PLUGIN_DIR}/build/CreateAndBuildProject.bat" AND NOT EXISTS "${COMPILER_PLUGIN_DIR}/build/${CompilerPlugin}_compiler.vs2022/Release/${CompilerPlugin}_compiler.exe")
         if(NOT EXISTS "${COMPILER_PLUGIN_DIR}/dependencies")
@@ -838,7 +838,7 @@ target_include_directories(xeditorcli PRIVATE "${CMAKE_SOURCE_DIR}")
 # renamed copy of the core can then be used without the exe silently reaching the original one).
 # Never part of a normal build: EXCLUDE_FROM_ALL, and it is EXPECTED to fail to link until the list is empty
 # (tools/ecs_gate/check_link_gate.py compares it to the saved baseline: it may only shrink).
-option(XLION_ECS_LINK_GATE "Add the xLION_ecs_gate target (not built by default)" OFF)
+set(XLION_ECS_LINK_GATE ON)      # (C104: always a target, EXCLUDE_FROM_ALL - built only when asked, by test_ecs_gate; a variable, so an old OFF in a tree's cache does not hide it)
 if(XLION_ECS_LINK_GATE)
   add_executable(xLION_ecs_gate EXCLUDE_FROM_ALL ${XLION_HEADLESS_SOURCES})
   target_include_directories(xLION_ecs_gate PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})

@@ -122,8 +122,10 @@ def test_a_system_is_named_by_its_guid_too(game_level):
     game_level.cmd("Undo")
 
 
-def _unplaced_in_the_file() -> int:
-    return re.findall(rb'Placed"\s+;bool\s+(\d)', ORDER.read_bytes()).count(b"0")
+def _unplaced_names_in_the_file() -> set:
+    text = ORDER.read_text(errors="replace")
+    names = dict(re.findall(r'\[G:(\d+)\]/Name"\s+;string\s+"([^"]*)"', text))
+    return {names[k] for k, placed in re.findall(r'\[G:(\d+)\]/Placed"\s+;bool\s+(\d)', text) if placed == "0" and k in names}
 
 
 def test_an_edit_is_an_edit_of_the_level_saved_with_it(game_level):
@@ -135,11 +137,13 @@ def test_an_edit_is_an_edit_of_the_level_saved_with_it(game_level):
         assert any(x.dirty for x in game_level.ed.sessions() if x.name == game_level.name), "the Level has unsaved changes"
         assert ORDER.read_bytes() == original, "and the file has not been written"
 
+        # (by name, against what the file said before: a project may hold other Games' systems that are not placed - C98, SmokeTests' Bistro systems)
+        before = _unplaced_names_in_the_file()
         game_level.cmd("Save", allow_disk=True)
-        assert _unplaced_in_the_file() == 1, "the Save writes the registry: one system is not placed"
+        assert _unplaced_names_in_the_file() == before | {PLAYERS}, "the Save writes the registry: the players are not placed, nothing else changed"
         game_level.cmd("Undo")
         game_level.cmd("Save", allow_disk=True)
-        assert _unplaced_in_the_file() == 0, "an undone edit is saved the same way: every system is placed"
+        assert _unplaced_names_in_the_file() == before, "an undone edit is saved the same way: the players are placed again"
     finally:
         ORDER.write_bytes(original)
 
