@@ -261,6 +261,7 @@ class Editor:
         if os.name != "nt" and os.environ.get("XLION_TEST_GDB") and shutil.which("gdb"):
             # Linux: run the editor under gdb so a crash leaves its backtrace in the editor log (there is no crash handler writing LevelEditor.trace.log)
             argv = ["gdb", "-q", "-batch", "-ex", "handle SIGPIPE nostop noprint", "-ex", "run", "-ex", "bt 30", "--args", *argv]
+        self._idle = None                    # (a new launch gets a new watchdog)
         self.proc = subprocess.Popen(argv, cwd=str(self.exe.parent), stdout=log, stderr=subprocess.STDOUT, preexec_fn=None if os.name == "nt" else _allow_ptrace_by_parent,
                                      env={**os.environ, "XEDITOR_NO_ASSERT_DIALOG": "1", "XEDITOR_VIRTUAL_INPUT": "1", "XLOG_USER_DIR": str(SMOKE_DIR / ".logs" / "user"), "XLOG_LOGS_DIR": str(SMOKE_DIR / ".logs" / "sessions"), **self.extra_env})   # an assert is logged + ends the editor, never a dialog nobody clicks
         try:
@@ -270,6 +271,7 @@ class Editor:
                     raise EditorCrashed(f"editor exited during startup (exit {self.describe_exit()}){self.crash_summary()}")
                 try:
                     self._roundtrip("help", timeout=5.0)
+                    self._watch_idle()
                     return
                 except (OSError, TimeoutError):
                     time.sleep(0.5)
@@ -397,9 +399,53 @@ class Editor:
         finally:
             sock.close()
 
+    # ------------------------------------------------------------------ idle watchdog
+    # An editor this harness started that neither writes to its log nor gets a real command for IDLE_S seconds (status polls do not count)
+    # is stopped: a test editor left waiting on nothing holds the machine's one editor slot (2026-11-20: a test editor sat 25 min with an
+    # empty compile queue). The command in flight, and every one after, fails with "IDLE <n> min: <last command>". XEDITOR_IDLE_S: the
+    # seconds (default 300; 0 = off).
+    IDLE_S = float(os.environ.get("XEDITOR_IDLE_S") or 300)
+    IDLE_POLLS = ("CompileStatus", "GetPlayState", "help")
+
+    def _watch_idle(self, check_s: float = 15.0) -> None:
+        if self.IDLE_S <= 0 or getattr(self, "_idle", None) is not None:
+            return
+        self._idle = st = {"at": time.monotonic(), "last": "(none yet)", "tripped": None}
+        proc = self.proc
+
+        def log_size() -> int:
+            try:
+                return (Path(self.log_dir) / f"editor_{self.launches}.log").stat().st_size
+            except OSError:
+                return -1
+
+        def run() -> None:
+            size, size_at = log_size(), time.monotonic()
+            while proc.poll() is None and self.proc is proc:
+                time.sleep(check_s)
+                if (now := log_size()) != size:
+                    size, size_at = now, time.monotonic()
+                quiet = time.monotonic() - max(size_at, st["at"])
+                if quiet < self.IDLE_S:
+                    continue
+                st["tripped"] = f"IDLE {self.IDLE_S / 60:g} min: {st['last']}"
+                print(f"(harness: {st['tripped']} - the log and the commands were quiet for {quiet:.0f} s; stopping editor pid {proc.pid})", flush=True)
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                return
+        threading.Thread(target=run, daemon=True).start()
+
     def _roundtrip(self, line: str, timeout: float) -> str:
         """One request/response. Connecting retries while the server re-creates its pipe instance; a reply
         that does not finish within `timeout` is cancelled and raises TimeoutError."""
+        st = getattr(self, "_idle", None)
+        if st is not None:
+            if st["tripped"] and self.proc is not None and self.proc.poll() is not None:
+                raise EditorCrashed(st["tripped"])
+            if not str(line).split(" -", 1)[0].replace("/", "\\").split("\\")[-1].startswith(self.IDLE_POLLS):
+                st["at"], st["last"] = time.monotonic(), str(line)[:120]
         if os.name != "nt":
             return self._roundtrip_unix(line, timeout)
         deadline = time.monotonic() + timeout
