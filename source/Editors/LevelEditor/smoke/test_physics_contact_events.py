@@ -15,7 +15,8 @@ def contact_lines(editor, kind, ids=None):
     lines = [l for l in editor.log_text().splitlines() if l.startswith(f"[System] Contact {kind} ")]
     if ids is None: return lines
     want = {i.upper().lstrip("0") for i in ids}
-    return [l for l in lines if {x.upper().lstrip("0") for x in re.findall(r"\b[ab]=(\w+)", l)} & want]
+    # (both: a contact between two of these entities - a runtime handle an earlier test's leftover body reuses can name one of ours, not both)
+    return [l for l in lines if {x.upper().lstrip("0") for x in re.findall(r"\b[ab]=(\w+)", l)} <= want]
 
 
 def make(level, entity, parts, position, size=None, events=False):
@@ -76,10 +77,10 @@ def test_a_ball_that_falls_on_a_floor_is_reported_touching_and_hitting_with_its_
 def test_shapes_that_did_not_ask_for_contact_events_say_nothing(level):
     editor = level.ed
     with scene_backup():
-        mine = ("7E570021", "7E570022")
+        mine = ("7E5700A1", "7E5700A2")      # (ids no other test uses: nothing earlier in the run carries them)
         before = [len(contact_lines(editor, k, mine)) for k in ("begin", "end", "hit")]
-        make(level, "7E570021", FLOOR, (500, 0, 500))
-        make(level, "7E570022", BALL, (500, 4, 500))
+        make(level, "7E5700A1", FLOOR, (500, 0, 500))
+        make(level, "7E5700A2", BALL, (500, 4, 500))
         play_for(level, seconds=6)
     assert [len(contact_lines(editor, k, mine)) for k in ("begin", "end", "hit")] == before, "ContactEvents is off by default"
 
