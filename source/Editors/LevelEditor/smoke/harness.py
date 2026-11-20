@@ -145,7 +145,7 @@ def compiler_processes() -> list[dict]:
         if len(parts) < 4 or not parts[0].isdigit():
             continue
         m = re.search(r'-DESCRIPTOR\s+"?([^"]+?)"?(\s+-|$)', parts[3])
-        procs.append({"pid": int(parts[0]), "parent": int(parts[1]), "exe": parts[2], "descriptor": m[1] if m else ""})
+        procs.append({"pid": int(parts[0]), "parent": int(parts[1]), "exe": parts[2], "descriptor": m[1] if m else "", "cmd": parts[3]})
     return procs
 
 
@@ -166,6 +166,11 @@ def compile_snapshot(editor: "Editor | None" = None) -> dict:
             snap["editor"] = {"error": str(e)}
     e = snap.get("editor", {})
     snap["idle"] = not snap["processes"] and e.get("Compiling", 0) == 0 and e.get("Waiting", 0) == 0
+    # the compilers of THIS editor's project only (XLION_PROJECT): another workspace's compiles say nothing about this editor (a land's editor
+    # waited 30 min on other workspaces' compilers with its own queue empty, 2026-11-20)
+    proj = os.environ.get("XLION_PROJECT", "").replace("\\", "/").rstrip("/").lower()
+    snap["own"] = [p for p in snap["processes"] if not proj or proj in p.get("cmd", "").replace("\\", "/").lower()]
+    snap["idle_own"] = not snap["own"] and e.get("Compiling", 0) == 0 and e.get("Waiting", 0) == 0
     return snap
 
 
@@ -683,18 +688,27 @@ class Editor:
         return m[1]
 
     # ------------------------------------------------------------------ compilation (timings are only valid when nothing compiles)
-    def wait_compile_idle(self, timeout: float = 1800.0, poll: float = 5.0, settle: float = 3.0) -> dict:
-        """Waits until nothing compiles - this editor's queue empty and no compiler running anywhere on the machine - for settle seconds
-        in a row; returns the last snapshot (idle False: it timed out). Call it before and after every timing measurement."""
-        deadline, quiet_since = time.monotonic() + timeout, None
+    def wait_compile_idle(self, timeout: float = 1800.0, poll: float = 5.0, settle: float = 3.0, machine: bool = False, stuck: float = 120.0) -> dict:
+        """Waits until nothing compiles for settle seconds in a row: this editor's queue empty and none of its project's compilers running
+        (machine=True: no compiler anywhere on the machine - a timing measurement). Returns the last snapshot (idle False: it gave up).
+        It gives up at the timeout, or when nothing changed for `stuck` seconds while not idle (a compile that never ends), saying what runs."""
+        key = "idle" if machine else "idle_own"
+        deadline, quiet_since, same_since, last = time.monotonic() + timeout, None, time.monotonic(), None
         while True:
             snap = compile_snapshot(self)
-            if snap["idle"]:
+            if snap[key]:
                 quiet_since = quiet_since or time.monotonic()
                 if time.monotonic() - quiet_since >= settle:
                     return snap
             else:
                 quiet_since = None
+                now = (sorted(p["pid"] for p in snap["processes" if machine else "own"]), snap.get("editor", {}).get("Compiling"), snap.get("editor", {}).get("Waiting"))
+                if now != last:
+                    last, same_since = now, time.monotonic()
+                elif time.monotonic() - same_since > stuck:
+                    print(f"wait_compile_idle: no change for {stuck:.0f} s, giving up: queue {snap.get('editor')}, compilers "
+                          + "; ".join(f"{p['exe']} {p['descriptor']}" for p in snap["processes" if machine else "own"][:5]), flush=True)
+                    return snap
             if time.monotonic() > deadline:
                 return snap
             time.sleep(poll)
