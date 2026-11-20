@@ -838,7 +838,7 @@ target_include_directories(xeditorcli PRIVATE "${CMAKE_SOURCE_DIR}")
 # renamed copy of the core can then be used without the exe silently reaching the original one).
 # Never part of a normal build: EXCLUDE_FROM_ALL, and it is EXPECTED to fail to link until the list is empty
 # (tools/ecs_gate/check_link_gate.py compares it to the saved baseline: it may only shrink).
-option(XLION_ECS_LINK_GATE "Add the xLION_ecs_gate target (not built by default)" OFF)
+set(XLION_ECS_LINK_GATE ON)      # (C104: always a target, EXCLUDE_FROM_ALL - built only when asked, by test_ecs_gate; a variable, so an old OFF in a tree's cache does not hide it)
 if(XLION_ECS_LINK_GATE)
   add_executable(xLION_ecs_gate EXCLUDE_FROM_ALL ${XLION_HEADLESS_SOURCES})
   target_include_directories(xLION_ecs_gate PRIVATE "${CMAKE_SOURCE_DIR}" ${XLION_PLUGIN_INCLUDES})
